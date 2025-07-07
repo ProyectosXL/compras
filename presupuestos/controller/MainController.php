@@ -1,0 +1,321 @@
+
+<?php
+
+/**
+ * Controlador principal simplificado que coordina las funcionalidades
+ */
+class MainController {
+    
+    private $presupuesto;
+    private $procesador;
+    
+    public function __construct() {
+        require_once __DIR__ . '/../class/presupuesto.php';
+        require_once __DIR__ . '/../class/PresupuestoCalculos.php';
+        require_once __DIR__ . '/ProcesadorDatos.php';
+        
+        $this->presupuesto = new Presupuesto();
+        $this->procesador = new ProcesadorDatos();
+    }
+    
+    /**
+     * Obtener datos base del presupuesto de compras
+     */
+    public function obtenerDatosBase() {
+        try {
+            $datos = $this->presupuesto->obtenerPresupuestoCompras();
+            
+            if (isset($datos['error'])) {
+                $this->jsonResponse([
+                    'success' => false,
+                    'message' => $datos['mensaje'],
+                    'data' => []
+                ], 500);
+            } else {
+                // Agregar información de temporada
+                $infoTemporada = PresupuestoCalculos::obtenerInfoTemporada();
+                
+                $this->jsonResponse([
+                    'success' => true,
+                    'message' => 'Datos base obtenidos correctamente',
+                    'data' => $datos,
+                    'info_temporada' => $infoTemporada,
+                    'total_registros' => count($datos)
+                ]);
+            }
+            
+        } catch (Exception $e) {
+            $this->jsonResponse([
+                'success' => false,
+                'message' => 'Error interno del servidor: ' . $e->getMessage(),
+                'data' => []
+            ], 500);
+        }
+    }
+    
+    /**
+     * Obtener datos para la solapa de Compra Proyectada Verano
+     */
+    public function obtenerCompraProyectadaVerano() {
+        try {
+            $datosBase = $this->obtenerDatosValidados();
+            $datosProcessados = $this->procesador->procesarDatosCompraVerano($datosBase);
+            $columnasVenta = PresupuestoCalculos::obtenerColumnasVentas($datosBase, 'VERANO');
+            $etiquetas = PresupuestoCalculos::generarEtiquetasVentaProyectada();
+            
+            $this->jsonResponse([
+                'success' => true,
+                'message' => 'Datos de compra proyectada verano obtenidos',
+                'data' => $datosProcessados,
+                'columnas_venta' => $columnasVenta,
+                'etiquetas' => $etiquetas,
+                'total_registros' => count($datosProcessados)
+            ]);
+            
+        } catch (Exception $e) {
+            $this->jsonResponse([
+                'success' => false,
+                'message' => 'Error al procesar compra verano: ' . $e->getMessage(),
+                'data' => []
+            ], 500);
+        }
+    }
+    
+    /**
+     * Obtener datos para la solapa de Compra Proyectada Invierno
+     */
+    public function obtenerCompraProyectadaInvierno() {
+        try {
+            $datosBase = $this->obtenerDatosValidados();
+            $datosProcessados = $this->procesador->procesarDatosCompraInvierno($datosBase);
+            $columnasVenta = PresupuestoCalculos::obtenerColumnasVentas($datosBase, 'INVIERNO');
+            $etiquetas = PresupuestoCalculos::generarEtiquetasVentaProyectada();
+            
+            $this->jsonResponse([
+                'success' => true,
+                'message' => 'Datos de compra proyectada invierno obtenidos',
+                'data' => $datosProcessados,
+                'columnas_venta' => $columnasVenta,
+                'etiquetas' => $etiquetas,
+                'total_registros' => count($datosProcessados)
+            ]);
+            
+        } catch (Exception $e) {
+            $this->jsonResponse([
+                'success' => false,
+                'message' => 'Error al procesar compra invierno: ' . $e->getMessage(),
+                'data' => []
+            ], 500);
+        }
+    }
+    
+    /**
+     * Obtener datos para la solapa de Stock Proyectado
+     */
+    public function obtenerStockProyectado() {
+        try {
+            $datosBase = $this->obtenerDatosValidados();
+            $datosProcessados = $this->procesador->procesarDatosStockProyectado($datosBase);
+            
+            $this->jsonResponse([
+                'success' => true,
+                'message' => 'Datos de stock proyectado obtenidos',
+                'data' => $datosProcessados,
+                'total_registros' => count($datosProcessados)
+            ]);
+            
+        } catch (Exception $e) {
+            $this->jsonResponse([
+                'success' => false,
+                'message' => 'Error al procesar stock proyectado: ' . $e->getMessage(),
+                'data' => []
+            ], 500);
+        }
+    }
+    
+    /**
+     * Procesar solicitudes HTTP y rutear a controladores específicos
+     */
+    public function procesarSolicitud() {
+        $metodo = $_SERVER['REQUEST_METHOD'];
+        $accion = $_GET['accion'] ?? '';
+        
+        try {
+            switch ($metodo) {
+                case 'GET':
+                    $this->procesarGet($accion);
+                    break;
+                case 'POST':
+                    $this->procesarPost($accion);
+                    break;
+                default:
+                    $this->jsonResponse([
+                        'success' => false,
+                        'message' => 'Método HTTP no permitido',
+                        'metodos_permitidos' => ['GET', 'POST']
+                    ], 405);
+                    break;
+            }
+        } catch (Exception $e) {
+            $this->jsonResponse([
+                'success' => false,
+                'message' => 'Error procesando solicitud: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    /**
+     * Procesar solicitudes GET
+     */
+    private function procesarGet($accion) {
+        switch ($accion) {
+            // Datos principales
+            case 'datos-base':
+                $this->obtenerDatosBase();
+                break;
+            case 'compra-verano':
+                $this->obtenerCompraProyectadaVerano();
+                break;
+            case 'compra-invierno':
+                $this->obtenerCompraProyectadaInvierno();
+                break;
+            case 'stock-proyectado':
+                $this->obtenerStockProyectado();
+                break;
+                
+            // Funcionalidades de búsqueda
+            case 'buscar':
+            case 'rubros':
+            case 'filtrar-rubro':
+                $this->delegarBusqueda($accion);
+                break;
+                
+            // Funcionalidades de exportación
+            case 'exportar':
+                $this->delegarExportacion();
+                break;
+                
+            // Funcionalidades de índices
+            case 'estadisticas-indices':
+                $this->delegarIndices($accion);
+                break;
+                
+            default:
+                $this->jsonResponse([
+                    'success' => false,
+                    'message' => 'Acción no válida',
+                    'acciones_disponibles' => [
+                        'datos-base', 'compra-verano', 'compra-invierno', 
+                        'stock-proyectado', 'buscar', 'exportar', 'rubros'
+                    ]
+                ], 400);
+                break;
+        }
+    }
+    
+    /**
+     * Procesar solicitudes POST
+     */
+    private function procesarPost($accion) {
+        switch ($accion) {
+            case 'actualizar-indice':
+            case 'actualizar-multiples-indices':
+            case 'resetear-indices':
+                $this->delegarIndices($accion);
+                break;
+            default:
+                $this->jsonResponse([
+                    'success' => false,
+                    'message' => 'Acción POST no válida'
+                ], 400);
+                break;
+        }
+    }
+    
+    /**
+     * Delegar funcionalidades de búsqueda
+     */
+    private function delegarBusqueda($accion) {
+        require_once __DIR__ . '/BusquedaController.php';
+        $busquedaController = new BusquedaController();
+        
+        switch ($accion) {
+            case 'buscar':
+                $busquedaController->buscarDatos();
+                break;
+            case 'rubros':
+                $busquedaController->obtenerRubros();
+                break;
+            case 'filtrar-rubro':
+                $busquedaController->filtrarPorRubro();
+                break;
+        }
+    }
+    
+    /**
+     * Delegar funcionalidades de exportación
+     */
+    private function delegarExportacion() {
+        require_once __DIR__ . '/ExportacionController.php';
+        $exportacionController = new ExportacionController();
+        $exportacionController->exportarExcel();
+    }
+    
+    /**
+     * Delegar funcionalidades de índices
+     */
+    private function delegarIndices($accion) {
+        require_once __DIR__ . '/IndiceController.php';
+        $indiceController = new IndiceController();
+        
+        switch ($accion) {
+            case 'actualizar-indice':
+                $indiceController->actualizarIndiceVariacion();
+                break;
+            case 'actualizar-multiples-indices':
+                $indiceController->actualizarMultiplesIndices();
+                break;
+            case 'resetear-indices':
+                $indiceController->resetearIndices();
+                break;
+            case 'estadisticas-indices':
+                $indiceController->obtenerEstadisticasIndices();
+                break;
+        }
+    }
+    
+    /**
+     * Obtener datos base con validación
+     */
+    private function obtenerDatosValidados() {
+        $datos = $this->presupuesto->obtenerPresupuestoCompras();
+        
+        if (isset($datos['error'])) {
+            throw new Exception($datos['mensaje']);
+        }
+        
+        return $datos;
+    }
+    
+    /**
+     * Enviar respuesta JSON
+     */
+    private function jsonResponse($data, $httpCode = 200) {
+        http_response_code($httpCode);
+        header('Content-Type: application/json; charset=utf-8');
+        header('Access-Control-Allow-Origin: *');
+        header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
+        header('Access-Control-Allow-Headers: Content-Type');
+        
+        echo json_encode($data, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+        exit;
+    }
+}
+
+// Si se accede directamente al archivo, procesar la solicitud
+if (basename($_SERVER['PHP_SELF']) === 'MainController.php') {
+    $controller = new MainController();
+    $controller->procesarSolicitud();
+}
+
+?>
