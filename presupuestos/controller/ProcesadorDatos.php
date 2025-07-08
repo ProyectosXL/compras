@@ -3,14 +3,12 @@
 
 /**
  * Clase dedicada al procesamiento de datos para las diferentes solapas
- * Sistema de Presupuesto de Compras v2.1
- * 
- * CORRECCIÓN: Manejo mejorado de datos y prevención de duplicados
+ * Sistema de Presupuesto de Compras v2.1 - CORREGIDA PARA VENTA PROYECTADA
  */
 class ProcesadorDatos {
     
     /**
-     * Procesar datos para la solapa de compra verano
+     * CORREGIDO: Procesar datos para la solapa de compra verano
      */
     public function procesarDatosCompraVerano($datos) {
         $resultado = [];
@@ -22,7 +20,7 @@ class ProcesadorDatos {
         // Asegurar que no hay duplicados en los datos fuente
         $datosUnicos = $this->eliminarDuplicados($datos);
         
-        foreach ($datosUnicos as $registro) {
+        foreach ($datosUnicos as $index => $registro) {
             try {
                 $stockProyectado = $this->calcularStockProyectadoRegistro($registro);
                 $calculosCompra = PresupuestoCalculos::procesarRegistroCompraProyectada(
@@ -35,23 +33,23 @@ class ProcesadorDatos {
                     'RUBRO' => $this->limpiarTexto($registro['RUBRO'] ?? ''),
                     'CATEGORIA_PADRE' => $this->limpiarTexto($registro['CATEGORIA_PADRE'] ?? ''),
                     'STOCK_PROYECTADO' => round($stockProyectado, 2),
-                    'INDICE_VARIACION' => round((float)($registro['INDICE_VARIACION'] ?? 1.0), 4),
-                    'VENTA_PROY_VERANO' => round($calculosCompra['venta_proy_verano'], 2),
-                    'VENTA_PROY_INVIERNO' => round($calculosCompra['venta_proy_invierno'], 2),
-                    'COMPRA_PROYECTADA' => round($calculosCompra['compra_proyectada'], 2)
+                    'INDICE_VARIACION' => round((float)($registro['INDICE_VARIACION'] ?? 1.0), 2), // 2 decimales
+                    'VENTA_PROY_VERANO' => round($calculosCompra['venta_proy_verano'], 0), // SIN decimales
+                    'VENTA_PROY_INVIERNO' => round($calculosCompra['venta_proy_invierno'], 0), // SIN decimales
+                    'COMPRA_PROYECTADA' => round($calculosCompra['compra_proyectada'], 0) // SIN decimales
                 ];
                 
                 // Agregar columnas de ventas históricas de forma controlada
                 $columnasVenta = $this->obtenerColumnasVentasSeguras($registro);
                 foreach ($columnasVenta as $columna) {
-                    $registroProcesado[$columna] = round((float)($registro[$columna] ?? 0), 2);
+                    $registroProcesado[$columna] = round((float)($registro[$columna] ?? 0), 0); // SIN decimales
                 }
                 
                 $resultado[] = $registroProcesado;
                 
             } catch (Exception $e) {
-                error_log("Error procesando registro de verano: " . $e->getMessage());
-                continue; // Saltar registro problemático
+                error_log("Error procesando registro de verano (índice $index): " . $e->getMessage());
+                continue;
             }
         }
         
@@ -59,7 +57,7 @@ class ProcesadorDatos {
     }
     
     /**
-     * Procesar datos para la solapa de compra invierno
+     * CORREGIDO: Procesar datos para la solapa de compra invierno
      */
     public function procesarDatosCompraInvierno($datos) {
         $resultado = [];
@@ -71,7 +69,7 @@ class ProcesadorDatos {
         // Asegurar que no hay duplicados en los datos fuente
         $datosUnicos = $this->eliminarDuplicados($datos);
         
-        foreach ($datosUnicos as $registro) {
+        foreach ($datosUnicos as $index => $registro) {
             try {
                 $stockProyectado = $this->calcularStockProyectadoRegistro($registro);
                 $calculosCompra = PresupuestoCalculos::procesarRegistroCompraProyectada(
@@ -84,29 +82,29 @@ class ProcesadorDatos {
                     'RUBRO' => $this->limpiarTexto($registro['RUBRO'] ?? ''),
                     'CATEGORIA_PADRE' => $this->limpiarTexto($registro['CATEGORIA_PADRE'] ?? ''),
                     'STOCK_PROYECTADO' => round($stockProyectado, 2),
-                    'INDICE_VARIACION' => round((float)($registro['INDICE_VARIACION'] ?? 1.0), 4),
-                    'VENTA_PROY_VERANO' => round($calculosCompra['venta_proy_verano'], 2),
-                    'VENTA_PROY_INVIERNO' => round($calculosCompra['venta_proy_invierno'], 2),
-                    'COMPRA_PROYECTADA' => round($calculosCompra['compra_proyectada'], 2)
+                    'INDICE_VARIACION' => round((float)($registro['INDICE_VARIACION'] ?? 1.0), 2), // 2 decimales
+                    'VENTA_PROY_VERANO' => round($calculosCompra['venta_proy_verano'], 0), // SIN decimales
+                    'VENTA_PROY_INVIERNO' => round($calculosCompra['venta_proy_invierno'], 0), // SIN decimales
+                    'COMPRA_PROYECTADA' => round($calculosCompra['compra_proyectada'], 0) // SIN decimales
                 ];
                 
                 // Agregar columnas de ventas históricas de forma controlada
                 $columnasVenta = $this->obtenerColumnasVentasSeguras($registro);
                 foreach ($columnasVenta as $columna) {
-                    $registroProcesado[$columna] = round((float)($registro[$columna] ?? 0), 2);
+                    $registroProcesado[$columna] = round((float)($registro[$columna] ?? 0), 0); // SIN decimales
                 }
                 
                 $resultado[] = $registroProcesado;
                 
             } catch (Exception $e) {
-                error_log("Error procesando registro de invierno: " . $e->getMessage());
-                continue; // Saltar registro problemático
+                error_log("Error procesando registro de invierno (índice $index): " . $e->getMessage());
+                continue;
             }
         }
         
         return $resultado;
     }
-    
+        
     /**
      * Procesar datos para la solapa de stock proyectado
      */
@@ -181,7 +179,7 @@ class ProcesadorDatos {
     }
     
     /**
-     * NUEVO: Obtener columnas de ventas de forma segura (sin duplicados)
+     * CORREGIDO: Obtener columnas de ventas de forma segura (sin duplicados)
      */
     private function obtenerColumnasVentasSeguras($registro) {
         $columnasVenta = [];
@@ -217,7 +215,7 @@ class ProcesadorDatos {
     }
     
     /**
-     * Procesar registro individual para compra verano
+     * CORREGIDO: Procesar registro individual para compra verano
      */
     public function procesarRegistroCompraVerano($registro) {
         $stockProyectado = $this->calcularStockProyectadoRegistro($registro);
@@ -229,14 +227,14 @@ class ProcesadorDatos {
         
         return array_merge($registro, [
             'STOCK_PROYECTADO' => round($stockProyectado, 2),
-            'VENTA_PROY_VERANO' => round($calculosCompra['venta_proy_verano'], 2),
-            'VENTA_PROY_INVIERNO' => round($calculosCompra['venta_proy_invierno'], 2),
-            'COMPRA_PROYECTADA' => round($calculosCompra['compra_proyectada'], 2)
+            'VENTA_PROY_VERANO' => round($calculosCompra['venta_proy_verano'], 0), // SIN decimales
+            'VENTA_PROY_INVIERNO' => round($calculosCompra['venta_proy_invierno'], 0), // SIN decimales
+            'COMPRA_PROYECTADA' => round($calculosCompra['compra_proyectada'], 0) // SIN decimales
         ]);
     }
     
     /**
-     * Procesar registro individual para compra invierno
+     * CORREGIDO: Procesar registro individual para compra invierno
      */
     public function procesarRegistroCompraInvierno($registro) {
         $stockProyectado = $this->calcularStockProyectadoRegistro($registro);
@@ -248,9 +246,9 @@ class ProcesadorDatos {
         
         return array_merge($registro, [
             'STOCK_PROYECTADO' => round($stockProyectado, 2),
-            'VENTA_PROY_VERANO' => round($calculosCompra['venta_proy_verano'], 2),
-            'VENTA_PROY_INVIERNO' => round($calculosCompra['venta_proy_invierno'], 2),
-            'COMPRA_PROYECTADA' => round($calculosCompra['compra_proyectada'], 2)
+            'VENTA_PROY_VERANO' => round($calculosCompra['venta_proy_verano'], 0), // SIN decimales
+            'VENTA_PROY_INVIERNO' => round($calculosCompra['venta_proy_invierno'], 0), // SIN decimales
+            'COMPRA_PROYECTADA' => round($calculosCompra['compra_proyectada'], 0) // SIN decimales
         ]);
     }
     
@@ -273,6 +271,85 @@ class ProcesadorDatos {
             $comprasAtemporal, 
             $stockCobertura
         );
+    }
+    
+    /**
+     * NUEVO: Función para diagnosticar problemas en los datos
+     */
+    public function diagnosticarProblemas($datos) {
+        $diagnostico = [
+            'total_registros' => count($datos),
+            'registros_sin_ventas' => 0,
+            'registros_con_ventas' => 0,
+            'columnas_venta_encontradas' => [],
+            'ejemplos_problematicos' => []
+        ];
+        
+        if (empty($datos)) {
+            return $diagnostico;
+        }
+        
+        foreach ($datos as $index => $registro) {
+            $tieneVentas = false;
+            $ventasEncontradas = [];
+            
+            foreach ($registro as $columna => $valor) {
+                if ((stripos($columna, 'VERANO') !== false || stripos($columna, 'INVIERNO') !== false) 
+                    && is_numeric($valor) && $valor > 0) {
+                    $tieneVentas = true;
+                    $ventasEncontradas[$columna] = $valor;
+                    
+                    if (!in_array($columna, $diagnostico['columnas_venta_encontradas'])) {
+                        $diagnostico['columnas_venta_encontradas'][] = $columna;
+                    }
+                }
+            }
+            
+            if ($tieneVentas) {
+                $diagnostico['registros_con_ventas']++;
+            } else {
+                $diagnostico['registros_sin_ventas']++;
+                
+                // Guardar algunos ejemplos problemáticos
+                if (count($diagnostico['ejemplos_problematicos']) < 5) {
+                    $diagnostico['ejemplos_problematicos'][] = [
+                        'indice' => $index,
+                        'rubro' => $registro['RUBRO'] ?? 'N/A',
+                        'categoria' => $registro['CATEGORIA_PADRE'] ?? 'N/A',
+                        'columnas_disponibles' => array_keys($registro)
+                    ];
+                }
+            }
+        }
+        
+        return $diagnostico;
+    }
+    
+    /**
+     * NUEVO: Obtener muestra de datos para debug
+     */
+    public function obtenerMuestraDatos($datos, $cantidad = 3) {
+        $muestra = [];
+        
+        for ($i = 0; $i < min($cantidad, count($datos)); $i++) {
+            $registro = $datos[$i];
+            $muestraRegistro = [
+                'rubro' => $registro['RUBRO'] ?? 'N/A',
+                'categoria' => $registro['CATEGORIA_PADRE'] ?? 'N/A',
+                'indice_variacion' => $registro['INDICE_VARIACION'] ?? 'N/A',
+                'ventas_historicas' => []
+            ];
+            
+            foreach ($registro as $columna => $valor) {
+                if (stripos($columna, 'VERANO') !== false || stripos($columna, 'INVIERNO') !== false) {
+                    $muestraRegistro['ventas_historicas'][$columna] = $valor;
+                }
+            }
+            
+            $muestra[] = $muestraRegistro;
+        }
+        
+        return $muestra;
     }
     
     /**
@@ -323,6 +400,15 @@ class ProcesadorDatos {
             return ($item['COMPRA_PROYECTADA'] ?? 0) < 0;
         }));
         
+        // NUEVO: Contar registros con ventas proyectadas en cero
+        $ventasVeranoCero = count(array_filter($datos, function($item) {
+            return ($item['VENTA_PROY_VERANO'] ?? 0) == 0;
+        }));
+        
+        $ventasInviernoCero = count(array_filter($datos, function($item) {
+            return ($item['VENTA_PROY_INVIERNO'] ?? 0) == 0;
+        }));
+        
         return [
             'total_compra_proyectada' => round($totalCompraProyectada, 2),
             'total_venta_verano' => round($totalVentaVerano, 2),
@@ -330,7 +416,10 @@ class ProcesadorDatos {
             'total_stock_proyectado' => round($totalStock, 2),
             'compras_positivas' => $comprasPositivas,
             'compras_negativas' => $comprasNegativas,
-            'porcentaje_compras_positivas' => count($datos) > 0 ? round(($comprasPositivas / count($datos)) * 100, 2) : 0
+            'porcentaje_compras_positivas' => count($datos) > 0 ? round(($comprasPositivas / count($datos)) * 100, 2) : 0,
+            'ventas_verano_cero' => $ventasVeranoCero,
+            'ventas_invierno_cero' => $ventasInviernoCero,
+            'porcentaje_ventas_problematicas' => count($datos) > 0 ? round((($ventasVeranoCero + $ventasInviernoCero) / (count($datos) * 2)) * 100, 2) : 0
         ];
     }
     
@@ -414,6 +503,15 @@ class ProcesadorDatos {
             }
         }
         
+        // NUEVO: Validar que las ventas proyectadas no sean cero
+        if (isset($registro['VENTA_PROY_VERANO']) && $registro['VENTA_PROY_VERANO'] == 0) {
+            $advertencias[] = "Registro $index: VENTA_PROY_VERANO es cero - verificar datos históricos";
+        }
+        
+        if (isset($registro['VENTA_PROY_INVIERNO']) && $registro['VENTA_PROY_INVIERNO'] == 0) {
+            $advertencias[] = "Registro $index: VENTA_PROY_INVIERNO es cero - verificar datos históricos";
+        }
+        
         // Validar coherencia de compra proyectada
         if (isset($registro['COMPRA_PROYECTADA'])) {
             $compra = (float)$registro['COMPRA_PROYECTADA'];
@@ -449,141 +547,6 @@ class ProcesadorDatos {
                 }
             }
         }
-    }
-    
-    /**
-     * Ordenar datos según criterio
-     */
-    public function ordenarDatos($datos, $campo = 'RUBRO', $direccion = 'ASC') {
-        if (empty($datos) || !isset($datos[0][$campo])) {
-            return $datos;
-        }
-        
-        usort($datos, function($a, $b) use ($campo, $direccion) {
-            $valorA = $a[$campo] ?? '';
-            $valorB = $b[$campo] ?? '';
-            
-            // Si son números, comparar numéricamente
-            if (is_numeric($valorA) && is_numeric($valorB)) {
-                $resultado = $valorA <=> $valorB;
-            } else {
-                // Comparar como strings
-                $resultado = strcasecmp($valorA, $valorB);
-            }
-            
-            return $direccion === 'DESC' ? -$resultado : $resultado;
-        });
-        
-        return $datos;
-    }
-    
-    /**
-     * Aplicar filtros a los datos
-     */
-    public function aplicarFiltros($datos, $filtros = []) {
-        if (empty($filtros)) {
-            return $datos;
-        }
-        
-        return array_filter($datos, function($registro) use ($filtros) {
-            foreach ($filtros as $campo => $valor) {
-                if (!isset($registro[$campo])) {
-                    return false;
-                }
-                
-                $valorRegistro = $registro[$campo];
-                
-                // Si el valor es un array, buscar si está incluido
-                if (is_array($valor)) {
-                    if (!in_array($valorRegistro, $valor)) {
-                        return false;
-                    }
-                } else {
-                    // Comparación exacta o parcial (si contiene *)
-                    if (strpos($valor, '*') !== false) {
-                        $patron = str_replace('*', '.*', preg_quote($valor, '/'));
-                        if (!preg_match("/^$patron$/i", $valorRegistro)) {
-                            return false;
-                        }
-                    } else {
-                        if (strcasecmp($valorRegistro, $valor) !== 0) {
-                            return false;
-                        }
-                    }
-                }
-            }
-            
-            return true;
-        });
-    }
-    
-    // [Resto de los métodos se mantienen igual que en la versión anterior]
-    // ... (métodos como filtrarPorRango, agruparDatos, calcularEstadisticas, etc.)
-    
-    /**
-     * NUEVO: Método para diagnosticar problemas de datos
-     */
-    public function diagnosticarDatos($datos) {
-        $diagnostico = [
-            'total_registros' => count($datos),
-            'registros_vacios' => 0,
-            'duplicados_potenciales' => 0,
-            'columnas_encontradas' => [],
-            'valores_extremos' => []
-        ];
-        
-        if (empty($datos)) {
-            return $diagnostico;
-        }
-        
-        // Analizar primera fila para obtener columnas
-        $diagnostico['columnas_encontradas'] = array_keys($datos[0]);
-        
-        $rubroCategoriaVistos = [];
-        
-        foreach ($datos as $index => $registro) {
-            // Contar registros vacíos
-            if (empty(trim($registro['RUBRO'] ?? '')) || empty(trim($registro['CATEGORIA_PADRE'] ?? ''))) {
-                $diagnostico['registros_vacios']++;
-            }
-            
-            // Detectar duplicados potenciales
-            $clave = trim($registro['RUBRO'] ?? '') . '|' . trim($registro['CATEGORIA_PADRE'] ?? '');
-            if (isset($rubroCategoriaVistos[$clave])) {
-                $diagnostico['duplicados_potenciales']++;
-            } else {
-                $rubroCategoriaVistos[$clave] = $index;
-            }
-            
-            // Analizar valores extremos en campos numéricos
-            foreach (['STOCK_PROYECTADO', 'COMPRA_PROYECTADA', 'INDICE_VARIACION'] as $campo) {
-                if (isset($registro[$campo]) && is_numeric($registro[$campo])) {
-                    $valor = (float)$registro[$campo];
-                    
-                    if (!isset($diagnostico['valores_extremos'][$campo])) {
-                        $diagnostico['valores_extremos'][$campo] = [
-                            'min' => $valor,
-                            'max' => $valor,
-                            'suma' => $valor,
-                            'count' => 1
-                        ];
-                    } else {
-                        $diagnostico['valores_extremos'][$campo]['min'] = min($diagnostico['valores_extremos'][$campo]['min'], $valor);
-                        $diagnostico['valores_extremos'][$campo]['max'] = max($diagnostico['valores_extremos'][$campo]['max'], $valor);
-                        $diagnostico['valores_extremos'][$campo]['suma'] += $valor;
-                        $diagnostico['valores_extremos'][$campo]['count']++;
-                    }
-                }
-            }
-        }
-        
-        // Calcular promedios
-        foreach ($diagnostico['valores_extremos'] as $campo => &$stats) {
-            $stats['promedio'] = $stats['count'] > 0 ? round($stats['suma'] / $stats['count'], 2) : 0;
-            unset($stats['suma'], $stats['count']);
-        }
-        
-        return $diagnostico;
     }
 }
 ?>

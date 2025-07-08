@@ -8,8 +8,8 @@ class TablaRenderer {
      * NUEVO: Formatear número para input (usar punto como decimal)
      */
     static formatearNumeroParaInput(numero) {
-        if (numero === null || numero === undefined || isNaN(numero)) return '1.0';
-        return parseFloat(numero).toFixed(4);
+        if (numero === null || numero === undefined || isNaN(numero)) return '1.00';
+        return parseFloat(numero).toFixed(2); // 2 decimales para índices
     }
 
     /**
@@ -111,17 +111,17 @@ class TablaRenderer {
     }
 
     /**
-     * Obtener número de columnas originales por solapa
+     * ACTUALIZADO: Obtener número de columnas originales (ahora son 9)
      */
     static obtenerColumnasOriginales(solapa) {
         switch (solapa) {
             case 'verano':
             case 'invierno':
-                return 7; // Rubro, Categoría, Stock Proy, Índice, Venta Ver, Venta Inv, Compra Proy
+                return 9; // Rubro, Categoría, Stock, Índice, Venta Hist Ver, Venta Proy Ver, Venta Hist Inv, Venta Proy Inv, Compra Proy
             case 'stock':
-                return 9; // Rubro, Categoría, Stock, Stock Guardar, Compras Ver, Compras Inv, Compras Atemp, Stock Cob, Stock Proy
+                return 9; // Original del stock
             default:
-                return 7;
+                return 9;
         }
     }
 
@@ -138,20 +138,27 @@ class TablaRenderer {
         const ventaProyInvierno = FormatoUtils.formatearNumero(item.VENTA_PROY_INVIERNO || 0);
         const compraProyectada = item.COMPRA_PROYECTADA || 0;
         
+        // Buscar ventas históricas para mostrar ANTES de las proyectadas
+        const ventaVeranoAnterior = TablaRenderer.buscarVentaHistorica(item, 'VERANO');
+        const ventaInviernoAnterior = TablaRenderer.buscarVentaHistorica(item, 'INVIERNO');
+        
         // Determinar clase para compra proyectada
         const claseCompra = FormatoUtils.obtenerClaseValor(compraProyectada);
         
+        // NUEVO ORDEN: incluir ventas históricas ANTES de proyectadas
         tr.innerHTML = `
             <td class="fw-medium">${item.RUBRO || ''}</td>
             <td>${item.CATEGORIA_PADRE || ''}</td>
             <td class="text-end">${stockProyectado}</td>
             <td class="text-center editable-cell" onclick="editarIndice('${TablaRenderer.escaparComillas(item.RUBRO)}', '${TablaRenderer.escaparComillas(item.CATEGORIA_PADRE)}', ${indiceVariacion}, 'verano', ${index})">
-                <input type="number" class="indice-input" value="${TablaRenderer.formatearNumeroParaInput(indiceVariacion)}" 
-                       step="0.0001" min="0" max="10" readonly>
+                <input type="number" class="indice-input" value="${indiceVariacion.toFixed(2)}" 
+                    step="0.01" min="0" max="10" readonly>
             </td>
-            <td class="text-end valor-positivo">${ventaProyVerano}</td>
-            <td class="text-end valor-positivo">${ventaProyInvierno}</td>
-            <td class="text-end ${claseCompra}">${FormatoUtils.formatearNumero(compraProyectada)}</td>
+            <td class="text-end bg-info-subtle" title="Venta histórica verano">${FormatoUtils.formatearNumero(ventaVeranoAnterior)}</td>
+            <td class="text-end bg-primary-subtle text-primary-emphasis fw-bold" title="Venta proyectada verano">${ventaProyVerano}</td>
+            <td class="text-end bg-info-subtle" title="Venta histórica invierno">${FormatoUtils.formatearNumero(ventaInviernoAnterior)}</td>
+            <td class="text-end bg-primary-subtle text-primary-emphasis fw-bold" title="Venta proyectada invierno">${ventaProyInvierno}</td>
+            <td class="text-end bg-success-subtle text-success-emphasis fw-bold ${claseCompra}" title="Compra proyectada">${FormatoUtils.formatearNumero(compraProyectada)}</td>
         `;
         
         return tr;
@@ -170,23 +177,66 @@ class TablaRenderer {
         const ventaProyInvierno = FormatoUtils.formatearNumero(item.VENTA_PROY_INVIERNO || 0);
         const compraProyectada = item.COMPRA_PROYECTADA || 0;
         
+        // Buscar ventas históricas para mostrar ANTES de las proyectadas
+        const ventaVeranoAnterior = TablaRenderer.buscarVentaHistorica(item, 'VERANO');
+        const ventaInviernoAnterior = TablaRenderer.buscarVentaHistorica(item, 'INVIERNO');
+        
         // Determinar clase para compra proyectada
         const claseCompra = FormatoUtils.obtenerClaseValor(compraProyectada);
         
+        // NUEVO ORDEN: incluir ventas históricas ANTES de proyectadas
         tr.innerHTML = `
             <td class="fw-medium">${item.RUBRO || ''}</td>
             <td>${item.CATEGORIA_PADRE || ''}</td>
             <td class="text-end">${stockProyectado}</td>
             <td class="text-center editable-cell" onclick="editarIndice('${TablaRenderer.escaparComillas(item.RUBRO)}', '${TablaRenderer.escaparComillas(item.CATEGORIA_PADRE)}', ${indiceVariacion}, 'invierno', ${index})">
-                <input type="number" class="indice-input" value="${TablaRenderer.formatearNumeroParaInput(indiceVariacion)}" 
-                       step="0.0001" min="0" max="10" readonly>
+                <input type="number" class="indice-input" value="${indiceVariacion.toFixed(2)}" 
+                    step="0.01" min="0" max="10" readonly>
             </td>
-            <td class="text-end valor-positivo">${ventaProyVerano}</td>
-            <td class="text-end valor-positivo">${ventaProyInvierno}</td>
-            <td class="text-end ${claseCompra}">${FormatoUtils.formatearNumero(compraProyectada)}</td>
+            <td class="text-end bg-info-subtle" title="Venta histórica verano">${FormatoUtils.formatearNumero(ventaVeranoAnterior)}</td>
+            <td class="text-end bg-primary-subtle text-primary-emphasis fw-bold" title="Venta proyectada verano">${ventaProyVerano}</td>
+            <td class="text-end bg-info-subtle" title="Venta histórica invierno">${FormatoUtils.formatearNumero(ventaInviernoAnterior)}</td>
+            <td class="text-end bg-primary-subtle text-primary-emphasis fw-bold" title="Venta proyectada invierno">${ventaProyInvierno}</td>
+            <td class="text-end bg-success-subtle text-success-emphasis fw-bold ${claseCompra}" title="Compra proyectada">${FormatoUtils.formatearNumero(compraProyectada)}</td>
         `;
         
         return tr;
+    }
+
+    static buscarVentaHistorica(item, temporada) {
+        let ventaAnterior = 0;
+        const anoActual = new Date().getFullYear() % 100;
+        
+        // Buscar en orden de prioridad: año anterior, año actual - 1, etc.
+        for (let i = 1; i <= 3; i++) {
+            let anoObjetivo = anoActual - i;
+            if (anoObjetivo < 0) anoObjetivo += 100;
+            
+            const anoStr = anoObjetivo.toString().padStart(2, '0');
+            
+            const posiblesColumnas = [
+                `${temporada} ${anoStr}`,
+                `${temporada}_${anoStr}`,
+                `${temporada}${anoStr}`,
+                `VTA_${temporada}_${anoStr}`,
+                `VTA_${temporada}${anoStr}`
+            ];
+            
+            for (const columna of posiblesColumnas) {
+                if (item[columna] && !isNaN(item[columna]) && item[columna] > 0) {
+                    return parseFloat(item[columna]);
+                }
+            }
+        }
+        
+        // Si no encontramos nada específico, buscar cualquier columna que contenga la temporada
+        for (const [columna, valor] of Object.entries(item)) {
+            if (columna.includes(temporada) && !isNaN(valor) && valor > 0) {
+                return parseFloat(valor);
+            }
+        }
+        
+        return 0;
     }
 
     /**
@@ -260,14 +310,72 @@ class TablaRenderer {
         // Ordenar columnas cronológicamente
         const columnasOrdenadas = TablaRenderer.ordenarColumnasVenta(columnasVenta);
         
-        // Agregar headers
+        // Agregar headers (USAR EL MÉTODO EXISTENTE)
         TablaRenderer.agregarHeadersVentas(solapa, columnasOrdenadas);
         
-        // Agregar datos a las filas
+        // Agregar datos a las filas (USAR EL MÉTODO EXISTENTE)
         TablaRenderer.agregarDatosVentas(solapa, datos, columnasOrdenadas);
         
         // Marcar tabla como procesada
         tabla.setAttribute('data-columnas-procesadas', 'true');
+    }
+
+    static extraerColumnasVenta(primeraFila) {
+        const columnasVenta = [];
+        const columnasExcluidas = [
+            'RUBRO', 'CATEGORIA_PADRE', 'STOCK_PROYECTADO', 'INDICE_VARIACION',
+            'VENTA_PROY_VERANO', 'VENTA_PROY_INVIERNO', 'COMPRA_PROYECTADA',
+            'CANT_STOCK', 'CANT_STOCK_GUARDAR', 'CANT_PEND_OC_VERANO', 
+            'CANT_PEND_OC_INVIERNO', 'CANT_PEND_OC_ATEMPORAL', 'STOCK_COBERTURA',
+            'STOCK', 'STOCK_GUARDAR', 'COMPRAS_VERANO', 'COMPRAS_INVIERNO', 
+            'COMPRAS_ATEMPORAL'
+        ];
+        
+        // También excluir las ventas históricas que ya estamos mostrando
+        const ventaVeranoAnterior = TablaRenderer.buscarNombreColumnaVentaHistorica(primeraFila, 'VERANO');
+        const ventaInviernoAnterior = TablaRenderer.buscarNombreColumnaVentaHistorica(primeraFila, 'INVIERNO');
+        
+        if (ventaVeranoAnterior) columnasExcluidas.push(ventaVeranoAnterior);
+        if (ventaInviernoAnterior) columnasExcluidas.push(ventaInviernoAnterior);
+        
+        Object.keys(primeraFila).forEach(columna => {
+            if (!columnasExcluidas.includes(columna) && 
+                (columna.includes('VERANO') || columna.includes('INVIERNO') || 
+                columna.includes('VTA_'))) {
+                columnasVenta.push(columna);
+            }
+        });
+        
+        return [...new Set(columnasVenta)];
+    }
+
+    /**
+     * NUEVO: Buscar el nombre de la columna de venta histórica
+     */
+    static buscarNombreColumnaVentaHistorica(item, temporada) {
+        const anoActual = new Date().getFullYear() % 100;
+        
+        for (let i = 1; i <= 3; i++) {
+            let anoObjetivo = anoActual - i;
+            if (anoObjetivo < 0) anoObjetivo += 100;
+            
+            const anoStr = anoObjetivo.toString().padStart(2, '0');
+            const posiblesColumnas = [
+                `${temporada} ${anoStr}`,
+                `${temporada}_${anoStr}`,
+                `${temporada}${anoStr}`,
+                `VTA_${temporada}_${anoStr}`,
+                `VTA_${temporada}${anoStr}`
+            ];
+            
+            for (const columna of posiblesColumnas) {
+                if (item[columna] && !isNaN(item[columna]) && item[columna] > 0) {
+                    return columna;
+                }
+            }
+        }
+        
+        return null;
     }
 
     /**
@@ -281,14 +389,14 @@ class TablaRenderer {
             'CANT_STOCK', 'CANT_STOCK_GUARDAR', 'CANT_PEND_OC_VERANO', 
             'CANT_PEND_OC_INVIERNO', 'CANT_PEND_OC_ATEMPORAL', 'STOCK_COBERTURA',
             'STOCK', 'STOCK_GUARDAR', 'COMPRAS_VERANO', 'COMPRAS_INVIERNO', 
-            'COMPRAS_ATEMPORAL', 'STOCK_PROYECTADO'
+            'COMPRAS_ATEMPORAL'
         ];
         
         Object.keys(primeraFila).forEach(columna => {
             // Verificar si es columna de venta histórica
             if (!columnasExcluidas.includes(columna) && 
                 (columna.includes('VERANO') || columna.includes('INVIERNO') || 
-                 columna.includes('VTA_'))) {
+                columna.includes('VTA_'))) {
                 columnasVenta.push(columna);
             }
         });
@@ -325,9 +433,9 @@ class TablaRenderer {
             const infoA = extraerInfo(a);
             const infoB = extraerInfo(b);
             
-            // Primero ordenar por año
+            // Primero ordenar por año (MENOR A MAYOR)
             if (infoA.ano !== infoB.ano) {
-                return infoA.ano - infoB.ano;
+                return infoA.ano - infoB.ano; // Orden ascendente por año
             }
             
             // Si el año es igual, verano va antes que invierno

@@ -1,0 +1,90 @@
+
+/* Variables CSS Centralizadas - Sistema de Presupuesto de Compras */
+/* Archivo: presupuestos/css/variables.css */
+
+:root {
+    /* Colores principales */
+    --primary-color: #0d6efd;
+    --primary-dark: #0056b3;
+    --success-color: #198754;
+    --success-dark: #0d5f3c;
+    --warning-color: #ffc107;
+    --warning-dark: #d39e00;
+    --danger-color: #dc3545;
+    --danger-dark: #b02a37;
+    --info-color: #0dcaf0;
+    --info-dark: #087990;
+    
+    /* Colores de fondo */
+    --light-bg: #f8f9fa;
+    --dark-bg: #212529;
+    --card-bg: #ffffff;
+    --hover-bg: rgba(13, 110, 253, 0.05);
+    
+    /* Colores de texto */
+    --text-primary: #212529;
+    --text-secondary: #6c757d;
+    --text-muted: #868e96;
+    --text-white: #ffffff;
+    
+    /* Espaciado */
+    --spacing-xs: 0.25rem;
+    --spacing-sm: 0.5rem;
+    --spacing-md: 1rem;
+    --spacing-lg: 1.5rem;
+    --spacing-xl: 2rem;
+    --spacing-xxl: 3rem;
+    
+    /* Espaciado reducido para márgenes */
+    --margin-bottom-section: 0.75rem; /* Reducido de 1rem */
+    --padding-card: 0.75rem; /* Reducido de 1rem */
+    --padding-container: 0.5rem; /* Reducido de 1rem */
+    
+    /* Bordes y radios */
+    --border-radius: 0.5rem;
+    --border-radius-sm: 0.25rem;
+    --border-radius-lg: 0.75rem;
+    --border-width: 1px;
+    --border-color: #dee2e6;
+    
+    /* Sombras */
+    --box-shadow-sm: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+    --box-shadow: 0 0.25rem 0.5rem rgba(0, 0, 0, 0.1);
+    --box-shadow-lg: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+    --box-shadow-hover: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+    
+    /* Transiciones */
+    --transition-fast: all 0.15s ease-in-out;
+    --transition-normal: all 0.3s ease-in-out;
+    --transition-slow: all 0.5s ease-in-out;
+    
+    /* Tipografía */
+    --font-family-base: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    --font-family-monospace: 'Courier New', monospace;
+    --font-size-xs: 0.75rem;
+    --font-size-sm: 0.875rem;
+    --font-size-base: 1rem;
+    --font-size-lg: 1.125rem;
+    --font-size-xl: 1.25rem;
+    --font-weight-normal: 400;
+    --font-weight-medium: 500;
+    --font-weight-semibold: 600;
+    --font-weight-bold: 700;
+    
+    /* Z-index */
+    --z-index-dropdown: 1000;
+    --z-index-sticky: 1020;
+    --z-index-fixed: 1030;
+    --z-index-modal-backdrop: 1040;
+    --z-index-modal: 1050;
+    --z-index-popover: 1060;
+    --z-index-tooltip: 1070;
+    
+    /* Breakpoints para referencia en CSS */
+    --breakpoint-xs: 0;
+    --breakpoint-sm: 576px;
+    --breakpoint-md: 768px;
+    --breakpoint-lg: 992px;
+    --breakpoint-xl: 1200px;
+    --breakpoint-xxl: 1400px;
+}

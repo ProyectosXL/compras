@@ -2,7 +2,7 @@
 <?php
 
 /**
- * Clase para manejar todos los cálculos del presupuesto de compras
+ * Clase para manejar todos los cálculos del presupuesto de compras - CORREGIDA
  * Separa la lógica de cálculo del resto del sistema
  */
 class PresupuestoCalculos {
@@ -78,38 +78,73 @@ class PresupuestoCalculos {
     }
     
     /**
-     * Calcula la venta proyectada para verano
+     * CORREGIDO: Calcula la venta proyectada para verano
      */
     public static function calcularVentaProyectadaVerano($ventaVeranoAnterior, $indiceVariacion, $fecha = null) {
-        $temporadaActual = self::obtenerTemporadaActual($fecha);
+        // Validar datos de entrada
+        $ventaVeranoAnterior = (float)$ventaVeranoAnterior;
+        $indiceVariacion = (float)$indiceVariacion;
         
-        if ($temporadaActual['temporada'] === 'INVIERNO') {
-            return 0; // Si estamos en invierno, la venta proyectada de verano es 0
+        if ($ventaVeranoAnterior <= 0) {
+            error_log("Venta verano anterior es 0 o negativa: $ventaVeranoAnterior");
+            return 0;
         }
         
-        // Si estamos en verano
-        $diasRestantes = self::calcularDiasRestantesTemporada($fecha);
-        $ventaPorDia = $ventaVeranoAnterior / 180; // 180 días de temporada verano
+        if ($indiceVariacion <= 0) {
+            $indiceVariacion = 1.0; // Valor por defecto
+        }
         
-        return ($ventaPorDia * $diasRestantes * $indiceVariacion);
+        $temporadaActual = self::obtenerTemporadaActual($fecha);
+        
+        // CORRECCIÓN: Aplicar índice siempre, independiente de la temporada
+        $ventaProyectada = $ventaVeranoAnterior * $indiceVariacion;
+        
+        // Si estamos en temporada de verano, ajustar por días restantes
+        if ($temporadaActual['temporada'] === 'VERANO') {
+            $diasRestantes = self::calcularDiasRestantesTemporada($fecha);
+            $diasTotalTemporada = 180; // 6 meses aproximadamente
+            
+            // Calcular proporción restante
+            $proporcionRestante = $diasRestantes / $diasTotalTemporada;
+            $ventaProyectada = $ventaProyectada * $proporcionRestante;
+        }
+        
+        return round($ventaProyectada, 2);
     }
     
     /**
-     * Calcula la venta proyectada para invierno
+     * CORREGIDO: Calcula la venta proyectada para invierno
      */
     public static function calcularVentaProyectadaInvierno($ventaInviernoAnterior, $indiceVariacion, $fecha = null) {
-        $temporadaActual = self::obtenerTemporadaActual($fecha);
+        // Validar datos de entrada
+        $ventaInviernoAnterior = (float)$ventaInviernoAnterior;
+        $indiceVariacion = (float)$indiceVariacion;
         
-        if ($temporadaActual['temporada'] === 'VERANO') {
-            // Si estamos en verano, usar venta total de invierno anterior * índice
-            return $ventaInviernoAnterior * $indiceVariacion;
+        if ($ventaInviernoAnterior <= 0) {
+            error_log("Venta invierno anterior es 0 o negativa: $ventaInviernoAnterior");
+            return 0;
         }
         
-        // Si estamos en invierno
-        $diasRestantes = self::calcularDiasRestantesTemporada($fecha);
-        $ventaPorDia = $ventaInviernoAnterior / 180; // 180 días de temporada invierno
+        if ($indiceVariacion <= 0) {
+            $indiceVariacion = 1.0; // Valor por defecto
+        }
         
-        return ($ventaPorDia * $diasRestantes * $indiceVariacion);
+        $temporadaActual = self::obtenerTemporadaActual($fecha);
+        
+        // CORRECCIÓN: Aplicar índice siempre, independiente de la temporada
+        $ventaProyectada = $ventaInviernoAnterior * $indiceVariacion;
+        
+        // Si estamos en temporada de invierno, ajustar por días restantes
+        if ($temporadaActual['temporada'] === 'INVIERNO') {
+            $diasRestantes = self::calcularDiasRestantesTemporada($fecha);
+            $diasTotalTemporada = 180; // 6 meses aproximadamente
+            
+            // Calcular proporción restante
+            $proporcionRestante = $diasRestantes / $diasTotalTemporada;
+            $ventaProyectada = $ventaProyectada * $proporcionRestante;
+        }
+        
+        return round($ventaProyectada, 2);
     }
     
     /**
@@ -127,7 +162,7 @@ class PresupuestoCalculos {
     }
     
     /**
-     * Obtiene las columnas de ventas ordenadas según la temporada proyectada
+     * CORREGIDO: Obtiene las columnas de ventas ordenadas según la temporada proyectada
      */
     public static function obtenerColumnasVentas($datos, $temporadaProyectada) {
         if (empty($datos)) return [];
@@ -137,7 +172,8 @@ class PresupuestoCalculos {
         
         // Buscar todas las columnas que contienen temporadas
         foreach (array_keys($primeraFila) as $columna) {
-            if (preg_match('/(VERANO|INVIERNO)\s+\d{2}/', $columna)) {
+            if (preg_match('/(VERANO|INVIERNO)\s*\d{2}/', $columna) || 
+                preg_match('/VTA_.*(VERANO|INVIERNO)/', $columna)) {
                 $columnasVenta[] = $columna;
             }
         }
@@ -145,8 +181,12 @@ class PresupuestoCalculos {
         // Ordenar las columnas de manera lógica
         usort($columnasVenta, function($a, $b) {
             // Extraer año y temporada
-            preg_match('/(VERANO|INVIERNO)\s+(\d{2})/', $a, $matchesA);
-            preg_match('/(VERANO|INVIERNO)\s+(\d{2})/', $b, $matchesB);
+            preg_match('/(VERANO|INVIERNO)\s*(\d{2})/', $a, $matchesA);
+            preg_match('/(VERANO|INVIERNO)\s*(\d{2})/', $b, $matchesB);
+            
+            if (empty($matchesA) || empty($matchesB)) {
+                return strcmp($a, $b);
+            }
             
             $anoA = (int)$matchesA[2];
             $anoB = (int)$matchesB[2];
@@ -170,34 +210,29 @@ class PresupuestoCalculos {
     }
     
     /**
-     * Procesa un registro individual para la solapa de compra proyectada
+     * CORREGIDO: Procesa un registro individual para la solapa de compra proyectada
      */
     public static function procesarRegistroCompraProyectada($registro, $stockProyectado, $temporadaProyectada, $fecha = null) {
         $temporadaActual = self::obtenerTemporadaActual($fecha);
         $indiceVariacion = (float)($registro['INDICE_VARIACION'] ?? 1.0);
         
-        // Buscar ventas de temporadas anteriores
-        $ventaVeranoAnterior = 0;
-        $ventaInviernoAnterior = 0;
+        // CORRECCIÓN: Buscar ventas de temporadas anteriores con mejor lógica
+        $ventaVeranoAnterior = self::extraerVentaAnterior($registro, 'VERANO');
+        $ventaInviernoAnterior = self::extraerVentaAnterior($registro, 'INVIERNO');
         
-        // Buscar la venta de la temporada anterior correspondiente
-        foreach ($registro as $columna => $valor) {
-            if (preg_match('/(VERANO|INVIERNO)\s+(\d{2})/', $columna, $matches)) {
-                $temporada = $matches[1];
-                $ano = (int)$matches[2];
-                
-                // Para proyección, usar la temporada anterior más reciente
-                if ($temporada === 'VERANO') {
-                    $ventaVeranoAnterior = max($ventaVeranoAnterior, (float)$valor);
-                } else {
-                    $ventaInviernoAnterior = max($ventaInviernoAnterior, (float)$valor);
-                }
-            }
-        }
+        // Debug para diagnóstico
+        error_log("Debug - Procesando registro: " . ($registro['RUBRO'] ?? 'Unknown'));
+        error_log("Debug - Venta Verano Anterior: $ventaVeranoAnterior");
+        error_log("Debug - Venta Invierno Anterior: $ventaInviernoAnterior");
+        error_log("Debug - Índice Variación: $indiceVariacion");
         
         // Calcular ventas proyectadas
         $ventaProyVerano = self::calcularVentaProyectadaVerano($ventaVeranoAnterior, $indiceVariacion, $fecha);
         $ventaProyInvierno = self::calcularVentaProyectadaInvierno($ventaInviernoAnterior, $indiceVariacion, $fecha);
+        
+        // Debug de resultados
+        error_log("Debug - Venta Proy Verano: $ventaProyVerano");
+        error_log("Debug - Venta Proy Invierno: $ventaProyInvierno");
         
         // Calcular compra proyectada
         $compraProyectada = self::calcularCompraProyectada($stockProyectado, $ventaProyVerano, $ventaProyInvierno);
@@ -209,6 +244,49 @@ class PresupuestoCalculos {
             'temporada_actual' => $temporadaActual,
             'dias_restantes' => self::calcularDiasRestantesTemporada($fecha)
         ];
+    }
+    
+    /**
+     * NUEVO: Extrae la venta anterior de una temporada específica
+     */
+    private static function extraerVentaAnterior($registro, $temporada) {
+        $ventaAnterior = 0;
+        $anoActual = (int)date('y'); // Año actual en formato de 2 dígitos
+        
+        // Buscar en orden de prioridad: año anterior, año actual - 1, etc.
+        for ($i = 1; $i <= 3; $i++) {
+            $anoObjetivo = $anoActual - $i;
+            if ($anoObjetivo < 0) $anoObjetivo += 100; // Ajustar para cambio de siglo
+            
+            $anoStr = str_pad($anoObjetivo, 2, '0', STR_PAD_LEFT);
+            
+            // Probar diferentes formatos de columna
+            $posiblesColumnas = [
+                $temporada . ' ' . $anoStr,
+                $temporada . '_' . $anoStr,
+                $temporada . $anoStr,
+                'VTA_' . $temporada . '_' . $anoStr,
+                'VTA_' . $temporada . $anoStr
+            ];
+            
+            foreach ($posiblesColumnas as $columna) {
+                if (isset($registro[$columna]) && is_numeric($registro[$columna]) && $registro[$columna] > 0) {
+                    error_log("Debug - Encontrada columna: $columna con valor: " . $registro[$columna]);
+                    return (float)$registro[$columna];
+                }
+            }
+        }
+        
+        // Si no encontramos nada específico, buscar cualquier columna que contenga la temporada
+        foreach ($registro as $columna => $valor) {
+            if (stripos($columna, $temporada) !== false && is_numeric($valor) && $valor > 0) {
+                error_log("Debug - Columna genérica encontrada: $columna con valor: $valor");
+                return (float)$valor;
+            }
+        }
+        
+        error_log("Debug - No se encontró venta anterior para temporada: $temporada");
+        return 0;
     }
     
     /**
@@ -251,6 +329,27 @@ class PresupuestoCalculos {
             'etiquetas_proyeccion' => $etiquetas,
             'fecha_calculo' => $fecha ? $fecha->format('Y-m-d') : date('Y-m-d')
         ];
+    }
+    
+    /**
+     * NUEVO: Función de diagnóstico para debug
+     */
+    public static function diagnosticarDatos($registro) {
+        $info = [
+            'rubro' => $registro['RUBRO'] ?? 'N/A',
+            'categoria' => $registro['CATEGORIA_PADRE'] ?? 'N/A',
+            'indice_variacion' => $registro['INDICE_VARIACION'] ?? 'N/A',
+            'columnas_disponibles' => array_keys($registro),
+            'columnas_venta' => []
+        ];
+        
+        foreach ($registro as $columna => $valor) {
+            if (preg_match('/(VERANO|INVIERNO)/', $columna) && is_numeric($valor)) {
+                $info['columnas_venta'][$columna] = $valor;
+            }
+        }
+        
+        return $info;
     }
 }
 ?>

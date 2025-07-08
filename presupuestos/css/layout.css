@@ -1,0 +1,319 @@
+
+/* Estilos de Layout y Estructura - Sistema de Presupuesto de Compras */
+/* Archivo: presupuestos/css/layout.css */
+
+/* Estilos generales del body */
+body {
+    background-color: var(--light-bg);
+    font-family: var(--font-family-base);
+    margin: 0;
+    padding: 0;
+    min-height: 100vh;
+    overflow-x: hidden;
+}
+
+/* Container principal con márgenes reducidos */
+.container-fluid {
+    padding-left: var(--padding-container);
+    padding-right: var(--padding-container);
+    margin-bottom: 0 !important; /* Forzar margen cero */
+}
+
+/* Header compacto mejorado */
+.header-compacto {
+    background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);
+    color: var(--text-white);
+    padding: var(--padding-card) 0; /* Reducido */
+    margin: calc(-1 * var(--padding-container)) calc(-1 * var(--padding-container)) var(--margin-bottom-section) calc(-1 * var(--padding-container));
+    border-radius: 0 0 var(--border-radius) var(--border-radius);
+    box-shadow: 0 2px 8px rgba(13, 110, 253, 0.2);
+}
+
+.header-compacto h1 {
+    font-size: 1.4rem; /* Reducido más */
+    margin-bottom: 0;
+    font-weight: var(--font-weight-bold);
+    line-height: 1.2;
+}
+
+.header-compacto .timezone-info {
+    font-size: var(--font-size-xs);
+    opacity: 0.9;
+    margin-top: var(--spacing-xs);
+}
+
+/* Información de temporada compacta */
+.temporada-info {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: var(--text-white);
+    padding: var(--spacing-sm); /* Muy reducido */
+    border-radius: var(--border-radius);
+    margin-bottom: var(--margin-bottom-section);
+    box-shadow: var(--box-shadow-sm);
+}
+
+.temporada-info h6 {
+    margin-bottom: var(--spacing-xs);
+    font-size: var(--font-size-sm);
+}
+
+.temporada-info .h5 {
+    font-size: var(--font-size-lg);
+    font-weight: var(--font-weight-bold);
+}
+
+/* Cards con espaciado reducido */
+.card {
+    border: none;
+    border-radius: var(--border-radius);
+    box-shadow: var(--box-shadow-sm);
+    transition: var(--transition-fast);
+    margin-bottom: var(--margin-bottom-section);
+}
+
+.card:hover {
+    box-shadow: var(--box-shadow-hover);
+    transform: translateY(-1px);
+}
+
+.card-body {
+    padding: var(--padding-card); /* Reducido */
+}
+
+/* Tabs con espaciado optimizado */
+.nav-tabs {
+    border-bottom: 2px solid var(--border-color);
+    background: linear-gradient(135deg, var(--light-bg) 0%, #e9ecef 100%);
+    padding: var(--spacing-xs) var(--spacing-sm) 0; /* Reducido */
+    border-radius: var(--border-radius) var(--border-radius) 0 0;
+    margin-bottom: 0;
+}
+
+.nav-tabs .nav-link {
+    border: none;
+    color: var(--text-secondary);
+    font-weight: var(--font-weight-semibold);
+    padding: var(--spacing-sm) var(--spacing-md); /* Reducido */
+    border-radius: var(--border-radius);
+    margin: 0 var(--spacing-xs);
+    transition: var(--transition-fast);
+    background: transparent;
+    font-size: var(--font-size-sm);
+}
+
+.nav-tabs .nav-link:hover {
+    background-color: rgba(13, 110, 253, 0.1);
+    color: var(--primary-color);
+    transform: translateY(-1px);
+}
+
+.nav-tabs .nav-link.active {
+    background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-dark) 100%);
+    color: var(--text-white);
+    border: none;
+    box-shadow: 0 2px 8px rgba(13, 110, 253, 0.3);
+}
+
+.nav-tabs .nav-link i {
+    margin-right: var(--spacing-xs);
+    font-size: 1em;
+}
+
+/* Tab content con altura optimizada */
+.tab-content {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-top: none;
+    border-radius: 0 0 var(--border-radius) var(--border-radius);
+    min-height: 400px; /* Reducido de 500px */
+    max-height: calc(100vh - 200px); /* Limitar altura máxima */
+    box-shadow: var(--box-shadow-sm);
+    overflow: hidden;
+}
+
+.tab-pane {
+    animation: fadeIn 0.3s ease-in;
+    height: 100%;
+}
+
+@keyframes fadeIn {
+    from { 
+        opacity: 0; 
+        transform: translateY(5px); /* Reducido */
+    }
+    to { 
+        opacity: 1; 
+        transform: translateY(0); 
+    }
+}
+
+/* Search container compacto */
+.search-container {
+    background: linear-gradient(135deg, var(--light-bg) 0%, #e9ecef 100%);
+    padding: var(--spacing-sm); /* Muy reducido */
+    border-bottom: 1px solid var(--border-color);
+    position: sticky;
+    top: 0;
+    z-index: var(--z-index-sticky);
+}
+
+.search-container .input-group {
+    box-shadow: var(--box-shadow-sm);
+    border-radius: var(--border-radius);
+    overflow: hidden;
+}
+
+.search-container .input-group-text {
+    background: var(--primary-color);
+    color: var(--text-white);
+    border: none;
+    padding: var(--spacing-xs) var(--spacing-sm);
+}
+
+.search-container .form-control {
+    border: none;
+    font-weight: var(--font-weight-medium);
+    font-size: var(--font-size-sm);
+}
+
+.search-container .form-control:focus {
+    box-shadow: 0 0 0 0.15rem rgba(13, 110, 253, 0.25);
+}
+
+/* Export buttons compactos */
+.export-buttons {
+    display: flex;
+    gap: var(--spacing-xs);
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.export-buttons .btn {
+    padding: var(--spacing-xs) var(--spacing-sm);
+    font-size: var(--font-size-xs);
+    white-space: nowrap;
+}
+
+/* Loading optimizado */
+.loading {
+    padding: var(--spacing-lg);
+    text-align: center;
+    background: var(--card-bg);
+    border-radius: var(--border-radius);
+    box-shadow: var(--box-shadow-sm);
+    animation: fadeIn 0.3s ease-in;
+}
+
+.spinner-border {
+    width: 2.5rem; /* Reducido */
+    height: 2.5rem;
+    border-width: 0.25em;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Responsive mejoras con espaciado reducido */
+@media (max-width: 768px) {
+    .container-fluid {
+        padding-left: var(--spacing-xs);
+        padding-right: var(--spacing-xs);
+    }
+    
+    .header-compacto {
+        padding: var(--spacing-sm) 0;
+        margin-left: calc(-1 * var(--spacing-xs));
+        margin-right: calc(-1 * var(--spacing-xs));
+    }
+    
+    .header-compacto h1 {
+        font-size: 1.2rem;
+    }
+    
+    .header-compacto .d-flex {
+        flex-direction: column;
+        gap: var(--spacing-xs);
+        text-align: center;
+    }
+    
+    .export-buttons {
+        justify-content: center;
+    }
+    
+    .search-container {
+        padding: var(--spacing-xs);
+    }
+    
+    .search-container .row {
+        flex-direction: column;
+        gap: var(--spacing-xs);
+    }
+    
+    .nav-tabs .nav-link {
+        padding: var(--spacing-xs) var(--spacing-sm);
+        font-size: var(--font-size-xs);
+        margin: 0 1px;
+    }
+    
+    .nav-tabs .nav-link i {
+        display: none; /* Ocultar iconos en móvil para ahorrar espacio */
+    }
+    
+    .tab-content {
+        min-height: 300px;
+        max-height: calc(100vh - 150px);
+    }
+    
+    .temporada-info {
+        padding: var(--spacing-xs);
+    }
+    
+    .temporada-info .row {
+        flex-direction: column;
+        text-align: center;
+        gap: var(--spacing-xs);
+    }
+}
+
+@media (max-width: 576px) {
+    .header-compacto h1 {
+        font-size: 1.1rem;
+    }
+    
+    .nav-tabs {
+        padding: 2px 4px 0;
+    }
+    
+    .nav-tabs .nav-link {
+        padding: 4px 8px;
+        margin: 0;
+        font-size: 0.7rem;
+    }
+    
+    .search-container .input-group {
+        font-size: var(--font-size-xs);
+    }
+    
+    .tab-content {
+        min-height: 250px;
+        max-height: calc(100vh - 120px);
+    }
+    
+    .export-buttons .btn {
+        padding: 2px 6px;
+        font-size: 0.7rem;
+    }
+}
+
+/* Utilities para espaciado reducido */
+.mb-compact { margin-bottom: var(--margin-bottom-section) !important; }
+.p-compact { padding: var(--padding-card) !important; }
+.pt-compact { padding-top: var(--padding-card) !important; }
+.pb-compact { padding-bottom: var(--padding-card) !important; }
+
+/* Eliminar márgenes innecesarios */
+.no-margin-bottom { margin-bottom: 0 !important; }
+.no-padding-bottom { padding-bottom: 0 !important; }
