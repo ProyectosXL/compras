@@ -116,6 +116,86 @@
             50% { transform: scale(1.1); }
             100% { transform: scale(1); }
         }
+
+        .header-venta-anterior {
+            background-color: #0dcaf0 !important; /* Info azul claro */
+            color: #000 !important; /* Texto negro para contraste */
+            font-weight: 700 !important;
+            font-size: 0.75rem !important;
+            text-align: center !important;
+            padding: 8px 4px !important;
+            border: 1px solid #000 !important;
+        }
+        
+        .header-venta-proyectada {
+            background-color: #0d6efd !important; /* Azul primario */
+            color: #fff !important; /* Texto blanco */
+            font-weight: 700 !important;
+            font-size: 0.75rem !important;
+            text-align: center !important;
+            padding: 8px 4px !important;
+            border: 1px solid #000 !important;
+        }
+        
+        .header-compra-proyectada {
+            background-color: #198754 !important; /* Verde */
+            color: #fff !important; /* Texto blanco */
+            font-weight: 700 !important;
+            font-size: 0.75rem !important;
+            text-align: center !important;
+            padding: 8px 4px !important;
+            border: 1px solid #000 !important;
+        }
+        
+        /* Asegurar que todos los headers de la tabla sean visibles */
+        .table thead th {
+            background-color: #343a40 !important;
+            color: #fff !important;
+            font-weight: 700 !important;
+            text-align: center !important;
+            padding: 8px 4px !important;
+            border: 1px solid #000 !important;
+            font-size: 0.75rem !important;
+        }
+        
+        /* Headers específicos con colores distintivos */
+        .bg-warning {
+            background-color: #ffc107 !important;
+            color: #000 !important; /* Texto negro para contraste */
+            font-weight: 700 !important;
+            border: 1px solid #000 !important;
+        }
+        
+        .bg-info.text-dark {
+            background-color: #0dcaf0 !important;
+            color: #000 !important;
+            font-weight: 700 !important;
+            border: 1px solid #000 !important;
+        }
+        
+        /* Sticky headers mejorados */
+        .sticky-header th {
+            position: sticky !important;
+            top: 0 !important;
+            z-index: 10 !important;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3) !important;
+        }
+        
+        /* Responsive mejorado */
+        @media (max-width: 768px) {
+            .table thead th {
+                font-size: 0.65rem !important;
+                padding: 4px 2px !important;
+            }
+            
+            .header-venta-anterior,
+            .header-venta-proyectada,
+            .header-compra-proyectada {
+                font-size: 0.6rem !important;
+                padding: 4px 2px !important;
+            }
+        }
+
     </style>
 </head>
 <body>
@@ -244,16 +324,16 @@
                                             <th>Categoría</th>
                                             <th class="text-center">Stock Proyectado</th>
                                             <th class="text-center bg-warning">Índice Variación</th>
-                                            <th class="text-center bg-info text-dark">Venta Ant. Ver</th>
+                                            <th class="text-center header-venta-anterior">Venta Ant. Ver</th>
                                             <th class="text-center header-venta-proyectada" id="header-venta-verano">Venta Proy. Ver</th>
-                                            <th class="text-center bg-info text-dark">Venta Ant. Inv</th>
+                                            <th class="text-center header-venta-anterior">Venta Ant. Inv</th>
                                             <th class="text-center header-venta-proyectada" id="header-venta-invierno">Venta Proy. Inv</th>
                                             <th class="text-center header-compra-proyectada">Compra Proyectada</th>
                                         </tr>
                                     </thead>
                                     <tbody id="tbody-verano">
                                         <tr>
-                                            <td colspan="7" class="text-center text-muted py-4">
+                                            <td colspan="9" class="text-center text-muted py-4">
                                                 <i class="fas fa-info-circle"></i>
                                                 Cargue los datos para ver la proyección de compras de verano
                                             </td>
@@ -295,14 +375,16 @@
                                             <th>Categoría</th>
                                             <th class="text-center">Stock Proyectado</th>
                                             <th class="text-center bg-warning">Índice Variación</th>
+                                            <th class="text-center header-venta-anterior">Venta Ant. Ver</th>
                                             <th class="text-center header-venta-proyectada" id="header-venta-verano-inv">Venta Proy. Ver</th>
+                                            <th class="text-center header-venta-anterior">Venta Ant. Inv</th>
                                             <th class="text-center header-venta-proyectada" id="header-venta-invierno-inv">Venta Proy. Inv</th>
                                             <th class="text-center header-compra-proyectada">Compra Proyectada</th>
                                         </tr>
                                     </thead>
                                     <tbody id="tbody-invierno">
                                         <tr>
-                                            <td colspan="7" class="text-center text-muted py-4">
+                                            <td colspan="9" class="text-center text-muted py-4">
                                                 <i class="fas fa-info-circle"></i>
                                                 Cargue los datos para ver la proyección de compras de invierno
                                             </td>
@@ -344,10 +426,10 @@
                                             <th>Categoría</th>
                                             <th class="text-center">Stock Proyectado</th>
                                             <th class="text-center bg-warning">Índice Variación</th>
-                                            <th class="text-center bg-info text-dark">Venta Ant. Ver</th>
-                                            <th class="text-center header-venta-proyectada" id="header-venta-verano-inv">Venta Proy. Ver</th>
-                                            <th class="text-center bg-info text-dark">Venta Ant. Inv</th>
-                                            <th class="text-center header-venta-proyectada" id="header-venta-invierno-inv">Venta Proy. Inv</th>
+                                            <th class="text-center header-venta-anterior">Venta Ant. Ver</th>
+                                            <th class="text-center header-venta-proyectada" id="header-venta-verano-stock">Venta Proy. Ver</th>
+                                            <th class="text-center header-venta-anterior">Venta Ant. Inv</th>
+                                            <th class="text-center header-venta-proyectada" id="header-venta-invierno-stock">Venta Proy. Inv</th>
                                             <th class="text-center header-compra-proyectada">Compra Proyectada</th>
                                         </tr>
                                     </thead>
@@ -392,6 +474,12 @@
                         <label for="modal-nuevo-indice" class="form-label">Nuevo Índice:</label>
                         <input type="number" class="form-control" id="modal-nuevo-indice" 
                                step="0.01" min="0" max="10">
+                               <div class="form-text">
+                                <strong>Ejemplos:</strong><br>
+                                • 1.0 = Sin cambio (100%)<br>
+                                • 1.2 = Aumento 20%<br>
+                                • 0.8 = Reducción 20%
+                            </div>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -521,7 +609,14 @@
 
         // Inicialización
         document.addEventListener('DOMContentLoaded', function() {
-            console.log('Sistema de Presupuesto de Compras v2.1 iniciado');
+            console.log('Sistema de Presupuesto de Compras v2.2 - CORREGIDO iniciado');
+
+            // AGREGAR después del console.log anterior:
+            console.log('✅ Correcciones aplicadas:');
+            console.log('  - Cálculo proporcional por días para temporada actual');
+            console.log('  - Nomenclatura VERANO XX-XX correcta');
+            console.log('  - Headers de ventas anteriores visibles');
+            console.log('  - Eliminadas columnas históricas duplicadas');
             
             // Actualizar fecha y hora inmediatamente
             actualizarFechaHora();
