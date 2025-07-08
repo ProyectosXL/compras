@@ -36,8 +36,6 @@ class Presupuesto {
     }
 
     /**
-     * Ejecuta el procedimiento almacenado RO_SP_VENTAS_PRESUPUESTO_COMPRAS
-     * y retorna los resultados para el cálculo de presupuesto de compras
      * 
      * @return array Datos del presupuesto de compras o array vacío en caso de error
      */
@@ -48,7 +46,8 @@ class Presupuesto {
             }
 
             // Ejecutar el procedimiento almacenado
-            $sql = "EXEC RO_SP_VENTAS_PRESUPUESTO_COMPRAS";
+            $sql = "SELECT * FROM RO_PC_T_VENTAS_PRESUPUESTO_COMPRAS
+                    ORDER BY RUBRO, CATEGORIA_PADRE";
             
             $stmt = sqlsrv_query($this->cid_apps, $sql);
             

@@ -466,7 +466,7 @@ body {
     background: linear-gradient(135deg, var(--primary-color) 0%, #0056b3 100%);
     color: white;
     margin: -1.5rem -15px 2rem -15px;
-    padding: 2rem 15px;
+    padding: 0.8rem 15px;
     border-radius: 0 0 var(--border-radius) var(--border-radius);
     box-shadow: 0 4px 15px rgba(13, 110, 253, 0.3);
 }

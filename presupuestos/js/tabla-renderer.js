@@ -5,6 +5,14 @@
 class TablaRenderer {
     
     /**
+     * NUEVO: Formatear número para input (usar punto como decimal)
+     */
+    static formatearNumeroParaInput(numero) {
+        if (numero === null || numero === undefined || isNaN(numero)) return '1.0';
+        return parseFloat(numero).toFixed(4);
+    }
+
+    /**
      * Renderizar tabla de Compra Proyectada Verano
      */
     static renderizarTablaVerano(datos, etiquetas = null) {
@@ -15,6 +23,8 @@ class TablaRenderer {
             return;
         }
 
+        // Limpiar tabla antes de renderizar
+        TablaRenderer.limpiarTabla('verano');
         tbody.innerHTML = '';
         
         datos.forEach((item, index) => {
@@ -42,6 +52,8 @@ class TablaRenderer {
             return;
         }
 
+        // Limpiar tabla antes de renderizar
+        TablaRenderer.limpiarTabla('invierno');
         tbody.innerHTML = '';
         
         datos.forEach((item, index) => {
@@ -69,6 +81,8 @@ class TablaRenderer {
             return;
         }
 
+        // Limpiar tabla antes de renderizar
+        TablaRenderer.limpiarTabla('stock');
         tbody.innerHTML = '';
         
         datos.forEach(item => {
@@ -78,7 +92,41 @@ class TablaRenderer {
     }
 
     /**
-     * Crear fila para tabla de verano
+     * Limpiar tabla y resetear headers a estado original
+     */
+    static limpiarTabla(solapa) {
+        const tabla = document.getElementById(`tabla-${solapa}`);
+        const thead = tabla.querySelector('thead tr');
+        
+        // Remover columnas dinámicas agregadas previamente
+        const columnasOriginales = TablaRenderer.obtenerColumnasOriginales(solapa);
+        
+        // Limpiar thead manteniendo solo columnas originales
+        while (thead.children.length > columnasOriginales) {
+            thead.removeChild(thead.lastChild);
+        }
+        
+        // Marcar tabla como limpia
+        tabla.setAttribute('data-limpia', 'true');
+    }
+
+    /**
+     * Obtener número de columnas originales por solapa
+     */
+    static obtenerColumnasOriginales(solapa) {
+        switch (solapa) {
+            case 'verano':
+            case 'invierno':
+                return 7; // Rubro, Categoría, Stock Proy, Índice, Venta Ver, Venta Inv, Compra Proy
+            case 'stock':
+                return 9; // Rubro, Categoría, Stock, Stock Guardar, Compras Ver, Compras Inv, Compras Atemp, Stock Cob, Stock Proy
+            default:
+                return 7;
+        }
+    }
+
+    /**
+     * Crear fila para tabla de verano (CORREGIDO - Formateo de números)
      */
     static crearFilaVerano(item, index) {
         const tr = document.createElement('tr');
@@ -98,7 +146,7 @@ class TablaRenderer {
             <td>${item.CATEGORIA_PADRE || ''}</td>
             <td class="text-end">${stockProyectado}</td>
             <td class="text-center editable-cell" onclick="editarIndice('${TablaRenderer.escaparComillas(item.RUBRO)}', '${TablaRenderer.escaparComillas(item.CATEGORIA_PADRE)}', ${indiceVariacion}, 'verano', ${index})">
-                <input type="number" class="indice-input" value="${FormatoUtils.formatearDecimal(indiceVariacion, 4)}" 
+                <input type="number" class="indice-input" value="${TablaRenderer.formatearNumeroParaInput(indiceVariacion)}" 
                        step="0.0001" min="0" max="10" readonly>
             </td>
             <td class="text-end valor-positivo">${ventaProyVerano}</td>
@@ -110,7 +158,7 @@ class TablaRenderer {
     }
 
     /**
-     * Crear fila para tabla de invierno
+     * Crear fila para tabla de invierno (CORREGIDO - Formateo de números)
      */
     static crearFilaInvierno(item, index) {
         const tr = document.createElement('tr');
@@ -130,7 +178,7 @@ class TablaRenderer {
             <td>${item.CATEGORIA_PADRE || ''}</td>
             <td class="text-end">${stockProyectado}</td>
             <td class="text-center editable-cell" onclick="editarIndice('${TablaRenderer.escaparComillas(item.RUBRO)}', '${TablaRenderer.escaparComillas(item.CATEGORIA_PADRE)}', ${indiceVariacion}, 'invierno', ${index})">
-                <input type="number" class="indice-input" value="${FormatoUtils.formatearDecimal(indiceVariacion, 4)}" 
+                <input type="number" class="indice-input" value="${TablaRenderer.formatearNumeroParaInput(indiceVariacion)}" 
                        step="0.0001" min="0" max="10" readonly>
             </td>
             <td class="text-end valor-positivo">${ventaProyVerano}</td>
@@ -189,15 +237,25 @@ class TablaRenderer {
     }
 
     /**
-     * Agregar columnas de ventas históricas dinámicamente
+     * Agregar columnas de ventas históricas dinámicamente (MEJORADO - SIN DUPLICADOS)
      */
     static agregarColumnasVentasHistoricas(solapa, datos) {
         if (!datos || datos.length === 0) return;
         
+        const tabla = document.getElementById(`tabla-${solapa}`);
+        
+        // Verificar si ya se procesaron las columnas para evitar duplicados
+        if (tabla.getAttribute('data-columnas-procesadas') === 'true') {
+            return;
+        }
+        
         const primeraFila = datos[0];
         const columnasVenta = TablaRenderer.extraerColumnasVenta(primeraFila);
         
-        if (columnasVenta.length === 0) return;
+        if (columnasVenta.length === 0) {
+            tabla.setAttribute('data-columnas-procesadas', 'true');
+            return;
+        }
         
         // Ordenar columnas cronológicamente
         const columnasOrdenadas = TablaRenderer.ordenarColumnasVenta(columnasVenta);
@@ -207,68 +265,106 @@ class TablaRenderer {
         
         // Agregar datos a las filas
         TablaRenderer.agregarDatosVentas(solapa, datos, columnasOrdenadas);
+        
+        // Marcar tabla como procesada
+        tabla.setAttribute('data-columnas-procesadas', 'true');
     }
 
     /**
-     * Extraer columnas de venta de los datos
+     * Extraer columnas de venta de los datos (MEJORADO)
      */
     static extraerColumnasVenta(primeraFila) {
         const columnasVenta = [];
+        const columnasExcluidas = [
+            'RUBRO', 'CATEGORIA_PADRE', 'STOCK_PROYECTADO', 'INDICE_VARIACION',
+            'VENTA_PROY_VERANO', 'VENTA_PROY_INVIERNO', 'COMPRA_PROYECTADA',
+            'CANT_STOCK', 'CANT_STOCK_GUARDAR', 'CANT_PEND_OC_VERANO', 
+            'CANT_PEND_OC_INVIERNO', 'CANT_PEND_OC_ATEMPORAL', 'STOCK_COBERTURA',
+            'STOCK', 'STOCK_GUARDAR', 'COMPRAS_VERANO', 'COMPRAS_INVIERNO', 
+            'COMPRAS_ATEMPORAL', 'STOCK_PROYECTADO'
+        ];
         
         Object.keys(primeraFila).forEach(columna => {
-            if (columna.includes('VERANO') || columna.includes('INVIERNO')) {
-                if (!['VENTA_PROY_VERANO', 'VENTA_PROY_INVIERNO', 'COMPRAS_VERANO', 'COMPRAS_INVIERNO'].includes(columna)) {
-                    columnasVenta.push(columna);
-                }
+            // Verificar si es columna de venta histórica
+            if (!columnasExcluidas.includes(columna) && 
+                (columna.includes('VERANO') || columna.includes('INVIERNO') || 
+                 columna.includes('VTA_'))) {
+                columnasVenta.push(columna);
             }
         });
         
-        return columnasVenta;
+        // Eliminar duplicados usando Set
+        return [...new Set(columnasVenta)];
     }
 
     /**
-     * Ordenar columnas de venta cronológicamente
+     * Ordenar columnas de venta cronológicamente (MEJORADO)
      */
     static ordenarColumnasVenta(columnas) {
         return columnas.sort((a, b) => {
-            const matchA = a.match(/(VERANO|INVIERNO)\s*(\d{2})/);
-            const matchB = b.match(/(VERANO|INVIERNO)\s*(\d{2})/);
-            
-            if (matchA && matchB) {
-                const anoA = parseInt(matchA[2]);
-                const anoB = parseInt(matchB[2]);
-                const temporadaA = matchA[1];
-                const temporadaB = matchB[1];
+            // Extraer información de temporada y año
+            const extraerInfo = (columna) => {
+                let match = columna.match(/(VERANO|INVIERNO)[\s_]*(\d{2})/i);
+                if (match) {
+                    return {
+                        temporada: match[1].toUpperCase(),
+                        ano: parseInt(match[2])
+                    };
+                }
                 
-                if (anoA !== anoB) return anoA - anoB;
-                return temporadaA === 'VERANO' ? -1 : 1;
+                // Fallback para otros formatos
+                if (columna.includes('VERANO')) {
+                    return { temporada: 'VERANO', ano: 25 };
+                } else if (columna.includes('INVIERNO')) {
+                    return { temporada: 'INVIERNO', ano: 25 };
+                }
+                
+                return { temporada: 'OTROS', ano: 0 };
+            };
+            
+            const infoA = extraerInfo(a);
+            const infoB = extraerInfo(b);
+            
+            // Primero ordenar por año
+            if (infoA.ano !== infoB.ano) {
+                return infoA.ano - infoB.ano;
             }
-            return 0;
+            
+            // Si el año es igual, verano va antes que invierno
+            if (infoA.temporada !== infoB.temporada) {
+                if (infoA.temporada === 'VERANO' && infoB.temporada === 'INVIERNO') return -1;
+                if (infoA.temporada === 'INVIERNO' && infoB.temporada === 'VERANO') return 1;
+            }
+            
+            // Si todo es igual, orden alfabético
+            return a.localeCompare(b);
         });
     }
 
     /**
-     * Agregar headers de ventas
+     * Agregar headers de ventas (MEJORADO - SIN DUPLICADOS)
      */
     static agregarHeadersVentas(solapa, columnasOrdenadas) {
-        const thead = document.querySelector(`#tabla-${solapa} thead tr`);
-        const posicionInsercion = 7; // Después de "Compra Proyectada"
+        const tabla = document.getElementById(`tabla-${solapa}`);
+        const thead = tabla.querySelector('thead tr');
+        const columnasOriginales = TablaRenderer.obtenerColumnasOriginales(solapa);
         
-        columnasOrdenadas.forEach((columna, index) => {
+        // Verificar que no tengamos más columnas de las originales
+        if (thead.children.length > columnasOriginales) {
+            return; // Ya se agregaron las columnas
+        }
+        
+        columnasOrdenadas.forEach((columna) => {
             const th = document.createElement('th');
             th.className = 'text-center bg-light';
             th.textContent = TablaRenderer.formatearNombreColumna(columna);
-            
-            if (thead.children.length > posicionInsercion + index) {
-                thead.insertBefore(th, thead.children[posicionInsercion + index]);
-            } else {
-                thead.appendChild(th);
-            }
+            th.setAttribute('data-columna-dinamica', 'true');
+            thead.appendChild(th);
         });
     }
 
     /**
-     * Agregar datos de ventas a las filas
+     * Agregar datos de ventas a las filas (MEJORADO)
      */
     static agregarDatosVentas(solapa, datos, columnasOrdenadas) {
         const filas = document.querySelectorAll(`#tbody-${solapa} .fila-datos`);
@@ -276,28 +372,39 @@ class TablaRenderer {
         datos.forEach((item, rowIndex) => {
             if (filas[rowIndex]) {
                 const fila = filas[rowIndex];
+                const columnasOriginales = TablaRenderer.obtenerColumnasOriginales(solapa);
                 
-                columnasOrdenadas.forEach((columna, colIndex) => {
+                // Verificar que no tengamos más columnas de las originales
+                if (fila.children.length > columnasOriginales) {
+                    return; // Ya se agregaron las columnas
+                }
+                
+                columnasOrdenadas.forEach((columna) => {
                     const td = document.createElement('td');
                     td.className = 'text-end text-muted';
+                    td.setAttribute('data-columna-dinamica', 'true');
                     td.textContent = FormatoUtils.formatearNumero(item[columna] || 0);
-                    
-                    const posicion = 7 + colIndex; // Después de las columnas principales
-                    if (fila.children.length > posicion) {
-                        fila.insertBefore(td, fila.children[posicion]);
-                    } else {
-                        fila.appendChild(td);
-                    }
+                    fila.appendChild(td);
                 });
             }
         });
     }
 
     /**
-     * Formatear nombre de columna para mostrar
+     * Formatear nombre de columna para mostrar (MEJORADO)
      */
     static formatearNombreColumna(columna) {
-        return columna.replace(/_/g, ' ').replace(/\s+/g, ' ').trim();
+        // Reemplazar formatos comunes
+        let nombre = columna
+            .replace(/VTA_/g, '')
+            .replace(/_/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+        
+        // Capitalizar primera letra de cada palabra
+        return nombre.split(' ').map(palabra => 
+            palabra.charAt(0).toUpperCase() + palabra.slice(1).toLowerCase()
+        ).join(' ');
     }
 
     /**
@@ -371,24 +478,39 @@ class TablaRenderer {
     }
 
     /**
-     * Aplicar filtros visuales a las filas
+     * Aplicar filtros visuales a las filas (OPTIMIZADO PARA BÚSQUEDA RÁPIDA)
      */
-    static aplicarFiltroVisual(solapa, filtroFunction) {
+    static aplicarFiltroVisual(solapa, termino = '') {
         const tabla = document.getElementById(`tbody-${solapa}`);
         const filas = tabla.querySelectorAll('.fila-datos');
         
-        filas.forEach(fila => {
-            const rubro = fila.children[0]?.textContent || '';
-            const categoria = fila.children[1]?.textContent || '';
-            
-            if (filtroFunction(rubro, categoria)) {
+        if (!termino || termino.length < 2) {
+            // Mostrar todas las filas
+            filas.forEach(fila => {
                 fila.style.display = '';
                 fila.style.opacity = '1';
+            });
+            return filas.length;
+        }
+        
+        const terminoLower = termino.toLowerCase();
+        let coincidencias = 0;
+        
+        filas.forEach(fila => {
+            const rubro = (fila.children[0]?.textContent || '').toLowerCase();
+            const categoria = (fila.children[1]?.textContent || '').toLowerCase();
+            
+            if (rubro.includes(terminoLower) || categoria.includes(terminoLower)) {
+                fila.style.display = '';
+                fila.style.opacity = '1';
+                coincidencias++;
             } else {
                 fila.style.display = 'none';
                 fila.style.opacity = '0.5';
             }
         });
+        
+        return coincidencias;
     }
 
     /**
@@ -458,13 +580,16 @@ class TablaRenderer {
         const headers = tabla.querySelectorAll('thead th');
         
         headers.forEach((th, index) => {
-            th.style.cursor = 'pointer';
-            th.setAttribute('title', 'Click para ordenar');
-            
-            th.addEventListener('click', () => {
-                const currentDirection = th.classList.contains('sorted-asc') ? 'desc' : 'asc';
-                TablaRenderer.ordenarTabla(solapa, index, currentDirection);
-            });
+            // Solo agregar ordenamiento a columnas que no son dinámicas
+            if (!th.getAttribute('data-columna-dinamica')) {
+                th.style.cursor = 'pointer';
+                th.setAttribute('title', 'Click para ordenar');
+                
+                th.addEventListener('click', () => {
+                    const currentDirection = th.classList.contains('sorted-asc') ? 'desc' : 'asc';
+                    TablaRenderer.ordenarTabla(solapa, index, currentDirection);
+                });
+            }
         });
     }
 
@@ -580,6 +705,40 @@ class TablaRenderer {
     static inicializarTabla(solapa) {
         TablaRenderer.agregarOrdenamientoClickeable(solapa);
         TablaRenderer.agregarTooltips(solapa);
+    }
+
+    /**
+     * Resetear estado de tabla para nueva carga
+     */
+    static resetearEstadoTabla(solapa) {
+        const tabla = document.getElementById(`tabla-${solapa}`);
+        if (tabla) {
+            tabla.removeAttribute('data-columnas-procesadas');
+            tabla.removeAttribute('data-limpia');
+            
+            // Remover atributos de columnas dinámicas
+            const headersDinamicos = tabla.querySelectorAll('th[data-columna-dinamica]');
+            headersDinamicos.forEach(th => th.remove());
+            
+            const celdasDinamicas = tabla.querySelectorAll('td[data-columna-dinamica]');
+            celdasDinamicas.forEach(td => td.remove());
+        }
+    }
+
+    /**
+     * Obtener información de estado de la tabla
+     */
+    static obtenerEstadoTabla(solapa) {
+        const tabla = document.getElementById(`tabla-${solapa}`);
+        const tbody = tabla.querySelector('tbody');
+        
+        return {
+            columnas_procesadas: tabla.getAttribute('data-columnas-procesadas') === 'true',
+            tabla_limpia: tabla.getAttribute('data-limpia') === 'true',
+            total_headers: tabla.querySelectorAll('thead th').length,
+            total_filas: tbody.querySelectorAll('.fila-datos').length,
+            columnas_dinamicas: tabla.querySelectorAll('[data-columna-dinamica]').length
+        };
     }
 }
 

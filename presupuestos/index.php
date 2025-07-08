@@ -10,13 +10,13 @@
     <link href="css/obtener-presupuesto.css" rel="stylesheet">
     <style>
         .loading { display: none; }
-        .table-responsive { max-height: 70vh; overflow: auto; }
+        .table-responsive { max-height: 75vh; overflow: auto; }
         .nav-tabs { border-bottom: 2px solid #dee2e6; }
         .nav-tabs .nav-link { 
             border: none; 
             color: #6c757d; 
             font-weight: 600;
-            padding: 1rem 1.5rem;
+            padding: 0.75rem 1rem; /* Reducido padding */
         }
         .nav-tabs .nav-link.active { 
             background-color: #0d6efd; 
@@ -32,7 +32,7 @@
         }
         .search-container {
             background: #f8f9fa;
-            padding: 1rem;
+            padding: 0.75rem; /* Reducido de 1rem */
             border-bottom: 1px solid #dee2e6;
         }
         .editable-cell {
@@ -63,56 +63,109 @@
             background: #343a40;
             z-index: 10;
         }
-        .btn-export {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            z-index: 1000;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        /* NUEVO: Header compacto */
+        .header-compacto {
+            background: linear-gradient(135deg, #0d6efd 0%, #0056b3 100%);
+            color: white;
+            padding: 1rem 0; /* Reducido de 2rem */
+            margin: -1rem -15px 1rem -15px; /* Ajustado márgenes */
+            border-radius: 0 0 0.5rem 0.5rem;
+            box-shadow: 0 2px 8px rgba(13, 110, 253, 0.2);
+        }
+        .header-compacto h1 {
+            font-size: 1.5rem; /* Reducido tamaño */
+            margin-bottom: 0;
+            font-weight: 700;
+        }
+        /* NUEVO: Botones de exportación agrupados */
+        .export-buttons {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+        /* NUEVO: Zona horaria Argentina */
+        .timezone-info {
+            font-size: 0.85rem;
+            opacity: 0.9;
         }
         .temporada-info {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            padding: 1rem;
+            padding: 0.75rem; /* Reducido de 1rem */
             border-radius: 0.5rem;
             margin-bottom: 1rem;
+        }
+        /* Mejorar búsqueda rápida */
+        .search-input-fast {
+            transition: all 0.15s ease;
+        }
+        .search-input-fast:focus {
+            box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+            border-color: #0d6efd;
+            transform: scale(1.02);
+        }
+        /* Badge animado para contadores */
+        .contador-animado {
+            transition: all 0.3s ease;
+        }
+        .contador-animado.actualizado {
+            animation: pulse-counter 0.5s ease;
+        }
+        @keyframes pulse-counter {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
         }
     </style>
 </head>
 <body>
-    <div class="container-fluid py-4">
-        <!-- Header -->
-        <div class="row mb-4">
+    <div class="container-fluid py-2"> <!-- Reducido padding -->
+        <!-- Header Compacto -->
+        <div class="row">
             <div class="col-12">
-                <div class="d-flex justify-content-between align-items-center">
-                    <h1 class="h3 mb-0">
-                        <i class="fas fa-calculator text-primary"></i>
-                        Sistema de Presupuesto de Compras
-                    </h1>
-                    <div>
-                        <button type="button" class="btn btn-primary" onclick="cargarDatos()">
-                            <i class="fas fa-sync-alt"></i> Cargar Datos
-                        </button>
+                <div class="header-compacto">
+                    <div class="container-fluid">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <h1>
+                                    <i class="fas fa-calculator me-2"></i>
+                                    Sistema de Presupuesto de Compras
+                                </h1>
+                                <div class="timezone-info">
+                                    <i class="fas fa-clock me-1"></i>
+                                    <span id="fecha-hora-actual">--</span> (GMT-3 Argentina)
+                                </div>
+                            </div>
+                            <div class="export-buttons">
+                                <button type="button" class="btn btn-light" onclick="cargarDatos()">
+                                    <i class="fas fa-sync-alt me-1"></i> Cargar Datos
+                                </button>
+                                <button type="button" class="btn btn-success" onclick="exportarExcel('completo')" 
+                                        style="display: none;" id="btn-export-completo-header">
+                                    <i class="fas fa-file-excel me-1"></i> Excel Completo
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
 
         <!-- Información de Temporada -->
-        <div class="row mb-4" id="info-temporada-container" style="display: none;">
+        <div class="row mb-3" id="info-temporada-container" style="display: none;">
             <div class="col-12">
                 <div class="temporada-info">
                     <div class="row align-items-center">
                         <div class="col-md-4">
-                            <h5 class="mb-1">
+                            <h6 class="mb-1">
                                 <i class="fas fa-calendar-alt me-2"></i>
                                 <span id="temporada-actual">Temporada Actual</span>
-                            </h5>
+                            </h6>
                             <small id="fecha-actual"></small>
                         </div>
                         <div class="col-md-4 text-center">
                             <h6 class="mb-1">Días Restantes</h6>
-                            <span class="h4" id="dias-restantes">-</span>
+                            <span class="h5" id="dias-restantes">-</span>
                         </div>
                         <div class="col-md-4 text-end">
                             <small>Última actualización: <span id="ultima-actualizacion">--:--</span></small>
@@ -167,17 +220,17 @@
                                             <span class="input-group-text">
                                                 <i class="fas fa-search"></i>
                                             </span>
-                                            <input type="text" class="form-control" id="search-verano" 
-                                                   placeholder="Buscar por rubro o categoría..." 
+                                            <input type="text" class="form-control search-input-fast" id="search-verano" 
+                                                   placeholder="Búsqueda instantánea por rubro o categoría..." 
                                                    onkeyup="buscarDatos('verano')">
                                         </div>
                                     </div>
                                     <div class="col-md-3">
-                                        <span class="badge bg-info fs-6" id="count-verano">0 registros</span>
+                                        <span class="badge bg-info fs-6 contador-animado" id="count-verano">0 registros</span>
                                     </div>
-                                    <div class="col-md-3 text-end">
+                                    <div class="col-md-3 text-end export-buttons">
                                         <button class="btn btn-success btn-sm" onclick="exportarExcel('verano')">
-                                            <i class="fas fa-file-excel"></i> Excel
+                                            <i class="fas fa-file-excel me-1"></i> Excel
                                         </button>
                                     </div>
                                 </div>
@@ -216,17 +269,17 @@
                                             <span class="input-group-text">
                                                 <i class="fas fa-search"></i>
                                             </span>
-                                            <input type="text" class="form-control" id="search-invierno" 
-                                                   placeholder="Buscar por rubro o categoría..." 
+                                            <input type="text" class="form-control search-input-fast" id="search-invierno" 
+                                                   placeholder="Búsqueda instantánea por rubro o categoría..." 
                                                    onkeyup="buscarDatos('invierno')">
                                         </div>
                                     </div>
                                     <div class="col-md-3">
-                                        <span class="badge bg-info fs-6" id="count-invierno">0 registros</span>
+                                        <span class="badge bg-info fs-6 contador-animado" id="count-invierno">0 registros</span>
                                     </div>
-                                    <div class="col-md-3 text-end">
+                                    <div class="col-md-3 text-end export-buttons">
                                         <button class="btn btn-success btn-sm" onclick="exportarExcel('invierno')">
-                                            <i class="fas fa-file-excel"></i> Excel
+                                            <i class="fas fa-file-excel me-1"></i> Excel
                                         </button>
                                     </div>
                                 </div>
@@ -265,17 +318,17 @@
                                             <span class="input-group-text">
                                                 <i class="fas fa-search"></i>
                                             </span>
-                                            <input type="text" class="form-control" id="search-stock" 
-                                                   placeholder="Buscar por rubro o categoría..." 
+                                            <input type="text" class="form-control search-input-fast" id="search-stock" 
+                                                   placeholder="Búsqueda instantánea por rubro o categoría..." 
                                                    onkeyup="buscarDatos('stock')">
                                         </div>
                                     </div>
                                     <div class="col-md-3">
-                                        <span class="badge bg-info fs-6" id="count-stock">0 registros</span>
+                                        <span class="badge bg-info fs-6 contador-animado" id="count-stock">0 registros</span>
                                     </div>
-                                    <div class="col-md-3 text-end">
+                                    <div class="col-md-3 text-end export-buttons">
                                         <button class="btn btn-success btn-sm" onclick="exportarExcel('stock')">
-                                            <i class="fas fa-file-excel"></i> Excel
+                                            <i class="fas fa-file-excel me-1"></i> Excel
                                         </button>
                                     </div>
                                 </div>
@@ -311,14 +364,6 @@
             </div>
         </div>
     </div>
-
-    <!-- Botón de Exportación Completa -->
-    <button class="btn btn-primary btn-export" onclick="exportarExcel('completo')" 
-            title="Exportar todo a Excel" style="display: none;" id="btn-export-completo">
-        <i class="fas fa-download"></i>
-        <br>
-        <small>Excel Completo</small>
-    </button>
 
     <!-- Alert Container -->
     <div class="alert-container position-fixed top-0 end-0 p-3" id="alert-container" style="z-index: 1060;"></div>
@@ -381,7 +426,16 @@
         }
 
         function buscarDatos(solapa) {
-            window.presupuestoApp.buscarDatos(solapa);
+            // Usar búsqueda instantánea optimizada
+            if (BusquedaManager && BusquedaManager.busquedaInstantanea) {
+                const input = document.getElementById(`search-${solapa}`);
+                if (input) {
+                    BusquedaManager.busquedaInstantanea(solapa, input.value);
+                }
+            } else {
+                // Fallback
+                window.presupuestoApp.buscarDatos(solapa);
+            }
         }
 
         function exportarExcel(solapa) {
@@ -403,6 +457,11 @@
 
         function mostrarTabsContainer(mostrar) {
             UIUtils.mostrarTabsContainer(mostrar);
+            // Mostrar/ocultar botón de exportación completa
+            const btnExport = document.getElementById('btn-export-completo-header');
+            if (btnExport) {
+                btnExport.style.display = mostrar ? 'inline-block' : 'none';
+            }
         }
 
         function mostrarInfoTemporada(info) {
@@ -411,6 +470,12 @@
 
         function actualizarContador(elementId, count) {
             UIUtils.actualizarContador(elementId, count);
+            // Añadir animación al contador
+            const elemento = document.getElementById(elementId);
+            if (elemento) {
+                elemento.classList.add('actualizado');
+                setTimeout(() => elemento.classList.remove('actualizado'), 500);
+            }
         }
 
         function mostrarAlerta(mensaje, tipo, duracion) {
@@ -429,9 +494,37 @@
             return FormatoUtils.obtenerClaseValor(valor);
         }
 
+        // NUEVA: Función para actualizar fecha y hora con zona horaria Argentina
+        function actualizarFechaHora() {
+            const ahora = new Date();
+            // Configurar zona horaria Argentina (GMT-3)
+            const opciones = {
+                timeZone: 'America/Argentina/Buenos_Aires',
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: false
+            };
+            
+            const fechaHora = ahora.toLocaleString('es-AR', opciones);
+            const elemento = document.getElementById('fecha-hora-actual');
+            if (elemento) {
+                elemento.textContent = fechaHora;
+            }
+        }
+
         // Inicialización
         document.addEventListener('DOMContentLoaded', function() {
-            console.log('Sistema de Presupuesto de Compras v2.0 iniciado');
+            console.log('Sistema de Presupuesto de Compras v2.1 iniciado');
+            
+            // Actualizar fecha y hora inmediatamente
+            actualizarFechaHora();
+            
+            // Actualizar cada segundo
+            setInterval(actualizarFechaHora, 1000);
             
             // Mostrar información del sistema en consola
             console.log('Módulos cargados:', {
@@ -486,20 +579,10 @@
                         const input = document.getElementById(`search-${solapa}`);
                         if (input && input === document.activeElement) {
                             input.value = '';
-                            input.dispatchEvent(new Event('input'));
+                            buscarDatos(solapa);
                         }
                     });
                 }
-            });
-            
-            // Double-click en headers para ordenar
-            document.querySelectorAll('.table thead th').forEach(th => {
-                th.addEventListener('dblclick', function() {
-                    const tabla = th.closest('table');
-                    const solapa = tabla.id.replace('tabla-', '');
-                    const columnIndex = Array.from(th.parentNode.children).indexOf(th);
-                    TablaRenderer.ordenarTabla(solapa, columnIndex);
-                });
             });
             
             // Auto-save de preferencias de usuario
@@ -516,31 +599,7 @@
                 
                 StorageUtils.guardar('preferencias_usuario', preferencias, 24 * 60 * 60 * 1000); // 24 horas
             });
-            
-            // Restaurar preferencias
-            const preferencias = StorageUtils.obtener('preferencias_usuario');
-            if (preferencias) {
-                // Restaurar solapa activa
-                if (preferencias.ultima_solapa) {
-                    const tab = document.querySelector(`[data-bs-target="#${preferencias.ultima_solapa}"]`);
-                    if (tab) {
-                        setTimeout(() => {
-                            tab.click();
-                        }, 500);
-                    }
-                }
-                
-                // Restaurar búsquedas (solo si son recientes)
-                if (Date.now() - preferencias.timestamp < 60 * 60 * 1000) { // 1 hora
-                    Object.keys(preferencias.busquedas).forEach(solapa => {
-                        const input = document.getElementById(`search-${solapa}`);
-                        if (input && preferencias.busquedas[solapa]) {
-                            input.value = preferencias.busquedas[solapa];
-                        }
-                    });
-                }
-            }
         });
     </script>
 </body>
-</html> 
+</html>

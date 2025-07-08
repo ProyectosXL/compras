@@ -17,7 +17,12 @@ class PresupuestoApp {
         this.estado = {
             cargando: false,
             inicializado: false,
-            ultimaActualizacion: null
+            ultimaActualizacion: null,
+            tablasLimpias: {
+                verano: false,
+                invierno: false,
+                stock: false
+            }
         };
         this.init();
     }
@@ -28,7 +33,7 @@ class PresupuestoApp {
     init() {
         this.actualizarUltimaActualizacion();
         this.configurarEventListeners();
-        this.configurarIntervalos();
+        // ELIMINADO: this.configurarIntervalos(); - Sin actualizaciones automáticas
         this.cargarPreferenciasUsuario();
         this.estado.inicializado = true;
         console.log('PresupuestoApp inicializado correctamente');
@@ -50,14 +55,7 @@ class PresupuestoApp {
             this.guardarPreferenciasUsuario();
         });
 
-        // Event listener para cambios de visibilidad (optimización)
-        document.addEventListener('visibilitychange', () => {
-            if (document.hidden) {
-                this.pausarActualizaciones();
-            } else {
-                this.reanudarActualizaciones();
-            }
-        });
+        // ELIMINADO: Event listener para cambios de visibilidad - Sin auto-updates
     }
 
     /**
@@ -123,15 +121,8 @@ class PresupuestoApp {
     }
 
     /**
-     * Configurar intervalos de actualización
+     * ELIMINADO: configurarIntervalos() - Sin actualizaciones automáticas
      */
-    configurarIntervalos() {
-        // Actualizar hora cada minuto
-        setInterval(() => this.actualizarUltimaActualizacion(), 60000);
-        
-        // Limpiar cache cada 10 minutos
-        setInterval(() => this.limpiarCacheExpirado(), 10 * 60 * 1000);
-    }
 
     /**
      * Cargar todos los datos
@@ -146,6 +137,9 @@ class PresupuestoApp {
             this.estado.cargando = true;
             UIUtils.mostrarLoading(true);
             UIUtils.mostrarTabsContainer(false);
+            
+            // IMPORTANTE: Resetear estado de tablas antes de cargar nuevos datos
+            this.resetearEstadoTablas();
             
             // Cargar datos base primero
             const datosBase = await APIClient.obtenerDatosBase();
@@ -172,7 +166,7 @@ class PresupuestoApp {
             
         } catch (error) {
             console.error('Error cargando datos:', error);
-            UIUtils.mostrarAlerta('Error al cargar datos: ' + error.message, 'error');
+            // UIUtils.mostrarAlerta('Error al cargar datos: ' + error.message, 'error');
             this.manejarErrorCarga(error);
         } finally {
             this.estado.cargando = false;
@@ -181,33 +175,67 @@ class PresupuestoApp {
     }
 
     /**
-     * Cargar datos de todas las solapas
+     * NUEVO: Resetear estado de todas las tablas antes de cargar nuevos datos
+     */
+    resetearEstadoTablas() {
+        ['verano', 'invierno', 'stock'].forEach(solapa => {
+            TablaRenderer.resetearEstadoTabla(solapa);
+            this.estado.tablasLimpias[solapa] = false;
+        });
+    }
+
+    /**
+     * Cargar datos de todas las solapas (MEJORADO - Con manejo de errores individual)
      */
     async cargarDatosSolapas() {
         try {
-            // Cargar en paralelo
-            const [verano, invierno, stock] = await Promise.all([
-                APIClient.obtenerCompraVerano(),
-                APIClient.obtenerCompraInvierno(),
-                APIClient.obtenerStockProyectado()
-            ]);
-
-            if (verano.success) {
-                this.datos.verano = verano.data;
-                TablaRenderer.renderizarTablaVerano(verano.data, verano.etiquetas);
-                UIUtils.actualizarContador('count-verano', verano.data.length);
+            // Cargar secuencialmente para mejor control de errores
+            console.log('Cargando datos de verano...');
+            try {
+                const verano = await APIClient.obtenerCompraVerano();
+                if (verano.success) {
+                    this.datos.verano = verano.data;
+                    this.renderizarSolapaSegura('verano', verano.data, verano.etiquetas);
+                    UIUtils.actualizarContador('count-verano', verano.data.length);
+                    console.log('✓ Datos de verano cargados');
+                } else {
+                    throw new Error(verano.message);
+                }
+            } catch (error) {
+                console.error('Error cargando verano:', error);
+                throw new Error('Error en compra verano: ' + error.message);
             }
 
-            if (invierno.success) {
-                this.datos.invierno = invierno.data;
-                TablaRenderer.renderizarTablaInvierno(invierno.data, invierno.etiquetas);
-                UIUtils.actualizarContador('count-invierno', invierno.data.length);
+            console.log('Cargando datos de invierno...');
+            try {
+                const invierno = await APIClient.obtenerCompraInvierno();
+                if (invierno.success) {
+                    this.datos.invierno = invierno.data;
+                    this.renderizarSolapaSegura('invierno', invierno.data, invierno.etiquetas);
+                    UIUtils.actualizarContador('count-invierno', invierno.data.length);
+                    console.log('✓ Datos de invierno cargados');
+                } else {
+                    throw new Error(invierno.message);
+                }
+            } catch (error) {
+                console.error('Error cargando invierno:', error);
+                throw new Error('Error en compra invierno: ' + error.message);
             }
 
-            if (stock.success) {
-                this.datos.stock = stock.data;
-                TablaRenderer.renderizarTablaStock(stock.data);
-                UIUtils.actualizarContador('count-stock', stock.data.length);
+            console.log('Cargando datos de stock...');
+            try {
+                const stock = await APIClient.obtenerStockProyectado();
+                if (stock.success) {
+                    this.datos.stock = stock.data;
+                    this.renderizarSolapaSegura('stock', stock.data);
+                    UIUtils.actualizarContador('count-stock', stock.data.length);
+                    console.log('✓ Datos de stock cargados');
+                } else {
+                    throw new Error(stock.message);
+                }
+            } catch (error) {
+                console.error('Error cargando stock:', error);
+                throw new Error('Error en stock proyectado: ' + error.message);
             }
 
         } catch (error) {
@@ -217,7 +245,36 @@ class PresupuestoApp {
     }
 
     /**
-     * Cargar datos de solapa específica (lazy loading)
+     * NUEVO: Renderizar solapa de forma segura evitando duplicados
+     */
+    renderizarSolapaSegura(solapa, datos, etiquetas = null) {
+        try {
+            // Verificar si la tabla ya está limpia para esta carga
+            if (!this.estado.tablasLimpias[solapa]) {
+                TablaRenderer.resetearEstadoTabla(solapa);
+                this.estado.tablasLimpias[solapa] = true;
+            }
+
+            switch (solapa) {
+                case 'verano':
+                    TablaRenderer.renderizarTablaVerano(datos, etiquetas);
+                    break;
+                case 'invierno':
+                    TablaRenderer.renderizarTablaInvierno(datos, etiquetas);
+                    break;
+                case 'stock':
+                    TablaRenderer.renderizarTablaStock(datos);
+                    break;
+            }
+
+        } catch (error) {
+            console.error(`Error renderizando solapa ${solapa}:`, error);
+            UIUtils.mostrarAlerta(`Error renderizando ${solapa}: ${error.message}`, 'warning');
+        }
+    }
+
+    /**
+     * Cargar datos de solapa específica (lazy loading) - MEJORADO
      */
     async cargarDatosSolapa(solapa) {
         // Si ya están cargados, no recargar
@@ -233,7 +290,7 @@ class PresupuestoApp {
                     response = await APIClient.obtenerCompraVerano();
                     if (response.success) {
                         this.datos.verano = response.data;
-                        TablaRenderer.renderizarTablaVerano(response.data, response.etiquetas);
+                        this.renderizarSolapaSegura('verano', response.data, response.etiquetas);
                         UIUtils.actualizarContador('count-verano', response.data.length);
                     }
                     break;
@@ -242,7 +299,7 @@ class PresupuestoApp {
                     response = await APIClient.obtenerCompraInvierno();
                     if (response.success) {
                         this.datos.invierno = response.data;
-                        TablaRenderer.renderizarTablaInvierno(response.data, response.etiquetas);
+                        this.renderizarSolapaSegura('invierno', response.data, response.etiquetas);
                         UIUtils.actualizarContador('count-invierno', response.data.length);
                     }
                     break;
@@ -251,7 +308,7 @@ class PresupuestoApp {
                     response = await APIClient.obtenerStockProyectado();
                     if (response.success) {
                         this.datos.stock = response.data;
-                        TablaRenderer.renderizarTablaStock(response.data);
+                        this.renderizarSolapaSegura('stock', response.data);
                         UIUtils.actualizarContador('count-stock', response.data.length);
                     }
                     break;
@@ -277,7 +334,7 @@ class PresupuestoApp {
     }
 
     /**
-     * Buscar datos
+     * Buscar datos (MEJORADO)
      */
     async buscarDatos(solapa) {
         const termino = document.getElementById(`search-${solapa}`).value;
@@ -292,17 +349,10 @@ class PresupuestoApp {
                     const response = await APIClient.buscarDatos(termino, solapa);
                     
                     if (response.success) {
-                        switch (solapa) {
-                            case 'verano':
-                                TablaRenderer.renderizarTablaVerano(response.data);
-                                break;
-                            case 'invierno':
-                                TablaRenderer.renderizarTablaInvierno(response.data);
-                                break;
-                            case 'stock':
-                                TablaRenderer.renderizarTablaStock(response.data);
-                                break;
-                        }
+                        // Resetear estado antes de renderizar resultados de búsqueda
+                        TablaRenderer.resetearEstadoTabla(solapa);
+                        
+                        this.renderizarSolapaSegura(solapa, response.data);
                         UIUtils.actualizarContador(`count-${solapa}`, response.data.length);
                         
                         // Guardar término de búsqueda
@@ -319,23 +369,14 @@ class PresupuestoApp {
     }
 
     /**
-     * Resetear búsqueda
+     * Resetear búsqueda (MEJORADO)
      */
     resetearBusqueda(solapa) {
-        switch (solapa) {
-            case 'verano':
-                TablaRenderer.renderizarTablaVerano(this.datos.verano);
-                UIUtils.actualizarContador('count-verano', this.datos.verano.length);
-                break;
-            case 'invierno':
-                TablaRenderer.renderizarTablaInvierno(this.datos.invierno);
-                UIUtils.actualizarContador('count-invierno', this.datos.invierno.length);
-                break;
-            case 'stock':
-                TablaRenderer.renderizarTablaStock(this.datos.stock);
-                UIUtils.actualizarContador('count-stock', this.datos.stock.length);
-                break;
-        }
+        // Resetear estado de tabla antes de mostrar datos originales
+        TablaRenderer.resetearEstadoTabla(solapa);
+        
+        this.renderizarSolapaSegura(solapa, this.datos[solapa]);
+        UIUtils.actualizarContador(`count-${solapa}`, this.datos[solapa].length);
         
         // Limpiar preferencia de búsqueda
         this.guardarPreferencia(`busqueda_${solapa}`, '');
@@ -359,7 +400,7 @@ class PresupuestoApp {
     }
 
     /**
-     * Actualizar última actualización
+     * Actualizar última actualización (SOLO MANUAL)
      */
     actualizarUltimaActualizacion() {
         const ahora = new Date();
@@ -428,9 +469,12 @@ class PresupuestoApp {
             this.datos = datosCache.datos || { verano: [], invierno: [], stock: [] };
             this.temporadaInfo = datosCache.temporadaInfo;
             
-            TablaRenderer.renderizarTablaVerano(this.datos.verano);
-            TablaRenderer.renderizarTablaInvierno(this.datos.invierno);
-            TablaRenderer.renderizarTablaStock(this.datos.stock);
+            // Resetear estado antes de cargar desde cache
+            this.resetearEstadoTablas();
+            
+            this.renderizarSolapaSegura('verano', this.datos.verano);
+            this.renderizarSolapaSegura('invierno', this.datos.invierno);
+            this.renderizarSolapaSegura('stock', this.datos.stock);
             
             UIUtils.mostrarTabsContainer(true);
             UIUtils.mostrarInfoTemporada(this.temporadaInfo);
@@ -444,7 +488,7 @@ class PresupuestoApp {
      * Mostrar opciones de recuperación
      */
     mostrarOpcionesRecuperacion() {
-        UIUtils.mostrarAlerta('No se pudieron cargar los datos. Verifique su conexión.', 'error');
+        // UIUtils.mostrarAlerta('No se pudieron cargar los datos. Verifique su conexión.', 'error');
         
         setTimeout(() => {
             const container = document.querySelector('.alert-container .alert:last-child');
@@ -459,21 +503,11 @@ class PresupuestoApp {
     }
 
     /**
-     * Pausar actualizaciones automáticas
+     * ELIMINADO: pausarActualizaciones() y reanudarActualizaciones() - Sin auto-updates
      */
-    pausarActualizaciones() {
-        console.log('Pausando actualizaciones automáticas');
-    }
 
     /**
-     * Reanudar actualizaciones automáticas
-     */
-    reanudarActualizaciones() {
-        console.log('Reanudando actualizaciones automáticas');
-    }
-
-    /**
-     * Limpiar cache expirado
+     * Limpiar cache expirado (SOLO MANUAL)
      */
     limpiarCacheExpirado() {
         APIClient.limpiarCache();
@@ -586,12 +620,16 @@ class PresupuestoApp {
     }
 
     /**
-     * Diagnóstico del sistema
+     * Diagnóstico del sistema (MEJORADO)
      */
     diagnostico() {
         const info = {
             estado: this.estado,
-            datos_cargados: Object.keys(this.datos).map(k => ({ solapa: k, registros: this.datos[k].length })),
+            datos_cargados: Object.keys(this.datos).map(k => ({ 
+                solapa: k, 
+                registros: this.datos[k].length,
+                estado_tabla: TablaRenderer.obtenerEstadoTabla ? TablaRenderer.obtenerEstadoTabla(k) : 'N/A'
+            })),
             temporada: this.temporadaInfo,
             cache: APIClient.obtenerEstadisticasCache(),
             storage: {
@@ -602,7 +640,8 @@ class PresupuestoApp {
                 userAgent: navigator.userAgent,
                 idioma: navigator.language,
                 plataforma: navigator.platform
-            }
+            },
+            auto_updates: 'DISABLED' // Confirmación de que están deshabilitadas
         };
         
         console.table(info);
@@ -642,7 +681,13 @@ function diagnosticoSistema() {
 function limpiarCache() {
     APIClient.limpiarCache();
     StorageUtils.limpiarExpirados();
-    UIUtils.mostrarAlerta('Cache limpiado', 'info');
+    
+    // NUEVO: También resetear estado de tablas
+    ['verano', 'invierno', 'stock'].forEach(solapa => {
+        TablaRenderer.resetearEstadoTabla(solapa);
+    });
+    
+    UIUtils.mostrarAlerta('Cache y estado de tablas limpiado', 'info');
 }
 
 function reiniciarAplicacion() {
@@ -651,11 +696,28 @@ function reiniciarAplicacion() {
     }
 }
 
+// NUEVA: Función para forzar limpieza de tablas
+function limpiarTablas() {
+    ['verano', 'invierno', 'stock'].forEach(solapa => {
+        TablaRenderer.resetearEstadoTabla(solapa);
+        window.presupuestoApp.estado.tablasLimpias[solapa] = false;
+    });
+    UIUtils.mostrarAlerta('Estado de tablas reseteado', 'info');
+}
+
+// NUEVO: Función para actualizar manualmente la hora
+function actualizarHora() {
+    window.presupuestoApp.actualizarUltimaActualizacion();
+    UIUtils.mostrarAlerta('Hora actualizada', 'info', 1000);
+}
+
 // Inicializar cuando el DOM esté listo
 document.addEventListener('DOMContentLoaded', function() {
     console.log('Presupuesto App iniciado correctamente');
     
     // Mostrar información de versión en consola
-    console.log('%c Sistema de Presupuesto de Compras v2.0 ', 'background: #0d6efd; color: white; font-size: 14px; padding: 5px 10px; border-radius: 3px;');
+    console.log('%c Sistema de Presupuesto de Compras v2.1 - SIN AUTO-UPDATES ', 'background: #0d6efd; color: white; font-size: 14px; padding: 5px 10px; border-radius: 3px;');
     console.log('Tipo "diagnosticoSistema()" para ver información del sistema');
+    console.log('Funciones disponibles: limpiarCache(), limpiarTablas(), reiniciarAplicacion(), actualizarHora()');
+    console.log('✓ Actualizaciones automáticas DESHABILITADAS');
 });

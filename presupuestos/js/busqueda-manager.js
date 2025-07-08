@@ -1,11 +1,12 @@
 
-// Gestor de funcionalidades de búsqueda y filtrado
+// Gestor de funcionalidades de búsqueda optimizada
 // Archivo: presupuestos/js/busqueda-manager.js
 
 class BusquedaManager {
     static timeoutBusqueda = null;
     static historialBusquedas = [];
     static filtrosActivos = {};
+    static indiceBusqueda = {}; // Cache de índices para búsqueda rápida
 
     /**
      * Inicializar gestor de búsqueda
@@ -16,16 +17,16 @@ class BusquedaManager {
     }
 
     /**
-     * Configurar event listeners para búsqueda
+     * Configurar event listeners para búsqueda OPTIMIZADA
      */
     static configurarEventListeners() {
-        // Event listeners para inputs de búsqueda
         ['verano', 'invierno', 'stock'].forEach(solapa => {
             const input = document.getElementById(`search-${solapa}`);
             if (input) {
+                // Búsqueda instantánea con debounce muy corto
                 input.addEventListener('input', BusquedaManager.debounce((e) => {
-                    BusquedaManager.buscarEnSolapa(solapa, e.target.value);
-                }, 300));
+                    BusquedaManager.busquedaInstantanea(solapa, e.target.value);
+                }, 150)); // Reducido de 300ms a 150ms
 
                 input.addEventListener('keydown', (e) => {
                     if (e.key === 'Enter') {
@@ -45,7 +46,31 @@ class BusquedaManager {
     }
 
     /**
-     * Buscar en una solapa específica
+     * NUEVA: Búsqueda instantánea usando filtros visuales (no API)
+     */
+    static busquedaInstantanea(solapa, termino) {
+        const terminoLimpio = termino.trim();
+        
+        if (terminoLimpio.length === 0) {
+            TablaRenderer.aplicarFiltroVisual(solapa, '');
+            BusquedaManager.actualizarContadorBusqueda(solapa, null);
+            return;
+        }
+
+        if (terminoLimpio.length >= 2) {
+            // Usar filtro visual para búsqueda instantánea
+            const coincidencias = TablaRenderer.aplicarFiltroVisual(solapa, terminoLimpio);
+            BusquedaManager.actualizarContadorBusqueda(solapa, coincidencias);
+            
+            // Guardar término si es útil
+            if (coincidencias > 0) {
+                BusquedaManager.agregarAlHistorial(terminoLimpio, solapa, coincidencias, true);
+            }
+        }
+    }
+
+    /**
+     * Buscar en una solapa específica (para búsquedas complejas)
      */
     static async buscarEnSolapa(solapa, termino) {
         try {
@@ -64,39 +89,62 @@ class BusquedaManager {
                 return;
             }
 
-            // Mostrar indicador de búsqueda
-            BusquedaManager.mostrarIndicadorBusqueda(solapa, true);
+            // Para términos muy específicos, usar API para búsqueda completa
+            if (termino.length >= 5 || termino.includes(' ')) {
+                // Mostrar indicador de búsqueda
+                BusquedaManager.mostrarIndicadorBusqueda(solapa, true);
 
-            // Realizar búsqueda
-            const response = await APIClient.buscarDatos(termino, solapa);
+                const response = await APIClient.buscarDatos(termino, solapa);
 
-            if (response.success) {
-                // Renderizar resultados
-                BusquedaManager.renderizarResultados(solapa, response.data);
-                
-                // Actualizar contador
-                UIUtils.actualizarContador(`count-${solapa}`, response.data.length);
-                
-                // Guardar en historial
-                BusquedaManager.agregarAlHistorial(termino, solapa, response.data.length);
-                
-                // Resaltar términos encontrados
-                BusquedaManager.resaltarTerminos(solapa, termino);
-                
-                UIUtils.mostrarAlerta(
-                    `Encontrados ${response.data.length} resultados para "${termino}"`,
-                    'info',
-                    3000
-                );
-            } else {
-                UIUtils.mostrarAlerta('Error en búsqueda: ' + response.message, 'error');
+                if (response.success) {
+                    // Renderizar resultados
+                    BusquedaManager.renderizarResultados(solapa, response.data);
+                    
+                    // Actualizar contador
+                    UIUtils.actualizarContador(`count-${solapa}`, response.data.length);
+                    
+                    // Guardar en historial
+                    BusquedaManager.agregarAlHistorial(termino, solapa, response.data.length, false);
+                    
+                    // Resaltar términos encontrados
+                    BusquedaManager.resaltarTerminos(solapa, termino);
+                    
+                    UIUtils.mostrarAlerta(
+                        `Encontrados ${response.data.length} resultados para "${termino}"`,
+                        'info',
+                        2000
+                    );
+                } else {
+                    UIUtils.mostrarAlerta('Error en búsqueda: ' + response.message, 'error');
+                }
+
+                BusquedaManager.mostrarIndicadorBusqueda(solapa, false);
             }
-
+            
         } catch (error) {
             console.error('Error en búsqueda:', error);
             UIUtils.mostrarAlerta('Error realizando búsqueda', 'error');
-        } finally {
             BusquedaManager.mostrarIndicadorBusqueda(solapa, false);
+        }
+    }
+
+    /**
+     * NUEVA: Actualizar contador específico de búsqueda
+     */
+    static actualizarContadorBusqueda(solapa, coincidencias) {
+        const contador = document.getElementById(`count-${solapa}`);
+        if (contador) {
+            if (coincidencias === null) {
+                // Restaurar contador original
+                const app = window.presupuestoApp;
+                const datosOriginales = app.getDatos(solapa);
+                contador.textContent = `${FormatoUtils.formatearNumero(datosOriginales.length)} registros`;
+                contador.className = 'badge bg-info fs-6';
+            } else {
+                // Mostrar resultados de búsqueda
+                contador.textContent = `${FormatoUtils.formatearNumero(coincidencias)} de ${FormatoUtils.formatearNumero(window.presupuestoApp.getDatos(solapa).length)}`;
+                contador.className = coincidencias > 0 ? 'badge bg-success fs-6' : 'badge bg-warning fs-6';
+            }
         }
     }
 
@@ -124,8 +172,9 @@ class BusquedaManager {
         const app = window.presupuestoApp;
         const datosOriginales = app.getDatos(solapa);
         
-        BusquedaManager.renderizarResultados(solapa, datosOriginales);
-        UIUtils.actualizarContador(`count-${solapa}`, datosOriginales.length);
+        // Usar filtro visual para mostrar todo
+        TablaRenderer.aplicarFiltroVisual(solapa, '');
+        BusquedaManager.actualizarContadorBusqueda(solapa, null);
         BusquedaManager.limpiarResaltado(solapa);
     }
 
@@ -196,28 +245,32 @@ class BusquedaManager {
     }
 
     /**
-     * Agregar al historial de búsquedas
+     * Agregar al historial de búsquedas (MEJORADO)
      */
-    static agregarAlHistorial(termino, solapa, resultados) {
+    static agregarAlHistorial(termino, solapa, resultados, esInstantanea = false) {
+        // No agregar búsquedas muy cortas al historial
+        if (termino.length < 3) return;
+        
         const busqueda = {
             termino: termino,
             solapa: solapa,
             resultados: resultados,
+            instantanea: esInstantanea,
             timestamp: Date.now()
         };
 
-        // Evitar duplicados recientes
+        // Evitar duplicados recientes (últimos 30 segundos)
         const existe = BusquedaManager.historialBusquedas.find(
             b => b.termino === termino && b.solapa === solapa && 
-                 Date.now() - b.timestamp < 300000 // 5 minutos
+                 Date.now() - b.timestamp < 30000
         );
 
         if (!existe) {
             BusquedaManager.historialBusquedas.unshift(busqueda);
             
-            // Mantener máximo 50 búsquedas
-            if (BusquedaManager.historialBusquedas.length > 50) {
-                BusquedaManager.historialBusquedas = BusquedaManager.historialBusquedas.slice(0, 50);
+            // Mantener máximo 30 búsquedas
+            if (BusquedaManager.historialBusquedas.length > 30) {
+                BusquedaManager.historialBusquedas = BusquedaManager.historialBusquedas.slice(0, 30);
             }
             
             BusquedaManager.guardarHistorial();
@@ -225,21 +278,21 @@ class BusquedaManager {
     }
 
     /**
-     * Mostrar sugerencias de búsqueda
+     * Mostrar sugerencias de búsqueda (MEJORADO)
      */
     static mostrarSugerencias(solapa) {
         const input = document.getElementById(`search-${solapa}`);
         if (!input || input.value.length > 0) return;
 
-        // Obtener sugerencias del historial
+        // Obtener sugerencias del historial (no instantáneas)
         const sugerencias = BusquedaManager.historialBusquedas
-            .filter(b => b.solapa === solapa)
+            .filter(b => b.solapa === solapa && !b.instantanea && b.resultados > 0)
             .slice(0, 5)
             .map(b => b.termino);
 
         if (sugerencias.length === 0) return;
 
-        BusquedaManager.crearDropdownSugerencias(input, sugerencias);
+        BusquedaManager.crearDropdownSugerencias(input, [...new Set(sugerencias)]);
     }
 
     /**
@@ -262,7 +315,7 @@ class BusquedaManager {
             const item = document.createElement('a');
             item.className = 'dropdown-item';
             item.href = '#';
-            item.textContent = sugerencia;
+            item.innerHTML = `<i class="fas fa-search me-2"></i>${sugerencia}`;
             
             item.addEventListener('click', (e) => {
                 e.preventDefault();
@@ -288,6 +341,87 @@ class BusquedaManager {
                 }
             });
         }, 100);
+    }
+
+    /**
+     * NUEVA: Crear índice de búsqueda para datos cargados
+     */
+    static crearIndiceBusqueda(solapa, datos) {
+        if (!datos || datos.length === 0) return;
+        
+        BusquedaManager.indiceBusqueda[solapa] = {};
+        
+        datos.forEach((item, index) => {
+            const rubro = (item.RUBRO || '').toLowerCase();
+            const categoria = (item.CATEGORIA_PADRE || '').toLowerCase();
+            
+            // Crear índices por palabras clave
+            const palabras = [...rubro.split(' '), ...categoria.split(' ')];
+            
+            palabras.forEach(palabra => {
+                if (palabra.length >= 2) {
+                    if (!BusquedaManager.indiceBusqueda[solapa][palabra]) {
+                        BusquedaManager.indiceBusqueda[solapa][palabra] = [];
+                    }
+                    BusquedaManager.indiceBusqueda[solapa][palabra].push(index);
+                }
+            });
+        });
+    }
+
+    /**
+     * Obtener rubros únicos para filtros
+     */
+    static async obtenerRubros() {
+        try {
+            const response = await APIClient.obtenerRubros();
+            
+            if (response.success) {
+                return response.data;
+            } else {
+                throw new Error(response.message);
+            }
+            
+        } catch (error) {
+            console.error('Error al obtener rubros:', error);
+            return [];
+        }
+    }
+
+    /**
+     * Filtrar por rubro específico
+     */
+    static async filtrarPorRubro(rubro, solapa) {
+        try {
+            if (!rubro) {
+                BusquedaManager.restaurarDatosOriginales(solapa);
+                return;
+            }
+            
+            // Mostrar indicador
+            BusquedaManager.mostrarIndicadorBusqueda(solapa, true);
+            
+            const response = await APIClient.filtrarPorRubro(rubro, solapa);
+            
+            if (response.success) {
+                BusquedaManager.renderizarResultados(solapa, response.data);
+                UIUtils.actualizarContador(`count-${solapa}`, response.data.length);
+                
+                UIUtils.mostrarAlerta(
+                    `Filtrado por rubro: ${rubro} (${response.data.length} registros)`,
+                    'info',
+                    2000
+                );
+            } else {
+                UIUtils.mostrarAlerta('Error al filtrar: ' + response.message, 'error');
+            }
+            
+        } catch (error) {
+            console.error('Error filtrando por rubro:', error);
+            UIUtils.mostrarAlerta('Error al filtrar por rubro', 'error');
+        } finally {
+            BusquedaManager.mostrarIndicadorBusqueda(solapa, false);
+        }
     }
 
     /**
@@ -355,20 +489,6 @@ class BusquedaManager {
     }
 
     /**
-     * Exportar resultados de búsqueda
-     */
-    static exportarResultados(solapa, formato = 'csv') {
-        const tabla = document.getElementById(`tabla-${solapa}`);
-        const termino = document.getElementById(`search-${solapa}`).value;
-        
-        if (formato === 'csv') {
-            TablaRenderer.exportarTablaCSV(solapa);
-        }
-        
-        UIUtils.mostrarAlerta(`Resultados exportados para: "${termino}"`, 'success');
-    }
-
-    /**
      * Limpiar historial de búsquedas
      */
     static limpiarHistorial() {
@@ -381,7 +501,7 @@ class BusquedaManager {
      * Guardar historial en localStorage
      */
     static guardarHistorial() {
-        StorageUtils.guardar('historial_busquedas', BusquedaManager.historialBusquedas, 7 * 24 * 60 * 60 * 1000); // 7 días
+        StorageUtils.guardar('historial_busquedas', BusquedaManager.historialBusquedas, 3 * 24 * 60 * 60 * 1000); // 3 días
     }
 
     /**
@@ -399,8 +519,8 @@ class BusquedaManager {
      */
     static obtenerEstadisticas() {
         const total = BusquedaManager.historialBusquedas.length;
-        const ultimaSemana = BusquedaManager.historialBusquedas.filter(
-            b => Date.now() - b.timestamp < 7 * 24 * 60 * 60 * 1000
+        const ultimaHora = BusquedaManager.historialBusquedas.filter(
+            b => Date.now() - b.timestamp < 60 * 60 * 1000
         ).length;
         
         const terminosMasUsados = {};
@@ -414,14 +534,15 @@ class BusquedaManager {
 
         return {
             total_busquedas: total,
-            busquedas_semana: ultimaSemana,
+            busquedas_hora: ultimaHora,
             terminos_populares: topTerminos,
-            promedio_resultados: BusquedaManager.historialBusquedas.reduce((acc, b) => acc + b.resultados, 0) / total || 0
+            promedio_resultados: total > 0 ? BusquedaManager.historialBusquedas.reduce((acc, b) => acc + b.resultados, 0) / total : 0,
+            busquedas_instantaneas: BusquedaManager.historialBusquedas.filter(b => b.instantanea).length
         };
     }
 
     /**
-     * Debounce helper
+     * Debounce helper (optimizado)
      */
     static debounce(func, delay) {
         let timeoutId;
