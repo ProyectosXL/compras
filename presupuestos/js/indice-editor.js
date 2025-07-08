@@ -113,40 +113,166 @@ class IndiceEditor {
         IndiceEditor.mostrarLoadingBoton(btnGuardar, true);
         
         try {
-            // Enviar actualización al servidor
-            const response = await APIClient.actualizarIndice(
-                IndiceEditor.indiceEditando.rubro,
-                IndiceEditor.indiceEditando.categoria,
-                nuevoIndice,
-                IndiceEditor.indiceEditando.solapa
-            );
+            // SIMULACIÓN: En lugar de llamar API, actualizar solo frontend
+            await new Promise(resolve => setTimeout(resolve, 500)); // Simular delay de red
             
-            if (response.success) {
-                // Actualizar datos en memoria
-                IndiceEditor.actualizarDatosMemoria(nuevoIndice, response.data);
-                
-                // Actualizar tabla
-                IndiceEditor.actualizarFilaTabla(response.data);
-                
-                // Registrar cambio en historial
-                IndiceEditor.registrarCambio(nuevoIndice);
-                
-                UIUtils.mostrarAlerta('Índice actualizado correctamente', 'success');
-                
-                // Cerrar modal
-                IndiceEditor.modalInstancia.hide();
-                
-            } else {
-                UIUtils.mostrarAlerta('Error al actualizar índice: ' + response.message, 'error');
-            }
+            // Actualizar datos en memoria
+            IndiceEditor.actualizarDatosMemoriaFrontend(nuevoIndice);
+            
+            // Actualizar tabla
+            IndiceEditor.actualizarFilaTablaSoloFrontend();
+            
+            // Registrar cambio en historial
+            IndiceEditor.registrarCambio(nuevoIndice);
+            
+            UIUtils.mostrarAlerta('Índice actualizado correctamente (solo frontend)', 'success');
+            
+            // Cerrar modal
+            IndiceEditor.modalInstancia.hide();
             
         } catch (error) {
             console.error('Error actualizando índice:', error);
-            UIUtils.mostrarAlerta('Error de conexión al actualizar índice', 'error');
+            UIUtils.mostrarAlerta('Error al actualizar índice', 'error');
         } finally {
             IndiceEditor.mostrarLoadingBoton(btnGuardar, false, textoOriginal);
             TablaRenderer.resaltarFila(IndiceEditor.indiceEditando.solapa, IndiceEditor.indiceEditando.index, false);
         }
+    }
+
+    /**
+     * NUEVO: Actualizar datos en memoria solo frontend
+     */
+    static actualizarDatosMemoriaFrontend(nuevoIndice) {
+        const app = window.presupuestoApp;
+        const datos = app.getDatos(IndiceEditor.indiceEditando.solapa);
+        
+        if (datos[IndiceEditor.indiceEditando.index]) {
+            const registro = datos[IndiceEditor.indiceEditando.index];
+            
+            // DEBUG: Información del registro
+            console.log('=== DEBUG CÁLCULO VENTA PROYECTADA ===');
+            console.log(`Rubro: ${registro.RUBRO}`);
+            console.log(`Categoría: ${registro.CATEGORIA_PADRE}`);
+            console.log(`Índice anterior: ${registro.INDICE_VARIACION}`);
+            console.log(`Índice nuevo: ${nuevoIndice.toFixed(2)}`); // 2 decimales
+            
+            // Actualizar índice con 2 decimales
+            registro.INDICE_VARIACION = parseFloat(nuevoIndice.toFixed(2));
+            
+            // Extraer ventas históricas
+            const ventaVeranoAnterior = IndiceEditor.extraerVentaAnterior(registro, 'VERANO');
+            const ventaInviernoAnterior = IndiceEditor.extraerVentaAnterior(registro, 'INVIERNO');
+            
+            console.log(`Venta Verano Anterior: ${ventaVeranoAnterior}`);
+            console.log(`Venta Invierno Anterior: ${ventaInviernoAnterior}`);
+            
+            // Calcular nuevas ventas proyectadas (usando 2 decimales para el índice)
+            const nuevaVentaVerano = Math.round(ventaVeranoAnterior * registro.INDICE_VARIACION);
+            const nuevaVentaInvierno = Math.round(ventaInviernoAnterior * registro.INDICE_VARIACION);
+            const stockProyectado = parseFloat(registro.STOCK_PROYECTADO || 0);
+            const nuevaCompraProyectada = Math.round(stockProyectado - nuevaVentaVerano - nuevaVentaInvierno);
+            
+            console.log(`Cálculo Venta Verano: ${ventaVeranoAnterior} × ${registro.INDICE_VARIACION} = ${nuevaVentaVerano}`);
+            console.log(`Cálculo Venta Invierno: ${ventaInviernoAnterior} × ${registro.INDICE_VARIACION} = ${nuevaVentaInvierno}`);
+            console.log(`Stock Proyectado: ${stockProyectado}`);
+            console.log(`Cálculo Compra Proyectada: ${stockProyectado} - ${nuevaVentaVerano} - ${nuevaVentaInvierno} = ${nuevaCompraProyectada}`);
+            console.log('=== FIN DEBUG ===');
+            
+            // Actualizar valores calculados
+            registro.VENTA_PROY_VERANO = nuevaVentaVerano;
+            registro.VENTA_PROY_INVIERNO = nuevaVentaInvierno;
+            registro.COMPRA_PROYECTADA = nuevaCompraProyectada;
+        }
+    }
+
+    /**
+     * NUEVO: Actualizar fila en la tabla solo frontend
+     */
+    static actualizarFilaTablaSoloFrontend() {
+        const tbody = document.getElementById(`tbody-${IndiceEditor.indiceEditando.solapa}`);
+        const fila = tbody.children[IndiceEditor.indiceEditando.index];
+        
+        if (!fila) return;
+        
+        const app = window.presupuestoApp;
+        const datos = app.getDatos(IndiceEditor.indiceEditando.solapa);
+        const registroActualizado = datos[IndiceEditor.indiceEditando.index];
+        
+        if (!registroActualizado) return;
+        
+        const celdas = fila.children;
+        
+        // Actualizar celda del índice (columna 3) - FORMATO CORRECTO
+        if (celdas[3]) {
+            const input = celdas[3].querySelector('.indice-input');
+            if (input) {
+                // Usar punto como separador decimal para el input
+                input.value = registroActualizado.INDICE_VARIACION.toFixed(2);
+            }
+        }
+        
+        // Actualizar Venta Proyectada Verano (columna 5)
+        if (celdas[5]) {
+            celdas[5].textContent = FormatoUtils.formatearNumero(registroActualizado.VENTA_PROY_VERANO || 0);
+        }
+        
+        // Actualizar Venta Proyectada Invierno (columna 7)
+        if (celdas[7]) {
+            celdas[7].textContent = FormatoUtils.formatearNumero(registroActualizado.VENTA_PROY_INVIERNO || 0);
+        }
+        
+        // Actualizar Compra Proyectada (columna 8)
+        if (celdas[8]) {
+            const compraProyectada = registroActualizado.COMPRA_PROYECTADA || 0;
+            celdas[8].textContent = FormatoUtils.formatearNumero(compraProyectada);
+            
+            // Actualizar clase de color según el valor
+            celdas[8].className = `text-end bg-success-subtle text-success-emphasis fw-bold ${FormatoUtils.obtenerClaseValor(compraProyectada)}`;
+        }
+    }
+
+    /**
+     * NUEVO: Extraer venta anterior (simplificado para frontend)
+     */
+    static extraerVentaAnterior(registro, temporada) {
+        let ventaAnterior = 0;
+        const anoActual = new Date().getFullYear() % 100;
+        
+        console.log(`Buscando venta anterior para temporada: ${temporada}`);
+        
+        // Buscar en orden de prioridad: año anterior
+        for (let i = 1; i <= 3; i++) {
+            let anoObjetivo = anoActual - i;
+            if (anoObjetivo < 0) anoObjetivo += 100;
+            
+            const anoStr = anoObjetivo.toString().padStart(2, '0');
+            
+            const posiblesColumnas = [
+                `${temporada} ${anoStr}`,
+                `${temporada}_${anoStr}`,
+                `${temporada}${anoStr}`,
+                `VTA_${temporada}_${anoStr}`,
+                `VTA_${temporada}${anoStr}`
+            ];
+            
+            for (const columna of posiblesColumnas) {
+                if (registro[columna] && !isNaN(registro[columna]) && registro[columna] > 0) {
+                    console.log(`Encontrada columna: ${columna} = ${registro[columna]}`);
+                    return parseFloat(registro[columna]);
+                }
+            }
+        }
+        
+        // Si no encontramos nada específico, buscar cualquier columna que contenga la temporada
+        for (const [columna, valor] of Object.entries(registro)) {
+            if (columna.includes(temporada) && !isNaN(valor) && valor > 0) {
+                console.log(`Columna genérica encontrada: ${columna} = ${valor}`);
+                return parseFloat(valor);
+            }
+        }
+        
+        console.log(`No se encontró venta anterior para ${temporada}`);
+        return 0;
     }
 
     /**
@@ -200,7 +326,9 @@ class IndiceEditor {
     static mostrarPreviewCalculo(nuevoIndice) {
         if (!IndiceEditor.indiceEditando || isNaN(nuevoIndice)) return;
         
-        const diferencia = nuevoIndice - IndiceEditor.indiceEditando.indiceActual;
+        // Usar 2 decimales para el cálculo
+        const indiceFormateado = parseFloat(nuevoIndice.toFixed(2));
+        const diferencia = indiceFormateado - IndiceEditor.indiceEditando.indiceActual;
         const porcentajeCambio = (diferencia / IndiceEditor.indiceEditando.indiceActual) * 100;
         
         let previewElement = document.getElementById('preview-calculo');
@@ -211,14 +339,14 @@ class IndiceEditor {
             document.querySelector('#modalEditarIndice .modal-body').appendChild(previewElement);
         }
         
-        let mensaje = `Cambio: ${FormatoUtils.formatearDecimal(diferencia, 4)} `;
-        mensaje += `(${porcentajeCambio > 0 ? '+' : ''}${FormatoUtils.formatearDecimal(porcentajeCambio, 1)}%)`;
+        let mensaje = `Cambio: ${diferencia.toFixed(2)} `;
+        mensaje += `(${porcentajeCambio > 0 ? '+' : ''}${porcentajeCambio.toFixed(1)}%)`;
         
         previewElement.innerHTML = `
             <small class="text-muted">
                 <strong>Preview:</strong><br>
-                Índice anterior: ${FormatoUtils.formatearDecimal(IndiceEditor.indiceEditando.indiceActual, 4)}<br>
-                Índice nuevo: ${FormatoUtils.formatearDecimal(nuevoIndice, 4)}<br>
+                Índice anterior: ${IndiceEditor.indiceEditando.indiceActual.toFixed(2)}<br>
+                Índice nuevo: ${indiceFormateado.toFixed(2)}<br>
                 ${mensaje}
             </small>
         `;

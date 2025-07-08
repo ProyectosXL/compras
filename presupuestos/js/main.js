@@ -127,6 +127,7 @@ class PresupuestoApp {
     /**
      * Cargar todos los datos
      */
+
     async cargarDatos() {
         if (this.estado.cargando) {
             UIUtils.mostrarAlerta('Ya se están cargando los datos...', 'warning');
@@ -152,7 +153,12 @@ class PresupuestoApp {
                 await this.cargarDatosSolapas();
                 
                 UIUtils.mostrarTabsContainer(true);
-                document.getElementById('btn-export-completo').style.display = 'block';
+                
+                // CORREGIDO: Verificar que el elemento existe antes de modificarlo
+                const btnExport = document.getElementById('btn-export-completo-header');
+                if (btnExport) {
+                    btnExport.style.display = 'block';
+                }
                 
                 this.estado.ultimaActualizacion = new Date();
                 UIUtils.mostrarAlerta('Datos cargados correctamente', 'success');
@@ -166,7 +172,6 @@ class PresupuestoApp {
             
         } catch (error) {
             console.error('Error cargando datos:', error);
-            // UIUtils.mostrarAlerta('Error al cargar datos: ' + error.message, 'error');
             this.manejarErrorCarga(error);
         } finally {
             this.estado.cargando = false;

@@ -119,7 +119,8 @@
     </style>
 </head>
 <body>
-    <div class="container-fluid py-2"> <!-- Reducido padding -->
+    <div class="container-fluid py-2 pb-1"> <!-- Reducido padding -->
+        <div class="container-fluid py-2 pb-1" style="margin-bottom: 0; padding-bottom: 0.5rem;">
         <!-- Header Compacto -->
         <div class="row">
             <div class="col-12">
@@ -243,9 +244,11 @@
                                             <th>Categoría</th>
                                             <th class="text-center">Stock Proyectado</th>
                                             <th class="text-center bg-warning">Índice Variación</th>
-                                            <th class="text-center" id="header-venta-verano">Venta Proy. Ver</th>
-                                            <th class="text-center" id="header-venta-invierno">Venta Proy. Inv</th>
-                                            <th class="text-center bg-success text-white">Compra Proyectada</th>
+                                            <th class="text-center bg-info text-dark">Venta Ant. Ver</th>
+                                            <th class="text-center header-venta-proyectada" id="header-venta-verano">Venta Proy. Ver</th>
+                                            <th class="text-center bg-info text-dark">Venta Ant. Inv</th>
+                                            <th class="text-center header-venta-proyectada" id="header-venta-invierno">Venta Proy. Inv</th>
+                                            <th class="text-center header-compra-proyectada">Compra Proyectada</th>
                                         </tr>
                                     </thead>
                                     <tbody id="tbody-verano">
@@ -292,9 +295,9 @@
                                             <th>Categoría</th>
                                             <th class="text-center">Stock Proyectado</th>
                                             <th class="text-center bg-warning">Índice Variación</th>
-                                            <th class="text-center" id="header-venta-verano-inv">Venta Proy. Ver</th>
-                                            <th class="text-center" id="header-venta-invierno-inv">Venta Proy. Inv</th>
-                                            <th class="text-center bg-success text-white">Compra Proyectada</th>
+                                            <th class="text-center header-venta-proyectada" id="header-venta-verano-inv">Venta Proy. Ver</th>
+                                            <th class="text-center header-venta-proyectada" id="header-venta-invierno-inv">Venta Proy. Inv</th>
+                                            <th class="text-center header-compra-proyectada">Compra Proyectada</th>
                                         </tr>
                                     </thead>
                                     <tbody id="tbody-invierno">
@@ -339,13 +342,13 @@
                                         <tr>
                                             <th>Rubro</th>
                                             <th>Categoría</th>
-                                            <th class="text-center">Stock</th>
-                                            <th class="text-center">Stock Guardar</th>
-                                            <th class="text-center">Compras Verano</th>
-                                            <th class="text-center">Compras Invierno</th>
-                                            <th class="text-center">Compras Atemporal</th>
-                                            <th class="text-center">Stock Cobertura</th>
-                                            <th class="text-center bg-primary text-white">Stock Proyectado</th>
+                                            <th class="text-center">Stock Proyectado</th>
+                                            <th class="text-center bg-warning">Índice Variación</th>
+                                            <th class="text-center bg-info text-dark">Venta Ant. Ver</th>
+                                            <th class="text-center header-venta-proyectada" id="header-venta-verano-inv">Venta Proy. Ver</th>
+                                            <th class="text-center bg-info text-dark">Venta Ant. Inv</th>
+                                            <th class="text-center header-venta-proyectada" id="header-venta-invierno-inv">Venta Proy. Inv</th>
+                                            <th class="text-center header-compra-proyectada">Compra Proyectada</th>
                                         </tr>
                                     </thead>
                                     <tbody id="tbody-stock">

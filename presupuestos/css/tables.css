@@ -1,0 +1,440 @@
+
+/* Estilos de Tablas - Sistema de Presupuesto de Compras */
+/* Archivo: presupuestos/css/tables.css */
+
+/* Tabla principal responsive */
+.table-responsive {
+    border-radius: 0 0 var(--border-radius) var(--border-radius);
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.05);
+    max-height: 65vh; /* Reducido de 70vh */
+    overflow: auto;
+    background: var(--card-bg);
+}
+
+.table {
+    margin-bottom: 0;
+    font-size: var(--font-size-sm);
+    line-height: 1.3; /* Compacto */
+}
+
+/* Headers de tabla */
+.table thead th {
+    border-top: none;
+    font-weight: var(--font-weight-bold);
+    text-transform: uppercase;
+    font-size: var(--font-size-xs);
+    letter-spacing: 0.5px;
+    padding: var(--spacing-sm) var(--spacing-xs); /* Reducido */
+    white-space: nowrap;
+    vertical-align: middle;
+    background-color: var(--dark-bg);
+    color: var(--text-white);
+}
+
+/* Sticky header mejorado */
+.sticky-header th {
+    position: sticky;
+    top: 0;
+    background: var(--dark-bg) !important;
+    z-index: var(--z-index-sticky);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Filas de datos */
+.table tbody tr {
+    transition: var(--transition-fast);
+    border: none;
+}
+
+.table tbody tr:hover {
+    background-color: var(--hover-bg);
+    transform: translateX(1px);
+    box-shadow: 2px 0 4px rgba(13, 110, 253, 0.1);
+}
+
+.table tbody td {
+    padding: var(--spacing-xs) var(--spacing-xs); /* Muy compacto */
+    vertical-align: middle;
+    border-top: 1px solid rgba(0, 0, 0, 0.05);
+    font-size: var(--font-size-xs);
+    line-height: 1.2;
+}
+
+/* Celdas editables */
+.editable-cell {
+    background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%) !important;
+    cursor: pointer;
+    position: relative;
+    transition: var(--transition-fast);
+    border-radius: var(--border-radius-sm);
+}
+
+.editable-cell:hover {
+    background: linear-gradient(135deg, #ffeaa7 0%, #fdcb6e 100%) !important;
+    transform: scale(1.01);
+    box-shadow: 0 2px 6px rgba(255, 193, 7, 0.3);
+}
+
+.editable-cell::before {
+    content: '✏️';
+    position: absolute;
+    top: 1px;
+    right: 1px;
+    font-size: 0.6rem;
+    opacity: 0;
+    transition: var(--transition-fast);
+}
+
+.editable-cell:hover::before {
+    opacity: 1;
+}
+
+/* Input de índice compacto */
+.indice-input {
+    width: 100%;
+    border: none;
+    background: transparent;
+    text-align: center;
+    font-weight: var(--font-weight-bold);
+    font-size: var(--font-size-xs);
+    padding: 2px 4px; /* Muy reducido */
+    border-radius: var(--border-radius-sm);
+    line-height: 1.1;
+}
+
+.indice-input:focus {
+    outline: 2px solid var(--primary-color);
+    background: var(--card-bg);
+    box-shadow: 0 0 0 0.15rem rgba(13, 110, 253, 0.25);
+}
+
+/* Clases de valores con espaciado optimizado */
+.valor-positivo {
+    color: var(--success-color);
+    font-weight: var(--font-weight-bold);
+    font-family: var(--font-family-monospace);
+    font-size: var(--font-size-xs);
+}
+
+.valor-negativo {
+    color: var(--danger-color);
+    font-weight: var(--font-weight-bold);
+    font-family: var(--font-family-monospace);
+    font-size: var(--font-size-xs);
+}
+
+.valor-neutro {
+    color: var(--text-secondary);
+    font-weight: var(--font-weight-semibold);
+    font-family: var(--font-family-monospace);
+    font-size: var(--font-size-xs);
+}
+
+/* Columnas de ventas históricas */
+.bg-light {
+    background: linear-gradient(135deg, var(--light-bg) 0%, #e9ecef 100%) !important;
+    font-weight: var(--font-weight-semibold);
+    color: #495057;
+    font-size: var(--font-size-xs) !important;
+}
+
+/* Efectos de hover para filas */
+.fila-datos:hover .valor-positivo {
+    text-shadow: 0 1px 2px rgba(25, 135, 84, 0.3);
+}
+
+.fila-datos:hover .valor-negativo {
+    text-shadow: 0 1px 2px rgba(220, 53, 69, 0.3);
+}
+
+/* Headers con colores específicos */
+.bg-warning {
+    background-color: var(--warning-color) !important;
+    color: var(--dark-bg) !important;
+    font-weight: var(--font-weight-bold);
+}
+
+.bg-success {
+    background-color: var(--success-color) !important;
+    color: var(--text-white) !important;
+}
+
+.bg-primary {
+    background-color: var(--primary-color) !important;
+    color: var(--text-white) !important;
+}
+
+/* Scrollbar personalizada para tablas */
+.table-responsive::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+.table-responsive::-webkit-scrollbar-track {
+    background: #f1f3f4;
+    border-radius: 4px;
+}
+
+.table-responsive::-webkit-scrollbar-thumb {
+    background: linear-gradient(135deg, #c1c8cd 0%, #a0aec0 100%);
+    border-radius: 4px;
+    border: 1px solid #f1f3f4;
+}
+
+.table-responsive::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(135deg, #a0aec0 0%, #718096 100%);
+}
+
+.table-responsive::-webkit-scrollbar-corner {
+    background: #f1f3f4;
+}
+
+/* Indicadores de ordenamiento */
+.sorted-asc .sort-icon {
+    color: var(--primary-color);
+}
+
+.sorted-desc .sort-icon {
+    color: var(--primary-color);
+}
+
+/* Tabla vacía */
+.tabla-vacia {
+    padding: var(--spacing-lg);
+    text-align: center;
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+.tabla-vacia i {
+    font-size: 2rem;
+    margin-bottom: var(--spacing-sm);
+    opacity: 0.5;
+}
+
+/* Responsive para tablas */
+@media (max-width: 768px) {
+    .table-responsive {
+        max-height: 55vh;
+        font-size: var(--font-size-xs);
+    }
+    
+    .table thead th,
+    .table tbody td {
+        padding: 2px 4px;
+        font-size: 0.7rem;
+    }
+    
+    .table thead th {
+        font-size: 0.6rem;
+    }
+    
+    .indice-input {
+        font-size: 0.7rem;
+        padding: 1px 2px;
+    }
+    
+    .valor-positivo,
+    .valor-negativo,
+    .valor-neutro {
+        font-size: 0.7rem;
+    }
+    
+    /* Ocultar columnas menos importantes en móvil */
+    .table td:nth-child(n+7),
+    .table th:nth-child(n+7) {
+        display: none;
+    }
+}
+
+@media (max-width: 576px) {
+    .table-responsive {
+        max-height: 45vh;
+    }
+    
+    .table thead th,
+    .table tbody td {
+        padding: 1px 2px;
+        font-size: 0.6rem;
+    }
+    
+    .table {
+        font-size: 0.6rem;
+    }
+    
+    /* Mostrar solo columnas esenciales en pantallas muy pequeñas */
+    .table td:nth-child(n+5),
+    .table th:nth-child(n+5) {
+        display: none;
+    }
+}
+
+/* Estados especiales de filas */
+.fila-resaltada {
+    background-color: rgba(255, 193, 7, 0.1) !important;
+    border-left: 3px solid var(--warning-color);
+}
+
+.fila-seleccionada {
+    background-color: rgba(13, 110, 253, 0.1) !important;
+    border-left: 3px solid var(--primary-color);
+}
+
+.fila-error {
+    background-color: rgba(220, 53, 69, 0.1) !important;
+    border-left: 3px solid var(--danger-color);
+}
+
+/* Animaciones para cambios de datos */
+@keyframes highlight-change {
+    0% { background-color: rgba(40, 167, 69, 0.3); }
+    100% { background-color: transparent; }
+}
+
+.data-changed {
+    animation: highlight-change 2s ease-in-out;
+}
+
+/* Tooltips para celdas */
+.table td[title]:hover {
+    position: relative;
+    cursor: help;
+}
+
+/* Filtros visuales */
+.fila-filtrada {
+    opacity: 0.3;
+    pointer-events: none;
+}
+
+.fila-coincidencia {
+    opacity: 1;
+    pointer-events: all;
+}
+
+/* Resaltado de búsqueda */
+mark {
+    background-color: #ffeb3b;
+    color: var(--dark-bg);
+    padding: 0 2px;
+    border-radius: 2px;
+    font-weight: var(--font-weight-semibold);
+}
+
+/* ========================================
+   COLORES PARA COLUMNAS PROYECTADAS
+   ======================================== */
+
+/* Columnas de ventas proyectadas - Azul claro */
+.bg-primary-subtle {
+    background-color: #cfe2ff !important;
+    color: #052c65 !important;
+}
+
+.text-primary-emphasis {
+    color: #052c65 !important;
+    font-weight: 700 !important;
+}
+
+/* Columnas de compra proyectada - Verde claro */
+.bg-success-subtle {
+    background-color: #d1e7dd !important;
+    color: #0a3622 !important;
+}
+
+.text-success-emphasis {
+    color: #0a3622 !important;
+    font-weight: 700 !important;
+}
+
+/* Columnas de ventas históricas - Info claro */
+.bg-info-subtle {
+    background-color: #e7f3ff !important;
+    color: #055160 !important;
+    font-weight: 600 !important;
+}
+
+/* Headers para las columnas nuevas */
+.header-venta-anterior {
+    background-color: #b3d9ff !important;
+    color: #003d82 !important;
+    font-weight: 700 !important;
+    font-size: 0.75rem !important;
+}
+
+.header-venta-proyectada {
+    background-color: #0066cc !important;
+    color: white !important;
+    font-weight: 700 !important;
+    font-size: 0.75rem !important;
+}
+
+.header-compra-proyectada {
+    background-color: #28a745 !important;
+    color: white !important;
+    font-weight: 700 !important;
+    font-size: 0.75rem !important;
+}
+
+/* Efectos hover para columnas coloreadas */
+.fila-datos:hover .bg-primary-subtle {
+    background-color: #9ec5fe !important;
+    transform: scale(1.02);
+    transition: all 0.15s ease;
+}
+
+.fila-datos:hover .bg-success-subtle {
+    background-color: #a3cfbb !important;
+    transform: scale(1.02);
+    transition: all 0.15s ease;
+}
+
+.fila-datos:hover .bg-info-subtle {
+    background-color: #b3e5fc !important;
+    transform: scale(1.02);
+    transition: all 0.15s ease;
+}
+
+/* Responsive para columnas coloreadas */
+@media (max-width: 768px) {
+    .bg-primary-subtle,
+    .bg-success-subtle,
+    .bg-info-subtle {
+        font-size: 0.7rem !important;
+        padding: 2px 4px !important;
+    }
+    
+    .text-primary-emphasis,
+    .text-success-emphasis {
+        font-weight: 600 !important;
+    }
+}
+
+@media (max-width: 576px) {
+    .bg-primary-subtle,
+    .bg-success-subtle,
+    .bg-info-subtle {
+        font-size: 0.65rem !important;
+        padding: 1px 2px !important;
+    }
+}
+
+.bg-warning {
+    background-color: #ffc107 !important;
+    color: #000 !important; /* Texto negro para contraste */
+    font-weight: 700 !important;
+    font-size: 0.75rem !important;
+}
+
+/* Asegurar que el texto sea visible en headers oscuros */
+.table thead th.bg-warning {
+    background-color: #ffc107 !important;
+    color: #000 !important;
+    border: 1px solid #000 !important;
+}
+
+/* Headers para sticky */
+.sticky-header th.bg-warning {
+    background-color: #ffc107 !important;
+    color: #000 !important;
+}

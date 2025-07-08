@@ -11,17 +11,39 @@ class FormatoUtils {
      * Formatear números con separadores de miles
      */
     static formatearNumero(numero) {
-        return new Intl.NumberFormat('es-AR').format(numero);
+        const num = parseFloat(numero);
+        if (isNaN(num)) return '0';
+        
+        // Si es un número entero o muy cercano a entero, no mostrar decimales
+        if (Number.isInteger(num) || Math.abs(num - Math.round(num)) < 0.01) {
+            return new Intl.NumberFormat('es-AR').format(Math.round(num));
+        }
+        
+        return new Intl.NumberFormat('es-AR', {
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 2
+        }).format(num);
+    }
+
+    static formatearParaInput(numero, decimales = 2) {
+        const num = parseFloat(numero);
+        if (isNaN(num)) return '0.00';
+        
+        // Usar formato inglés con punto para inputs HTML
+        return num.toFixed(decimales);
     }
 
     /**
      * Formatear decimales con precisión específica
      */
     static formatearDecimal(numero, decimales = 2) {
+        const num = parseFloat(numero);
+        if (isNaN(num)) return '0.00';
+        
         return new Intl.NumberFormat('es-AR', {
             minimumFractionDigits: decimales,
             maximumFractionDigits: decimales
-        }).format(numero);
+        }).format(num);
     }
 
     /**
