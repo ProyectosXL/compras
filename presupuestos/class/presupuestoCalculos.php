@@ -9,11 +9,11 @@ class PresupuestoCalculos {
     
     /**
      * Determina la temporada actual basada en la fecha
-     * Verano: 01/08 al 31/01 del año siguiente
-     * Invierno: 01/02 al 31/07
+     * Verano: 01/08 al 31/01 del año siguiente (VERANO 24-25, VERANO 25-26, etc.)
+     * Invierno: 01/02 al 31/07 (INVIERNO 25, INVIERNO 26, etc.)
      */
     public static function obtenerTemporadaActual($fecha = null) {
-        if (!$fecha) {
+        if (!$fecha) {  // CORREGIDO: era !fecha
             $fecha = new DateTime();
         } elseif (is_string($fecha)) {
             $fecha = new DateTime($fecha);
@@ -23,21 +23,25 @@ class PresupuestoCalculos {
         $ano = (int)$fecha->format('Y');
         
         if ($mes >= 8 && $mes <= 12) {
-            // Agosto a Diciembre = Verano del año siguiente
+            // Agosto a Diciembre = Verano del año siguiente (ej: ago 2024 = VERANO 24-25)
+            $anoInicial = $ano % 100;
+            $anoFinal = ($ano + 1) % 100;
             return [
                 'temporada' => 'VERANO',
                 'ano' => $ano + 1,
-                'codigo' => 'VERANO ' . str_pad(($ano + 1) % 100, 2, '0', STR_PAD_LEFT)
+                'codigo' => 'VERANO ' . str_pad($anoInicial, 2, '0', STR_PAD_LEFT) . '-' . str_pad($anoFinal, 2, '0', STR_PAD_LEFT)
             ];
         } elseif ($mes >= 1 && $mes <= 1) {
-            // Enero = Verano del año actual
+            // Enero = Verano del año actual (ej: ene 2025 = VERANO 24-25)
+            $anoInicial = ($ano - 1) % 100;
+            $anoFinal = $ano % 100;
             return [
                 'temporada' => 'VERANO',
                 'ano' => $ano,
-                'codigo' => 'VERANO ' . str_pad($ano % 100, 2, '0', STR_PAD_LEFT)
+                'codigo' => 'VERANO ' . str_pad($anoInicial, 2, '0', STR_PAD_LEFT) . '-' . str_pad($anoFinal, 2, '0', STR_PAD_LEFT)
             ];
         } else {
-            // Febrero a Julio = Invierno del año actual
+            // Febrero a Julio = Invierno del año actual (ej: mar 2025 = INVIERNO 25)
             return [
                 'temporada' => 'INVIERNO',
                 'ano' => $ano,
@@ -78,42 +82,8 @@ class PresupuestoCalculos {
     }
     
     /**
-     * CORREGIDO: Calcula la venta proyectada para verano
-     */
-    public static function calcularVentaProyectadaVerano($ventaVeranoAnterior, $indiceVariacion, $fecha = null) {
-        // Validar datos de entrada
-        $ventaVeranoAnterior = (float)$ventaVeranoAnterior;
-        $indiceVariacion = (float)$indiceVariacion;
-        
-        if ($ventaVeranoAnterior <= 0) {
-            error_log("Venta verano anterior es 0 o negativa: $ventaVeranoAnterior");
-            return 0;
-        }
-        
-        if ($indiceVariacion <= 0) {
-            $indiceVariacion = 1.0; // Valor por defecto
-        }
-        
-        $temporadaActual = self::obtenerTemporadaActual($fecha);
-        
-        // CORRECCIÓN: Aplicar índice siempre, independiente de la temporada
-        $ventaProyectada = $ventaVeranoAnterior * $indiceVariacion;
-        
-        // Si estamos en temporada de verano, ajustar por días restantes
-        if ($temporadaActual['temporada'] === 'VERANO') {
-            $diasRestantes = self::calcularDiasRestantesTemporada($fecha);
-            $diasTotalTemporada = 180; // 6 meses aproximadamente
-            
-            // Calcular proporción restante
-            $proporcionRestante = $diasRestantes / $diasTotalTemporada;
-            $ventaProyectada = $ventaProyectada * $proporcionRestante;
-        }
-        
-        return round($ventaProyectada, 2);
-    }
-    
-    /**
-     * CORREGIDO: Calcula la venta proyectada para invierno
+     * CORREGIDO: Calcula la venta proyectada para INVIERNO
+     * Si estamos en temporada de invierno, se aplica proporción de días restantes
      */
     public static function calcularVentaProyectadaInvierno($ventaInviernoAnterior, $indiceVariacion, $fecha = null) {
         // Validar datos de entrada
@@ -131,17 +101,51 @@ class PresupuestoCalculos {
         
         $temporadaActual = self::obtenerTemporadaActual($fecha);
         
-        // CORRECCIÓN: Aplicar índice siempre, independiente de la temporada
+        // CORRECCIÓN: Aplicar índice siempre
         $ventaProyectada = $ventaInviernoAnterior * $indiceVariacion;
         
-        // Si estamos en temporada de invierno, ajustar por días restantes
+        // Si estamos en temporada de INVIERNO, ajustar por días restantes
         if ($temporadaActual['temporada'] === 'INVIERNO') {
             $diasRestantes = self::calcularDiasRestantesTemporada($fecha);
-            $diasTotalTemporada = 180; // 6 meses aproximadamente
+            $diasTotalTemporada = 180; // 6 meses aproximadamente (febrero a julio)
             
-            // Calcular proporción restante
-            $proporcionRestante = $diasRestantes / $diasTotalTemporada;
-            $ventaProyectada = $ventaProyectada * $proporcionRestante;
+            // FÓRMULA CORREGIDA: (venta total invierno anterior / 180) * días restantes * índice
+            $ventaProyectada = ($ventaInviernoAnterior / $diasTotalTemporada) * $diasRestantes * $indiceVariacion;
+        }
+        
+        return round($ventaProyectada, 2);
+    }
+    
+    /**
+     * CORREGIDO: Calcula la venta proyectada para VERANO
+     * Si estamos en temporada de verano, se aplica proporción de días restantes
+     */
+    public static function calcularVentaProyectadaVerano($ventaVeranoAnterior, $indiceVariacion, $fecha = null) {
+        // Validar datos de entrada
+        $ventaVeranoAnterior = (float)$ventaVeranoAnterior;
+        $indiceVariacion = (float)$indiceVariacion;
+        
+        if ($ventaVeranoAnterior <= 0) {
+            error_log("Venta verano anterior es 0 o negativa: $ventaVeranoAnterior");
+            return 0;
+        }
+        
+        if ($indiceVariacion <= 0) {
+            $indiceVariacion = 1.0; // Valor por defecto
+        }
+        
+        $temporadaActual = self::obtenerTemporadaActual($fecha);
+        
+        // CORRECCIÓN: Aplicar índice siempre
+        $ventaProyectada = $ventaVeranoAnterior * $indiceVariacion;
+        
+        // Si estamos en temporada de VERANO, ajustar por días restantes
+        if ($temporadaActual['temporada'] === 'VERANO') {
+            $diasRestantes = self::calcularDiasRestantesTemporada($fecha);
+            $diasTotalTemporada = 180; // 6 meses aproximadamente (agosto a enero)
+            
+            // FÓRMULA CORREGIDA: (venta total verano anterior / 180) * días restantes * índice
+            $ventaProyectada = ($ventaVeranoAnterior / $diasTotalTemporada) * $diasRestantes * $indiceVariacion;
         }
         
         return round($ventaProyectada, 2);
@@ -172,7 +176,7 @@ class PresupuestoCalculos {
         
         // Buscar todas las columnas que contienen temporadas
         foreach (array_keys($primeraFila) as $columna) {
-            if (preg_match('/(VERANO|INVIERNO)\s*\d{2}/', $columna) || 
+            if (preg_match('/(VERANO|INVIERNO)\s*\d{2}(-\d{2})?/', $columna) || 
                 preg_match('/VTA_.*(VERANO|INVIERNO)/', $columna)) {
                 $columnasVenta[] = $columna;
             }
@@ -180,9 +184,9 @@ class PresupuestoCalculos {
         
         // Ordenar las columnas de manera lógica
         usort($columnasVenta, function($a, $b) {
-            // Extraer año y temporada
-            preg_match('/(VERANO|INVIERNO)\s*(\d{2})/', $a, $matchesA);
-            preg_match('/(VERANO|INVIERNO)\s*(\d{2})/', $b, $matchesB);
+            // Extraer año y temporada (ahora soporta formato XX-XX)
+            preg_match('/(VERANO|INVIERNO)\s*(\d{2})(-\d{2})?/', $a, $matchesA);
+            preg_match('/(VERANO|INVIERNO)\s*(\d{2})(-\d{2})?/', $b, $matchesB);
             
             if (empty($matchesA) || empty($matchesB)) {
                 return strcmp($a, $b);
@@ -225,6 +229,7 @@ class PresupuestoCalculos {
         error_log("Debug - Venta Verano Anterior: $ventaVeranoAnterior");
         error_log("Debug - Venta Invierno Anterior: $ventaInviernoAnterior");
         error_log("Debug - Índice Variación: $indiceVariacion");
+        error_log("Debug - Temporada Actual: " . $temporadaActual['codigo']);
         
         // Calcular ventas proyectadas
         $ventaProyVerano = self::calcularVentaProyectadaVerano($ventaVeranoAnterior, $indiceVariacion, $fecha);
@@ -247,32 +252,61 @@ class PresupuestoCalculos {
     }
     
     /**
-     * NUEVO: Extrae la venta anterior de una temporada específica
+     * CORREGIDO: Extrae la venta anterior de una temporada específica
+     * Ahora busca la temporada anterior correcta (ej: si estamos en VERANO 25-26, busca VERANO 24-25)
      */
     private static function extraerVentaAnterior($registro, $temporada) {
         $ventaAnterior = 0;
         $anoActual = (int)date('y'); // Año actual en formato de 2 dígitos
         
-        // Buscar en orden de prioridad: año anterior, año actual - 1, etc.
-        for ($i = 1; $i <= 3; $i++) {
-            $anoObjetivo = $anoActual - $i;
-            if ($anoObjetivo < 0) $anoObjetivo += 100; // Ajustar para cambio de siglo
-            
-            $anoStr = str_pad($anoObjetivo, 2, '0', STR_PAD_LEFT);
-            
-            // Probar diferentes formatos de columna
-            $posiblesColumnas = [
-                $temporada . ' ' . $anoStr,
-                $temporada . '_' . $anoStr,
-                $temporada . $anoStr,
-                'VTA_' . $temporada . '_' . $anoStr,
-                'VTA_' . $temporada . $anoStr
-            ];
-            
-            foreach ($posiblesColumnas as $columna) {
-                if (isset($registro[$columna]) && is_numeric($registro[$columna]) && $registro[$columna] > 0) {
-                    error_log("Debug - Encontrada columna: $columna con valor: " . $registro[$columna]);
-                    return (float)$registro[$columna];
+        // CORRECCIÓN: Para verano, buscar el formato XX-XX anterior
+        if ($temporada === 'VERANO') {
+            // Si estamos en VERANO 25-26, buscar VERANO 24-25
+            for ($i = 1; $i <= 3; $i++) {
+                $anoInicialAnterior = ($anoActual - $i) < 0 ? ($anoActual - $i + 100) : ($anoActual - $i);
+                $anoFinalAnterior = ($anoActual - $i + 1) < 0 ? ($anoActual - $i + 1 + 100) : ($anoActual - $i + 1);
+                
+                $anoInicialStr = str_pad($anoInicialAnterior, 2, '0', STR_PAD_LEFT);
+                $anoFinalStr = str_pad($anoFinalAnterior, 2, '0', STR_PAD_LEFT);
+                
+                // Probar diferentes formatos incluyendo el formato XX-XX
+                $posiblesColumnas = [
+                    'VERANO ' . $anoInicialStr . '-' . $anoFinalStr,
+                    'VERANO ' . $anoInicialStr,
+                    'VERANO_' . $anoInicialStr,
+                    'VERANO' . $anoInicialStr,
+                    'VTA_VERANO_' . $anoInicialStr,
+                    'VTA_VERANO' . $anoInicialStr
+                ];
+                
+                foreach ($posiblesColumnas as $columna) {
+                    if (isset($registro[$columna]) && is_numeric($registro[$columna]) && $registro[$columna] > 0) {
+                        error_log("Debug - Encontrada columna VERANO: $columna con valor: " . $registro[$columna]);
+                        return (float)$registro[$columna];
+                    }
+                }
+            }
+        } else {
+            // Para invierno, mantener la lógica anterior (solo año)
+            for ($i = 1; $i <= 3; $i++) {
+                $anoObjetivo = $anoActual - $i;
+                if ($anoObjetivo < 0) $anoObjetivo += 100;
+                
+                $anoStr = str_pad($anoObjetivo, 2, '0', STR_PAD_LEFT);
+                
+                $posiblesColumnas = [
+                    'INVIERNO ' . $anoStr,
+                    'INVIERNO_' . $anoStr,
+                    'INVIERNO' . $anoStr,
+                    'VTA_INVIERNO_' . $anoStr,
+                    'VTA_INVIERNO' . $anoStr
+                ];
+                
+                foreach ($posiblesColumnas as $columna) {
+                    if (isset($registro[$columna]) && is_numeric($registro[$columna]) && $registro[$columna] > 0) {
+                        error_log("Debug - Encontrada columna INVIERNO: $columna con valor: " . $registro[$columna]);
+                        return (float)$registro[$columna];
+                    }
                 }
             }
         }
@@ -290,16 +324,34 @@ class PresupuestoCalculos {
     }
     
     /**
-     * Genera las etiquetas dinámicas para las columnas de venta proyectada
+     * CORREGIDO: Genera las etiquetas dinámicas para las columnas de venta proyectada
      */
     public static function generarEtiquetasVentaProyectada($fecha = null) {
         $temporadaActual = self::obtenerTemporadaActual($fecha);
-        $anoActual = $temporadaActual['ano'];
         
-        return [
-            'verano' => 'VENTA PROY. VER ' . str_pad($anoActual % 100, 2, '0', STR_PAD_LEFT),
-            'invierno' => 'VENTA PROY. INV ' . str_pad($anoActual % 100, 2, '0', STR_PAD_LEFT)
-        ];
+        if ($temporadaActual['temporada'] === 'VERANO') {
+            // Si estamos en verano, proyectamos para el próximo verano e invierno
+            $anoVerano = $temporadaActual['ano'] % 100;
+            $anoInvierno = $temporadaActual['ano'] % 100;
+            
+            $proximoVeranoInicial = $anoVerano;
+            $proximoVeranoFinal = ($anoVerano + 1) > 99 ? 0 : ($anoVerano + 1);
+            
+            return [
+                'verano' => 'VENTA PROY. VER ' . str_pad($proximoVeranoInicial, 2, '0', STR_PAD_LEFT) . '-' . str_pad($proximoVeranoFinal, 2, '0', STR_PAD_LEFT),
+                'invierno' => 'VENTA PROY. INV ' . str_pad($anoInvierno, 2, '0', STR_PAD_LEFT)
+            ];
+        } else {
+            // Si estamos en invierno, proyectamos para el próximo invierno y el verano siguiente
+            $anoInvierno = $temporadaActual['ano'] % 100;
+            $anoVeranoInicial = $anoInvierno;
+            $anoVeranoFinal = ($anoInvierno + 1) > 99 ? 0 : ($anoInvierno + 1);
+            
+            return [
+                'verano' => 'VENTA PROY. VER ' . str_pad($anoVeranoInicial, 2, '0', STR_PAD_LEFT) . '-' . str_pad($anoVeranoFinal, 2, '0', STR_PAD_LEFT),
+                'invierno' => 'VENTA PROY. INV ' . str_pad($anoInvierno, 2, '0', STR_PAD_LEFT)
+            ];
+        }
     }
     
     /**
