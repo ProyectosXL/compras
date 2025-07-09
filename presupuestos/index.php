@@ -196,6 +196,48 @@
             }
         }
 
+        .card {
+            transition: all 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
+
+        .contador-animado.actualizado {
+            animation: pulse-total 0.6s ease;
+        }
+
+        @keyframes pulse-total {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+
+        /* Responsive para móviles */
+        @media (max-width: 768px) {
+            .search-container .row {
+                flex-direction: column;
+                gap: 0.5rem;
+            }
+            
+            .search-container .col-md-3,
+            .search-container .col-md-4 {
+                width: 100%;
+                margin-bottom: 0.5rem;
+            }
+            
+            .card.bg-warning-subtle,
+            .card.bg-primary-subtle {
+                margin-bottom: 0.5rem;
+            }
+            
+            .export-buttons {
+                justify-content: center;
+            }
+        }
+
     </style>
 </head>
 <body>
@@ -296,50 +338,43 @@
                         <div class="tab-pane fade show active" id="verano" role="tabpanel">
                             <div class="search-container">
                                 <div class="row align-items-center">
-                                    <div class="col-md-6">
+                                    <div class="col-md-4">
                                         <div class="input-group">
                                             <span class="input-group-text">
                                                 <i class="fas fa-search"></i>
                                             </span>
                                             <input type="text" class="form-control search-input-fast" id="search-verano" 
-                                                   placeholder="Búsqueda instantánea por rubro o categoría..." 
-                                                   onkeyup="buscarDatos('verano')">
+                                                placeholder="Búsqueda instantánea por rubro o categoría..." 
+                                                onkeyup="buscarDatos('verano')">
                                         </div>
                                     </div>
-                                    <div class="col-md-3">
+                                    <div class="col-md-2">
                                         <span class="badge bg-info fs-6 contador-animado" id="count-verano">0 registros</span>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <!-- NUEVO: Total de unidades a comprar -->
+                                        <div class="card bg-warning-subtle border-warning">
+                                            <div class="card-body p-2 text-center">
+                                                <h6 class="card-title mb-1 text-warning-emphasis">
+                                                    <i class="fas fa-shopping-cart me-1"></i>
+                                                    Total a Comprar
+                                                </h6>
+                                                <div class="text-warning-emphasis" id="total-comprar-verano">
+                                                    <strong>0</strong> unidades
+                                                    <small class="text-muted d-block">Calculando...</small>
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
                                     <div class="col-md-3 text-end export-buttons">
                                         <button class="btn btn-success btn-sm" onclick="exportarExcel('verano')">
                                             <i class="fas fa-file-excel me-1"></i> Excel
                                         </button>
+                                        <button class="btn btn-info btn-sm" onclick="mostrarEstadisticasCompra('verano')" title="Ver estadísticas detalladas">
+                                            <i class="fas fa-chart-bar"></i>
+                                        </button>
                                     </div>
                                 </div>
-                            </div>
-                            <div class="table-responsive">
-                                <table class="table table-striped table-hover mb-0" id="tabla-verano">
-                                    <thead class="table-dark sticky-header">
-                                        <tr>
-                                            <th>Rubro</th>
-                                            <th>Categoría</th>
-                                            <th class="text-center">Stock Proyectado</th>
-                                            <th class="text-center bg-warning">Índice Variación</th>
-                                            <th class="text-center header-venta-anterior">Venta Ant. Ver</th>
-                                            <th class="text-center header-venta-proyectada" id="header-venta-verano">Venta Proy. Ver</th>
-                                            <th class="text-center header-venta-anterior">Venta Ant. Inv</th>
-                                            <th class="text-center header-venta-proyectada" id="header-venta-invierno">Venta Proy. Inv</th>
-                                            <th class="text-center header-compra-proyectada">Compra Proyectada</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="tbody-verano">
-                                        <tr>
-                                            <td colspan="9" class="text-center text-muted py-4">
-                                                <i class="fas fa-info-circle"></i>
-                                                Cargue los datos para ver la proyección de compras de verano
-                                            </td>
-                                        </tr>
-                                    </tbody>
-                                </table>
                             </div>
                         </div>
 
@@ -347,50 +382,43 @@
                         <div class="tab-pane fade" id="invierno" role="tabpanel">
                             <div class="search-container">
                                 <div class="row align-items-center">
-                                    <div class="col-md-6">
+                                    <div class="col-md-4">
                                         <div class="input-group">
                                             <span class="input-group-text">
                                                 <i class="fas fa-search"></i>
                                             </span>
                                             <input type="text" class="form-control search-input-fast" id="search-invierno" 
-                                                   placeholder="Búsqueda instantánea por rubro o categoría..." 
-                                                   onkeyup="buscarDatos('invierno')">
+                                                placeholder="Búsqueda instantánea por rubro o categoría..." 
+                                                onkeyup="buscarDatos('invierno')">
                                         </div>
                                     </div>
-                                    <div class="col-md-3">
+                                    <div class="col-md-2">
                                         <span class="badge bg-info fs-6 contador-animado" id="count-invierno">0 registros</span>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <!-- NUEVO: Total de unidades a comprar -->
+                                        <div class="card bg-primary-subtle border-primary">
+                                            <div class="card-body p-2 text-center">
+                                                <h6 class="card-title mb-1 text-primary-emphasis">
+                                                    <i class="fas fa-shopping-cart me-1"></i>
+                                                    Total a Comprar
+                                                </h6>
+                                                <div class="text-primary-emphasis" id="total-comprar-invierno">
+                                                    <strong>0</strong> unidades
+                                                    <small class="text-muted d-block">Calculando...</small>
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
                                     <div class="col-md-3 text-end export-buttons">
                                         <button class="btn btn-success btn-sm" onclick="exportarExcel('invierno')">
                                             <i class="fas fa-file-excel me-1"></i> Excel
                                         </button>
+                                        <button class="btn btn-info btn-sm" onclick="mostrarEstadisticasCompra('invierno')" title="Ver estadísticas detalladas">
+                                            <i class="fas fa-chart-bar"></i>
+                                        </button>
                                     </div>
                                 </div>
-                            </div>
-                            <div class="table-responsive">
-                                <table class="table table-striped table-hover mb-0" id="tabla-invierno">
-                                    <thead class="table-dark sticky-header">
-                                        <tr>
-                                            <th>Rubro</th>
-                                            <th>Categoría</th>
-                                            <th class="text-center">Stock Proyectado</th>
-                                            <th class="text-center bg-warning">Índice Variación</th>
-                                            <th class="text-center header-venta-anterior">Venta Ant. Ver</th>
-                                            <th class="text-center header-venta-proyectada" id="header-venta-verano-inv">Venta Proy. Ver</th>
-                                            <th class="text-center header-venta-anterior">Venta Ant. Inv</th>
-                                            <th class="text-center header-venta-proyectada" id="header-venta-invierno-inv">Venta Proy. Inv</th>
-                                            <th class="text-center header-compra-proyectada">Compra Proyectada</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="tbody-invierno">
-                                        <tr>
-                                            <td colspan="9" class="text-center text-muted py-4">
-                                                <i class="fas fa-info-circle"></i>
-                                                Cargue los datos para ver la proyección de compras de invierno
-                                            </td>
-                                        </tr>
-                                    </tbody>
-                                </table>
                             </div>
                         </div>
 
@@ -424,13 +452,13 @@
                                         <tr>
                                             <th>Rubro</th>
                                             <th>Categoría</th>
-                                            <th class="text-center">Stock Proyectado</th>
-                                            <th class="text-center bg-warning">Índice Variación</th>
-                                            <th class="text-center header-venta-anterior">Venta Ant. Ver</th>
-                                            <th class="text-center header-venta-proyectada" id="header-venta-verano-stock">Venta Proy. Ver</th>
-                                            <th class="text-center header-venta-anterior">Venta Ant. Inv</th>
-                                            <th class="text-center header-venta-proyectada" id="header-venta-invierno-stock">Venta Proy. Inv</th>
-                                            <th class="text-center header-compra-proyectada">Compra Proyectada</th>
+                                            <th class="text-center bg-info">Stock Actual</th>
+                                            <th class="text-center bg-warning">Stock a Guardar</th>
+                                            <th class="text-center bg-success">Compras Verano</th>
+                                            <th class="text-center bg-success">Compras Invierno</th>
+                                            <th class="text-center bg-success">Compras Atemporal</th>
+                                            <th class="text-center bg-danger text-white">Stock Cobertura</th>
+                                            <th class="text-center bg-primary text-white">Stock Proyectado</th>
                                         </tr>
                                     </thead>
                                     <tbody id="tbody-stock">
@@ -517,14 +545,12 @@
         }
 
         function buscarDatos(solapa) {
-            // Usar búsqueda instantánea optimizada
             if (BusquedaManager && BusquedaManager.busquedaInstantanea) {
                 const input = document.getElementById(`search-${solapa}`);
                 if (input) {
                     BusquedaManager.busquedaInstantanea(solapa, input.value);
                 }
             } else {
-                // Fallback
                 window.presupuestoApp.buscarDatos(solapa);
             }
         }
@@ -548,7 +574,6 @@
 
         function mostrarTabsContainer(mostrar) {
             UIUtils.mostrarTabsContainer(mostrar);
-            // Mostrar/ocultar botón de exportación completa
             const btnExport = document.getElementById('btn-export-completo-header');
             if (btnExport) {
                 btnExport.style.display = mostrar ? 'inline-block' : 'none';
@@ -561,7 +586,6 @@
 
         function actualizarContador(elementId, count) {
             UIUtils.actualizarContador(elementId, count);
-            // Añadir animación al contador
             const elemento = document.getElementById(elementId);
             if (elemento) {
                 elemento.classList.add('actualizado');
@@ -585,10 +609,9 @@
             return FormatoUtils.obtenerClaseValor(valor);
         }
 
-        // NUEVA: Función para actualizar fecha y hora con zona horaria Argentina
+        // Función para actualizar fecha y hora con zona horaria Argentina
         function actualizarFechaHora() {
             const ahora = new Date();
-            // Configurar zona horaria Argentina (GMT-3)
             const opciones = {
                 timeZone: 'America/Argentina/Buenos_Aires',
                 year: 'numeric',
@@ -607,16 +630,47 @@
             }
         }
 
-        // Inicialización
+        // Verificación de módulos
+        function verificarModulosCargados() {
+            const modulos = {
+                'FormatoUtils': typeof FormatoUtils !== 'undefined',
+                'UIUtils': typeof UIUtils !== 'undefined',
+                'APIClient': typeof APIClient !== 'undefined',
+                'TablaRenderer': typeof TablaRenderer !== 'undefined',
+                'BusquedaManager': typeof BusquedaManager !== 'undefined',
+                'IndiceEditor': typeof IndiceEditor !== 'undefined',
+                'PresupuestoApp': typeof PresupuestoApp !== 'undefined'
+            };
+            
+            const faltantes = Object.entries(modulos)
+                .filter(([nombre, cargado]) => !cargado)
+                .map(([nombre]) => nombre);
+                
+            if (faltantes.length > 0) {
+                console.error('❌ Módulos no cargados:', faltantes);
+                alert('Error: Faltan módulos del sistema. Recarga la página.');
+                return false;
+            }
+            
+            console.log('✅ Todos los módulos cargados correctamente');
+            return true;
+        }
+
+        // Inicialización principal
         document.addEventListener('DOMContentLoaded', function() {
             console.log('Sistema de Presupuesto de Compras v2.2 - CORREGIDO iniciado');
 
-            // AGREGAR después del console.log anterior:
+            // Verificar que todos los módulos estén cargados
+            if (!verificarModulosCargados()) {
+                return;
+            }
+
             console.log('✅ Correcciones aplicadas:');
             console.log('  - Cálculo proporcional por días para temporada actual');
             console.log('  - Nomenclatura VERANO XX-XX correcta');
             console.log('  - Headers de ventas anteriores visibles');
-            console.log('  - Eliminadas columnas históricas duplicadas');
+            console.log('  - Tabla de stock corregida (sin ventas proyectadas)');
+            console.log('  - TablaRenderer simplificado');
             
             // Actualizar fecha y hora inmediatamente
             actualizarFechaHora();
@@ -634,7 +688,7 @@
                 'PresupuestoApp': typeof window.presupuestoApp !== 'undefined'
             });
             
-            // Verificar que todos los elementos del DOM existen
+            // Verificar elementos del DOM
             const elementosRequeridos = [
                 'loading', 'tabs-container', 'info-temporada-container',
                 'temporada-actual', 'dias-restantes', 'ultima-actualizacion',
@@ -645,7 +699,7 @@
             
             const elementosFaltantes = elementosRequeridos.filter(id => !document.getElementById(id));
             if (elementosFaltantes.length > 0) {
-                console.warn('Elementos faltantes en el DOM:', elementosFaltantes);
+                console.warn('Elementos DOM faltantes:', elementosFaltantes);
             }
             
             // Configurar tooltips de Bootstrap
@@ -653,9 +707,11 @@
             tooltipTriggerList.map(function (tooltipTriggerEl) {
                 return new bootstrap.Tooltip(tooltipTriggerEl);
             });
+            
+            console.log('✅ Sistema inicializado correctamente');
         });
 
-        // Event listeners adicionales para funcionalidades específicas
+        // Event listeners adicionales
         document.addEventListener('DOMContentLoaded', function() {
             // Shortcuts de teclado
             document.addEventListener('keydown', function(e) {
@@ -695,9 +751,59 @@
                     timestamp: Date.now()
                 };
                 
-                StorageUtils.guardar('preferencias_usuario', preferencias, 24 * 60 * 60 * 1000); // 24 horas
+                if (typeof StorageUtils !== 'undefined') {
+                    StorageUtils.guardar('preferencias_usuario', preferencias, 24 * 60 * 60 * 1000);
+                }
             });
         });
+
+        // Debug para verificar elementos DOM
+        function verificarElementosTablas() {
+            const elementos = [
+                'tabla-verano', 'tbody-verano',
+                'tabla-invierno', 'tbody-invierno', 
+                'tabla-stock', 'tbody-stock'
+            ];
+            
+            console.group('🔍 VERIFICACIÓN ELEMENTOS DOM');
+            elementos.forEach(id => {
+                const elemento = document.getElementById(id);
+                if (elemento) {
+                    console.log(`✅ ${id}: ENCONTRADO`);
+                } else {
+                    console.error(`❌ ${id}: NO ENCONTRADO`);
+                }
+            });
+            console.groupEnd();
+            
+            // Verificar estructura de tablas
+            ['verano', 'invierno', 'stock'].forEach(solapa => {
+                const tabla = document.getElementById(`tabla-${solapa}`);
+                if (tabla) {
+                    const thead = tabla.querySelector('thead');
+                    const tbody = tabla.querySelector('tbody');
+                    console.log(`📊 Tabla ${solapa}:`, {
+                        tabla: !!tabla,
+                        thead: !!thead,
+                        tbody: !!tbody,
+                        headers: thead ? thead.querySelectorAll('th').length : 0,
+                        filas: tbody ? tbody.querySelectorAll('tr').length : 0
+                    });
+                }
+            });
+        }
+
+        // Ejecutar verificación después de cargar el DOM
+        document.addEventListener('DOMContentLoaded', function() {
+            // Verificar inmediatamente
+            verificarElementosTablas();
+            
+            // Función global para debugging
+            window.verificarElementosTablas = verificarElementosTablas;
+            
+            console.log('💡 Usa verificarElementosTablas() para ver estado de elementos DOM');
+        });
+
     </script>
 </body>
 </html>

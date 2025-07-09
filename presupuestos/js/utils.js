@@ -91,9 +91,49 @@ class FormatoUtils {
     /**
      * Parsear número desde texto formateado
      */
+    /**
+     * Parsear número desde texto formateado (MEJORADA)
+     */
     static parsearNumero(texto) {
         if (!texto) return 0;
-        return parseFloat(texto.replace(/[^\d.-]/g, '')) || 0;
+        
+        // Convertir a string si no lo es
+        const str = texto.toString();
+        
+        // Remover todo excepto números, punto, coma y signo negativo
+        let numeroLimpio = str.replace(/[^\d.,-]/g, '');
+        
+        // Si está vacío después de limpiar, retornar 0
+        if (!numeroLimpio) return 0;
+        
+        // Manejar números negativos
+        const esNegativo = str.includes('-') || str.startsWith('(');
+        
+        // Remover signos para procesar
+        numeroLimpio = numeroLimpio.replace(/[-()]/g, '');
+        
+        // Manejar separadores decimales (punto vs coma)
+        // Si hay tanto punto como coma, asumir que la coma es separador de miles
+        if (numeroLimpio.includes('.') && numeroLimpio.includes(',')) {
+            // Formato: 1,234.56 (coma para miles, punto para decimales)
+            numeroLimpio = numeroLimpio.replace(/,/g, '');
+        } else if (numeroLimpio.includes(',')) {
+            // Solo coma - puede ser decimal o miles
+            const partes = numeroLimpio.split(',');
+            if (partes.length === 2 && partes[1].length <= 2) {
+                // Formato: 123,45 (coma como decimal)
+                numeroLimpio = numeroLimpio.replace(',', '.');
+            } else {
+                // Formato: 1,234 (coma como separador de miles)
+                numeroLimpio = numeroLimpio.replace(/,/g, '');
+            }
+        }
+        
+        // Convertir a número
+        const numero = parseFloat(numeroLimpio);
+        
+        // Aplicar signo negativo si corresponde
+        return isNaN(numero) ? 0 : (esNegativo ? -Math.abs(numero) : numero);
     }
 
     /**
