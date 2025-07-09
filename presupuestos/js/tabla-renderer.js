@@ -40,7 +40,16 @@ const TablaRendererUtils = {
 
     limpiarTabla(solapa) {
         const tabla = document.getElementById(`tabla-${solapa}`);
+        if (!tabla) {
+            console.warn(`Tabla ${solapa} no encontrada`);
+            return;
+        }
+        
         const thead = tabla.querySelector('thead tr');
+        if (!thead) {
+            console.warn(`Header de tabla ${solapa} no encontrado`);
+            return;
+        }
         
         const columnasDinamicas = thead.querySelectorAll('[data-columna-dinamica]');
         columnasDinamicas.forEach(th => th.remove());
