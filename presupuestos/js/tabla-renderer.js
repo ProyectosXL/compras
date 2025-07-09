@@ -9,10 +9,6 @@
 const TablaRendererUtils = {
     
     mostrarTablaVacia(tbody, colspan, mensaje) {
-        if (!tbody) {
-            console.warn('tbody no encontrado para mostrar tabla vacía');
-            return;
-        }
         tbody.innerHTML = `
             <tr>
                 <td colspan="${colspan}" class="text-center text-muted py-4">
@@ -30,33 +26,21 @@ const TablaRendererUtils = {
 
     resetearEstadoTabla(solapa) {
         const tabla = document.getElementById(`tabla-${solapa}`);
-        if (!tabla) {
-            console.warn(`Tabla ${solapa} no encontrada para resetear estado`);
-            return;
+        if (tabla) {
+            tabla.removeAttribute('data-columnas-procesadas');
+            tabla.removeAttribute('data-limpia');
+            
+            const headersDinamicos = tabla.querySelectorAll('th[data-columna-dinamica]');
+            headersDinamicos.forEach(th => th.remove());
+            
+            const celdasDinamicas = tabla.querySelectorAll('td[data-columna-dinamica]');
+            celdasDinamicas.forEach(td => td.remove());
         }
-        
-        tabla.removeAttribute('data-columnas-procesadas');
-        tabla.removeAttribute('data-limpia');
-        
-        const headersDinamicos = tabla.querySelectorAll('th[data-columna-dinamica]');
-        headersDinamicos.forEach(th => th.remove());
-        
-        const celdasDinamicas = tabla.querySelectorAll('td[data-columna-dinamica]');
-        celdasDinamicas.forEach(td => td.remove());
     },
 
     limpiarTabla(solapa) {
         const tabla = document.getElementById(`tabla-${solapa}`);
-        if (!tabla) {
-            console.warn(`Tabla ${solapa} no encontrada para limpiar`);
-            return;
-        }
-        
         const thead = tabla.querySelector('thead tr');
-        if (!thead) {
-            console.warn(`thead no encontrado en tabla ${solapa}`);
-            return;
-        }
         
         const columnasDinamicas = thead.querySelectorAll('[data-columna-dinamica]');
         columnasDinamicas.forEach(th => th.remove());
@@ -157,11 +141,6 @@ class TablaRenderer {
     static renderizarTablaVerano(datos, etiquetas = null) {
         const tbody = document.getElementById('tbody-verano');
         
-        if (!tbody) {
-            console.error('❌ tbody-verano no encontrado en el DOM');
-            return;
-        }
-        
         if (!datos || datos.length === 0) {
             TablaRendererUtils.mostrarTablaVacia(tbody, 9, 'No hay datos disponibles para la proyección de verano');
             return;
@@ -190,11 +169,6 @@ class TablaRenderer {
     static renderizarTablaInvierno(datos, etiquetas = null) {
         const tbody = document.getElementById('tbody-invierno');
         
-        if (!tbody) {
-            console.error('❌ tbody-invierno no encontrado en el DOM');
-            return;
-        }
-        
         if (!datos || datos.length === 0) {
             TablaRendererUtils.mostrarTablaVacia(tbody, 9, 'No hay datos disponibles para la proyección de invierno');
             return;
@@ -218,15 +192,10 @@ class TablaRenderer {
     }
 
     /**
-     * Renderizar tabla de Stock Proyectado - CON VALIDACIONES
+     * Renderizar tabla de Stock Proyectado
      */
     static renderizarTablaStock(datos) {
         const tbody = document.getElementById('tbody-stock');
-        
-        if (!tbody) {
-            console.error('❌ tbody-stock no encontrado en el DOM');
-            return;
-        }
         
         if (!datos || datos.length === 0) {
             TablaRendererUtils.mostrarTablaVacia(tbody, 9, 'No hay datos disponibles para el stock proyectado');
@@ -245,22 +214,13 @@ class TablaRenderer {
     }
 
     /**
-     * Agregar columnas de ventas históricas - CON VALIDACIONES
+     * Agregar columnas de ventas históricas (solo para compras)
      */
     static agregarColumnasVentasHistoricas(solapa, datos) {
         if (!datos || datos.length === 0) return;
         
         const tabla = document.getElementById(`tabla-${solapa}`);
-        if (!tabla) {
-            console.warn(`Tabla ${solapa} no encontrada para agregar columnas`);
-            return;
-        }
-        
         const thead = tabla.querySelector('thead tr');
-        if (!thead) {
-            console.warn(`thead no encontrado en tabla ${solapa}`);
-            return;
-        }
         
         if (tabla.getAttribute('data-columnas-procesadas') === 'true') {
             return;
@@ -376,20 +336,11 @@ class TablaRenderer {
         return TablaRendererUtils.resetearEstadoTabla(solapa);
     }
 
-    /**
-     * Aplicar filtros visuales - CON VALIDACIONES
-     */
     static aplicarFiltroVisual(solapa, termino = '') {
         const tabla = document.getElementById(`tbody-${solapa}`);
-        if (!tabla) {
-            console.warn(`tbody-${solapa} no encontrado para aplicar filtro`);
-            return 0;
-        }
-        
         const filas = tabla.querySelectorAll('.fila-datos');
         
         if (!termino || termino.length < 2) {
-            // Mostrar todas las filas
             filas.forEach(fila => {
                 fila.style.display = '';
                 fila.style.opacity = '1';
@@ -417,13 +368,8 @@ class TablaRenderer {
         return coincidencias;
     }
 
-     static resaltarFila(solapa, index, resaltar = true) {
+    static resaltarFila(solapa, index, resaltar = true) {
         const tabla = document.getElementById(`tbody-${solapa}`);
-        if (!tabla) {
-            console.warn(`tbody-${solapa} no encontrado para resaltar fila`);
-            return;
-        }
-        
         const fila = tabla.children[index];
         
         if (fila) {
@@ -460,28 +406,17 @@ class TablaRenderer {
 
     static obtenerEstadoTabla(solapa) {
         const tabla = document.getElementById(`tabla-${solapa}`);
-        if (!tabla) {
-            console.warn(`tabla-${solapa} no encontrada para obtener estado`);
-            return {
-                columnas_procesadas: false,
-                tabla_limpia: false,
-                total_headers: 0,
-                total_filas: 0,
-                columnas_dinamicas: 0,
-                error: 'Tabla no encontrada'
-            };
-        }
-        
         const tbody = tabla.querySelector('tbody');
         
         return {
             columnas_procesadas: tabla.getAttribute('data-columnas-procesadas') === 'true',
             tabla_limpia: tabla.getAttribute('data-limpia') === 'true',
             total_headers: tabla.querySelectorAll('thead th').length,
-            total_filas: tbody ? tbody.querySelectorAll('.fila-datos').length : 0,
+            total_filas: tbody.querySelectorAll('.fila-datos').length,
             columnas_dinamicas: tabla.querySelectorAll('[data-columna-dinamica]').length
         };
     }
+
     // Compatibilidad
     static mostrarTablaVacia(tbody, colspan, mensaje) {
         return TablaRendererUtils.mostrarTablaVacia(tbody, colspan, mensaje);
@@ -538,264 +473,4 @@ document.addEventListener('DOMContentLoaded', function() {
     window.limpiarTodasLasTablas = () => TablaRenderer.limpiarTodasLasTablas();
     
     console.log('✅ TablaRenderer simplificado cargado');
-});
-
-// Funciones para calcular total de unidades a comprar
-// Agregar al final de tabla-renderer.js
-
-// Agregar esta clase al final de tabla-renderer.js
-class TotalUnidadesComprar {
-    
-    /**
-     * Calcular total de unidades a comprar (solo valores negativos de compra proyectada)
-     */
-    static calcularTotal(solapa) {
-        const tbody = document.getElementById(`tbody-${solapa}`);
-        const filas = tbody.querySelectorAll('.fila-datos');
-        
-        let totalUnidades = 0;
-        let filasVisibles = 0;
-        let filasConCompraPositiva = 0;
-        
-        filas.forEach(fila => {
-            // Solo contar filas visibles (no filtradas)
-            if (fila.style.display !== 'none') {
-                filasVisibles++;
-                
-                // La compra proyectada está en la columna 8 (índice 8)
-                const celdaCompra = fila.children[8];
-                if (celdaCompra) {
-                    // Extraer el número del texto, removiendo formato
-                    const textoCompra = celdaCompra.textContent.trim();
-                    const valorCompra = FormatoUtils.parsearNumero(textoCompra);
-                    
-                    // Solo sumar valores negativos (necesidad de compra)
-                    if (valorCompra < 0) {
-                        totalUnidades += Math.abs(valorCompra); // Convertir a positivo
-                        filasConCompraPositiva++;
-                    }
-                }
-            }
-        });
-        
-        return {
-            total: Math.round(totalUnidades),
-            filas_visibles: filasVisibles,
-            filas_con_compra: filasConCompraPositiva,
-            porcentaje_compra: filasVisibles > 0 ? ((filasConCompraPositiva / filasVisibles) * 100).toFixed(1) : 0
-        };
-    }
-    
-    /**
-     * Actualizar el display del total en la interfaz
-     */
-    static actualizarTotal(solapa) {
-        const resultado = TotalUnidadesComprar.calcularTotal(solapa);
-        const elementoTotal = document.getElementById(`total-comprar-${solapa}`);
-        
-        if (elementoTotal) {
-            elementoTotal.innerHTML = `
-                <strong>${FormatoUtils.formatearNumero(resultado.total)}</strong> unidades
-                <small class="text-muted d-block">
-                    ${resultado.filas_con_compra} de ${resultado.filas_visibles} productos (${resultado.porcentaje_compra}%)
-                </small>
-            `;
-            
-            // Agregar animación cuando cambia
-            elementoTotal.classList.add('contador-animado');
-            elementoTotal.classList.add('actualizado');
-            setTimeout(() => {
-                elementoTotal.classList.remove('actualizado');
-            }, 500);
-        }
-        
-        return resultado;
-    }
-    
-    /**
-     * Inicializar totales para todas las solapas de compras
-     */
-    static inicializarTotales() {
-        ['verano', 'invierno'].forEach(solapa => {
-            TotalUnidadesComprar.actualizarTotal(solapa);
-        });
-    }
-    
-    /**
-     * Configurar observers para actualización automática
-     */
-    static configurarObservers() {
-        ['verano', 'invierno'].forEach(solapa => {
-            const tbody = document.getElementById(`tbody-${solapa}`);
-            if (tbody) {
-                // Observer para cambios en el DOM (filtros, nuevos datos)
-                const observer = new MutationObserver(() => {
-                    // Debounce para evitar múltiples cálculos
-                    clearTimeout(TotalUnidadesComprar.timeouts?.[solapa]);
-                    if (!TotalUnidadesComprar.timeouts) TotalUnidadesComprar.timeouts = {};
-                    
-                    TotalUnidadesComprar.timeouts[solapa] = setTimeout(() => {
-                        TotalUnidadesComprar.actualizarTotal(solapa);
-                    }, 100);
-                });
-                
-                observer.observe(tbody, {
-                    childList: true,
-                    subtree: true,
-                    attributes: true,
-                    attributeFilter: ['style']
-                });
-                
-                // Guardar observer para limpieza posterior si es necesario
-                TotalUnidadesComprar.observers = TotalUnidadesComprar.observers || {};
-                TotalUnidadesComprar.observers[solapa] = observer;
-            }
-        });
-    }
-    
-    /**
-     * Obtener estadísticas detalladas de compras
-     */
-    static obtenerEstadisticas(solapa) {
-        const tbody = document.getElementById(`tbody-${solapa}`);
-        const filas = tbody.querySelectorAll('.fila-datos');
-        
-        const stats = {
-            total_filas: filas.length,
-            filas_visibles: 0,
-            compras_negativas: 0,
-            compras_positivas: 0,
-            compras_neutras: 0,
-            total_unidades_comprar: 0,
-            total_unidades_sobra: 0,
-            valor_promedio_compra: 0,
-            rubros_con_compra: new Set()
-        };
-        
-        filas.forEach(fila => {
-            if (fila.style.display !== 'none') {
-                stats.filas_visibles++;
-                
-                const celdaCompra = fila.children[8];
-                const celdaRubro = fila.children[0];
-                
-                if (celdaCompra && celdaRubro) {
-                    const valorCompra = FormatoUtils.parsearNumero(celdaCompra.textContent);
-                    const rubro = celdaRubro.textContent.trim();
-                    
-                    if (valorCompra < 0) {
-                        stats.compras_negativas++;
-                        stats.total_unidades_comprar += Math.abs(valorCompra);
-                        stats.rubros_con_compra.add(rubro);
-                    } else if (valorCompra > 0) {
-                        stats.compras_positivas++;
-                        stats.total_unidades_sobra += valorCompra;
-                    } else {
-                        stats.compras_neutras++;
-                    }
-                }
-            }
-        });
-        
-        stats.valor_promedio_compra = stats.compras_negativas > 0 ? 
-            (stats.total_unidades_comprar / stats.compras_negativas) : 0;
-        
-        stats.rubros_unicos_con_compra = stats.rubros_con_compra.size;
-        stats.porcentaje_necesita_compra = stats.filas_visibles > 0 ? 
-            ((stats.compras_negativas / stats.filas_visibles) * 100) : 0;
-        
-        return stats;
-    }
-    
-    /**
-     * Mostrar estadísticas detalladas en consola
-     */
-    static mostrarEstadisticas(solapa) {
-        const stats = TotalUnidadesComprar.obtenerEstadisticas(solapa);
-        
-        console.group(`📊 ESTADÍSTICAS DE COMPRA - ${solapa.toUpperCase()}`);
-        console.log(`🛒 Total unidades a comprar: ${FormatoUtils.formatearNumero(stats.total_unidades_comprar)}`);
-        console.log(`📈 Productos que necesitan compra: ${stats.compras_negativas} de ${stats.filas_visibles} (${stats.porcentaje_necesita_compra.toFixed(1)}%)`);
-        console.log(`📦 Productos con sobra: ${stats.compras_positivas}`);
-        console.log(`⚖️ Productos equilibrados: ${stats.compras_neutras}`);
-        console.log(`🏷️ Rubros únicos con necesidad de compra: ${stats.rubros_unicos_con_compra}`);
-        console.log(`📊 Promedio unidades por producto: ${FormatoUtils.formatearNumero(stats.valor_promedio_compra)}`);
-        console.groupEnd();
-        
-        return stats;
-    }
-}
-
-// Extender TablaRenderer con funcionalidades de totales
-TablaRenderer.calcularTotalCompras = function(solapa) {
-    return TotalUnidadesComprar.calcularTotal(solapa);
-};
-
-TablaRenderer.actualizarTotalCompras = function(solapa) {
-    return TotalUnidadesComprar.actualizarTotal(solapa);
-};
-
-TablaRenderer.inicializarTotales = function() {
-    return TotalUnidadesComprar.inicializarTotales();
-};
-
-TablaRenderer.configurarObservers = function() {
-    return TotalUnidadesComprar.configurarObservers();
-};
-
-// Sobrescribir el método de aplicar filtro para actualizar totales
-const originalAplicarFiltro = TablaRenderer.aplicarFiltroVisual;
-TablaRenderer.aplicarFiltroVisual = function(solapa, termino = '') {
-    const resultado = originalAplicarFiltro.call(this, solapa, termino);
-    
-    // Actualizar totales después de aplicar filtro (solo para compras)
-    if (solapa === 'verano' || solapa === 'invierno') {
-        setTimeout(() => {
-            TotalUnidadesComprar.actualizarTotal(solapa);
-        }, 50);
-    }
-    
-    return resultado;
-};
-
-// Sobrescribir renderización para inicializar totales
-const originalRenderVerano = TablaRenderer.renderizarTablaVerano;
-TablaRenderer.renderizarTablaVerano = function(datos, etiquetas = null) {
-    const resultado = originalRenderVerano.call(this, datos, etiquetas);
-    
-    // Actualizar total después de renderizar
-    setTimeout(() => {
-        TotalUnidadesComprar.actualizarTotal('verano');
-    }, 100);
-    
-    return resultado;
-};
-
-const originalRenderInvierno = TablaRenderer.renderizarTablaInvierno;
-TablaRenderer.renderizarTablaInvierno = function(datos, etiquetas = null) {
-    const resultado = originalRenderInvierno.call(this, datos, etiquetas);
-    
-    // Actualizar total después de renderizar
-    setTimeout(() => {
-        TotalUnidadesComprar.actualizarTotal('invierno');
-    }, 100);
-    
-    return resultado;
-};
-
-// Inicializar cuando el DOM esté listo
-document.addEventListener('DOMContentLoaded', function() {
-    // Configurar observers después de un breve delay
-    setTimeout(() => {
-        TotalUnidadesComprar.configurarObservers();
-    }, 1000);
-    
-    // Funciones globales para debugging
-    window.mostrarEstadisticasCompra = (solapa) => TotalUnidadesComprar.mostrarEstadisticas(solapa);
-    window.calcularTotalCompras = (solapa) => TotalUnidadesComprar.calcularTotal(solapa);
-    
-    console.log('✅ Total de unidades a comprar configurado');
-    console.log('💡 Funciones disponibles:');
-    console.log('  📊 mostrarEstadisticasCompra("verano") - Ver estadísticas detalladas');
-    console.log('  🧮 calcularTotalCompras("verano") - Calcular total manual');
 });

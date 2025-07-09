@@ -351,27 +351,10 @@
                                     <div class="col-md-2">
                                         <span class="badge bg-info fs-6 contador-animado" id="count-verano">0 registros</span>
                                     </div>
-                                    <div class="col-md-3">
-                                        <!-- NUEVO: Total de unidades a comprar -->
-                                        <div class="card bg-warning-subtle border-warning">
-                                            <div class="card-body p-2 text-center">
-                                                <h6 class="card-title mb-1 text-warning-emphasis">
-                                                    <i class="fas fa-shopping-cart me-1"></i>
-                                                    Total a Comprar
-                                                </h6>
-                                                <div class="text-warning-emphasis" id="total-comprar-verano">
-                                                    <strong>0</strong> unidades
-                                                    <small class="text-muted d-block">Calculando...</small>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
+
                                     <div class="col-md-3 text-end export-buttons">
                                         <button class="btn btn-success btn-sm" onclick="exportarExcel('verano')">
                                             <i class="fas fa-file-excel me-1"></i> Excel
-                                        </button>
-                                        <button class="btn btn-info btn-sm" onclick="mostrarEstadisticasCompra('verano')" title="Ver estadísticas detalladas">
-                                            <i class="fas fa-chart-bar"></i>
                                         </button>
                                     </div>
                                 </div>
@@ -395,27 +378,9 @@
                                     <div class="col-md-2">
                                         <span class="badge bg-info fs-6 contador-animado" id="count-invierno">0 registros</span>
                                     </div>
-                                    <div class="col-md-3">
-                                        <!-- NUEVO: Total de unidades a comprar -->
-                                        <div class="card bg-primary-subtle border-primary">
-                                            <div class="card-body p-2 text-center">
-                                                <h6 class="card-title mb-1 text-primary-emphasis">
-                                                    <i class="fas fa-shopping-cart me-1"></i>
-                                                    Total a Comprar
-                                                </h6>
-                                                <div class="text-primary-emphasis" id="total-comprar-invierno">
-                                                    <strong>0</strong> unidades
-                                                    <small class="text-muted d-block">Calculando...</small>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
                                     <div class="col-md-3 text-end export-buttons">
                                         <button class="btn btn-success btn-sm" onclick="exportarExcel('invierno')">
                                             <i class="fas fa-file-excel me-1"></i> Excel
-                                        </button>
-                                        <button class="btn btn-info btn-sm" onclick="mostrarEstadisticasCompra('invierno')" title="Ver estadísticas detalladas">
-                                            <i class="fas fa-chart-bar"></i>
                                         </button>
                                     </div>
                                 </div>
@@ -756,54 +721,6 @@
                 }
             });
         });
-
-        // Debug para verificar elementos DOM
-        function verificarElementosTablas() {
-            const elementos = [
-                'tabla-verano', 'tbody-verano',
-                'tabla-invierno', 'tbody-invierno', 
-                'tabla-stock', 'tbody-stock'
-            ];
-            
-            console.group('🔍 VERIFICACIÓN ELEMENTOS DOM');
-            elementos.forEach(id => {
-                const elemento = document.getElementById(id);
-                if (elemento) {
-                    console.log(`✅ ${id}: ENCONTRADO`);
-                } else {
-                    console.error(`❌ ${id}: NO ENCONTRADO`);
-                }
-            });
-            console.groupEnd();
-            
-            // Verificar estructura de tablas
-            ['verano', 'invierno', 'stock'].forEach(solapa => {
-                const tabla = document.getElementById(`tabla-${solapa}`);
-                if (tabla) {
-                    const thead = tabla.querySelector('thead');
-                    const tbody = tabla.querySelector('tbody');
-                    console.log(`📊 Tabla ${solapa}:`, {
-                        tabla: !!tabla,
-                        thead: !!thead,
-                        tbody: !!tbody,
-                        headers: thead ? thead.querySelectorAll('th').length : 0,
-                        filas: tbody ? tbody.querySelectorAll('tr').length : 0
-                    });
-                }
-            });
-        }
-
-        // Ejecutar verificación después de cargar el DOM
-        document.addEventListener('DOMContentLoaded', function() {
-            // Verificar inmediatamente
-            verificarElementosTablas();
-            
-            // Función global para debugging
-            window.verificarElementosTablas = verificarElementosTablas;
-            
-            console.log('💡 Usa verificarElementosTablas() para ver estado de elementos DOM');
-        });
-
     </script>
 </body>
 </html>
