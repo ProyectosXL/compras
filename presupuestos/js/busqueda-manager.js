@@ -54,6 +54,12 @@ class BusquedaManager {
         if (terminoLimpio.length === 0) {
             TablaRenderer.aplicarFiltroVisual(solapa, '');
             BusquedaManager.actualizarContadorBusqueda(solapa, null);
+            
+            // AGREGAR ESTAS LÍNEAS - Restaurar totales originales
+            if (['verano', 'invierno'].includes(solapa)) {
+                const datosOriginales = window.presupuestoApp?.datos?.[solapa] || [];
+                TotalesCompra.aplicarFiltros(solapa, datosOriginales);
+            }
             return;
         }
 
@@ -61,6 +67,12 @@ class BusquedaManager {
             // Usar filtro visual para búsqueda instantánea
             const coincidencias = TablaRenderer.aplicarFiltroVisual(solapa, terminoLimpio);
             BusquedaManager.actualizarContadorBusqueda(solapa, coincidencias);
+            
+            // AGREGAR ESTAS LÍNEAS - Obtener datos filtrados y actualizar totales
+            if (['verano', 'invierno'].includes(solapa)) {
+                const datosFiltrados = BusquedaManager.obtenerDatosFiltrados(solapa, terminoLimpio);
+                TotalesCompra.aplicarFiltros(solapa, datosFiltrados);
+            }
             
             // Guardar término si es útil
             if (coincidencias > 0) {
@@ -70,6 +82,37 @@ class BusquedaManager {
     }
 
     /**
+     * NUEVA: Obtener datos filtrados por término de búsqueda
+     */
+    static obtenerDatosFiltrados(solapa, termino) {
+        try {
+            const datos = window.presupuestoApp?.datos?.[solapa] || [];
+            const terminoLimpio = termino.toLowerCase().trim();
+            
+            if (!terminoLimpio) return datos;
+            
+            return datos.filter(item => {
+                return BusquedaManager.buscarEnCampos(item, terminoLimpio);
+            });
+        } catch (error) {
+            console.error('Error obteniendo datos filtrados:', error);
+            return [];
+        }
+    }
+
+    /**
+     * NUEVA: Buscar término en campos del item
+     */
+    static buscarEnCampos(item, termino) {
+        const campos = ['RUBRO', 'CATEGORIA', 'CATEGORIA_PADRE', 'DESCRIPCION'];
+        
+        return campos.some(campo => {
+            const valor = item[campo];
+            return valor && valor.toString().toLowerCase().includes(termino);
+        });
+    }
+
+        /**
      * Buscar en una solapa específica (para búsquedas complejas)
      */
     static async buscarEnSolapa(solapa, termino) {
@@ -395,6 +438,12 @@ class BusquedaManager {
         try {
             if (!rubro) {
                 BusquedaManager.restaurarDatosOriginales(solapa);
+                
+                // AGREGAR ESTAS LÍNEAS - Restaurar totales originales
+                if (['verano', 'invierno'].includes(solapa)) {
+                    const datosOriginales = window.presupuestoApp?.datos?.[solapa] || [];
+                    TotalesCompra.aplicarFiltros(solapa, datosOriginales);
+                }
                 return;
             }
             
@@ -406,6 +455,11 @@ class BusquedaManager {
             if (response.success) {
                 BusquedaManager.renderizarResultados(solapa, response.data);
                 UIUtils.actualizarContador(`count-${solapa}`, response.data.length);
+                
+                // AGREGAR ESTAS LÍNEAS - Actualizar totales con datos filtrados
+                if (['verano', 'invierno'].includes(solapa)) {
+                    TotalesCompra.aplicarFiltros(solapa, response.data);
+                }
                 
                 UIUtils.mostrarAlerta(
                     `Filtrado por rubro: ${rubro} (${response.data.length} registros)`,

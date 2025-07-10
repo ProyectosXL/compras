@@ -437,6 +437,16 @@ class IndiceEditor {
             IndiceEditor.actualizarFilaTablaSoloFrontendCorregido();
             IndiceEditor.registrarCambio(nuevoIndice);
             
+            // AGREGAR ESTAS LÍNEAS - Notificar cambio a totales
+            if (['verano', 'invierno'].includes(IndiceEditor.indiceEditando.solapa)) {
+                TotalesCompra.onIndiceActualizado(
+                    IndiceEditor.indiceEditando.solapa,
+                    IndiceEditor.indiceEditando.rubro,
+                    IndiceEditor.indiceEditando.categoria,
+                    nuevoIndice
+                );
+            }
+            
             UIUtils.mostrarAlerta('Índice actualizado correctamente', 'success');
             IndiceEditor.modalInstancia.hide();
             

@@ -202,6 +202,10 @@ class PresupuestoApp {
                     this.datos.verano = verano.data;
                     this.renderizarSolapaSegura('verano', verano.data, verano.etiquetas);
                     UIUtils.actualizarContador('count-verano', verano.data.length);
+                    
+                    // AGREGAR ESTA LÍNEA - Actualizar totales de compra proyectada
+                    TotalesCompra.actualizarDatos('verano', verano.data);
+                    
                     console.log('✓ Datos de verano cargados');
                 } else {
                     throw new Error(verano.message);
@@ -218,6 +222,10 @@ class PresupuestoApp {
                     this.datos.invierno = invierno.data;
                     this.renderizarSolapaSegura('invierno', invierno.data, invierno.etiquetas);
                     UIUtils.actualizarContador('count-invierno', invierno.data.length);
+                    
+                    // AGREGAR ESTA LÍNEA - Actualizar totales de compra proyectada
+                    TotalesCompra.actualizarDatos('invierno', invierno.data);
+                    
                     console.log('✓ Datos de invierno cargados');
                 } else {
                     throw new Error(invierno.message);

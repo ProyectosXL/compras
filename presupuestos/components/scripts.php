@@ -9,6 +9,7 @@
 <script src="js/busqueda-manager.js"></script>
 <script src="js/indice-editor.js"></script>
 <script src="js/compras-manager.js"></script>
+<script src="js/totales-compra.js"></script>
 <script src="js/main.js"></script>
 
 <script>

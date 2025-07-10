@@ -338,8 +338,8 @@ class PresupuestoCalculos {
             $proximoVeranoFinal = ($anoVerano + 1) > 99 ? 0 : ($anoVerano + 1);
             
             return [
-                'verano' => 'VENTA PROY. VER ' . str_pad($proximoVeranoInicial, 2, '0', STR_PAD_LEFT) . '-' . str_pad($proximoVeranoFinal, 2, '0', STR_PAD_LEFT),
-                'invierno' => 'VENTA PROY. INV ' . str_pad($anoInvierno, 2, '0', STR_PAD_LEFT)
+                'verano' => 'PROY. VER ' . str_pad($proximoVeranoInicial, 2, '0', STR_PAD_LEFT) . '-' . str_pad($proximoVeranoFinal, 2, '0', STR_PAD_LEFT),
+                'invierno' => 'PROY. INV ' . str_pad($anoInvierno, 2, '0', STR_PAD_LEFT)
             ];
         } else {
             // Si estamos en invierno, proyectamos para el próximo invierno y el verano siguiente
@@ -348,8 +348,8 @@ class PresupuestoCalculos {
             $anoVeranoFinal = ($anoInvierno + 1) > 99 ? 0 : ($anoInvierno + 1);
             
             return [
-                'verano' => 'VENTA PROY. VER ' . str_pad($anoVeranoInicial, 2, '0', STR_PAD_LEFT) . '-' . str_pad($anoVeranoFinal, 2, '0', STR_PAD_LEFT),
-                'invierno' => 'VENTA PROY. INV ' . str_pad($anoInvierno, 2, '0', STR_PAD_LEFT)
+                'verano' => 'PROY. VER ' . str_pad($anoVeranoInicial, 2, '0', STR_PAD_LEFT) . '-' . str_pad($anoVeranoFinal, 2, '0', STR_PAD_LEFT),
+                'invierno' => 'PROY. INV ' . str_pad($anoInvierno, 2, '0', STR_PAD_LEFT)
             ];
         }
     }
