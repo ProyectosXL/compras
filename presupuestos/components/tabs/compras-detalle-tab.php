@@ -10,7 +10,7 @@
                     </span>
                     <input type="text" class="form-control search-input-fast" id="search-compras-detalle" 
                         placeholder="Buscar por OC, artículo, proveedor..." 
-                        onkeyup="buscarDatos('compras-detalle')">
+                        onkeyup="buscarComprasDetalle()">
                 </div>
             </div>
             <div class="col-md-2">
@@ -27,11 +27,11 @@
                 </select>
             </div>
             <div class="col-md-2 text-end export-buttons">
-                <button class="btn btn-success btn-sm" onclick="exportarExcel('compras-detalle')">
+                <button class="btn btn-success btn-sm" onclick="ComprasManager.exportarExcel()">
                     <i class="fas fa-file-excel me-1"></i> Excel
                 </button>
-                <button class="btn btn-info btn-sm" onclick="mostrarResumenCompras()">
-                    <i class="fas fa-chart-pie me-1"></i> Resumen
+                <button class="btn btn-primary btn-sm" onclick="ComprasManager.cargarDatos()">
+                    <i class="fas fa-sync-alt me-1"></i> Cargar
                 </button>
             </div>
         </div>
@@ -56,7 +56,7 @@
                 </select>
             </div>
             <div class="col-md-3">
-                <button class="btn btn-outline-secondary btn-sm" onclick="limpiarFiltros()">
+                <button class="btn btn-outline-secondary btn-sm" onclick="ComprasManager.limpiarFiltros()">
                     <i class="fas fa-eraser me-1"></i> Limpiar Filtros
                 </button>
             </div>
@@ -67,10 +67,10 @@
         <table class="table table-striped table-hover mb-0" id="tabla-compras-detalle">
             <thead class="table-dark sticky-header">
                 <tr>
-                    <th>Fecha Emisión</th>
-                    <th>N° Orden</th>
+                    <th class="text-center">Fecha<br>Emisión</th>
+                    <th class="text-center">N° Orden</th>
                     <th>Proveedor</th>
-                    <th>Cod. Artículo</th>
+                    <th class="text-center">Cod.<br>Artículo</th>
                     <th>Descripción</th>
                     <th>Rubro</th>
                     <th>Categoría</th>
@@ -85,7 +85,7 @@
                 <tr>
                     <td colspan="12" class="text-center text-muted py-4">
                         <i class="fas fa-info-circle"></i>
-                        Cargue los datos para ver el detalle de compras pendientes
+                        Presione "Cargar" para obtener el detalle de compras pendientes
                     </td>
                 </tr>
             </tbody>
@@ -96,19 +96,19 @@
     <div class="mt-3 p-3 bg-light rounded d-none" id="resumen-compras-detalle">
         <div class="row">
             <div class="col-md-3 text-center">
-                <h6>Total Verano</h6>
+                <h6 class="text-warning">Total Verano</h6>
                 <span class="h4 text-warning" id="total-verano">0</span>
             </div>
             <div class="col-md-3 text-center">
-                <h6>Total Invierno</h6>
+                <h6 class="text-info">Total Invierno</h6>
                 <span class="h4 text-info" id="total-invierno">0</span>
             </div>
             <div class="col-md-3 text-center">
-                <h6>Total Atemporal</h6>
+                <h6 class="text-success">Total Atemporal</h6>
                 <span class="h4 text-success" id="total-atemporal">0</span>
             </div>
             <div class="col-md-3 text-center">
-                <h6>Total General</h6>
+                <h6 class="text-primary">Total General</h6>
                 <span class="h4 text-primary" id="total-general">0</span>
             </div>
         </div>

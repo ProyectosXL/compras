@@ -23,13 +23,13 @@
                         <i class="fas fa-boxes me-2"></i>Stock Proyectado
                     </button>
                 </li>
-                <!-- Placeholder para nueva solapa -->
-                <!-- <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="nueva-tab" data-bs-toggle="tab" 
-                            data-bs-target="#nueva" type="button" role="tab">
-                        <i class="fas fa-plus me-2"></i>Nueva Solapa
+                <!-- Nueva solapa de compras pendientes -->
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="compras-detalle-tab" data-bs-toggle="tab" 
+                            data-bs-target="#compras-detalle" type="button" role="tab">
+                        <i class="fas fa-shopping-cart me-2"></i>Compras Pendientes
                     </button>
-                </li> -->
+                </li>
             </ul>
 
             <!-- Tab Content -->
@@ -43,8 +43,8 @@
                 <!-- Stock Proyectado -->
                 <?php include 'components/tabs/stock-tab.php'; ?>
                 
-                <!-- Placeholder para nueva solapa -->
-                <!-- <?php // include 'components/tabs/nueva-tab.php'; ?> -->
+                <!-- Compras Pendientes -->
+                <?php include 'components/tabs/compras-detalle-tab.php'; ?>
             </div>
         </div>
     </div>
