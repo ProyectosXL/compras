@@ -2,7 +2,8 @@
 <!-- Solapa: Detalle de Compras Pendientes -->
 <div class="tab-pane fade" id="compras-detalle" role="tabpanel">
     <div class="search-container">
-        <div class="row align-items-center">
+        <!-- Primera fila: Búsqueda y controles principales -->
+        <div class="row align-items-center mb-2">
             <div class="col-md-3">
                 <div class="input-group">
                     <span class="input-group-text">
@@ -36,8 +37,8 @@
             </div>
         </div>
         
-        <!-- Fila adicional con filtros de fecha -->
-        <div class="row mt-2">
+        <!-- Segunda fila: Filtros adicionales -->
+        <div class="row">
             <div class="col-md-3">
                 <label class="form-label-sm">Fecha desde:</label>
                 <input type="date" class="form-control form-control-sm" id="fecha-desde" onchange="filtrarPorFecha()">
@@ -63,7 +64,30 @@
         </div>
     </div>
     
-    <div class="table-responsive">
+    <!-- Resumen de totales en la parte superior (siempre visible) -->
+    <div class="bg-light p-2 border-bottom d-none" id="resumen-compras-superior">
+        <div class="row text-center">
+            <div class="col-3">
+                <small class="text-muted d-block">Total Verano</small>
+                <span class="badge bg-warning text-dark fs-6" id="badge-total-verano">0</span>
+            </div>
+            <div class="col-3">
+                <small class="text-muted d-block">Total Invierno</small>
+                <span class="badge bg-info fs-6" id="badge-total-invierno">0</span>
+            </div>
+            <div class="col-3">
+                <small class="text-muted d-block">Total Atemporal</small>
+                <span class="badge bg-success fs-6" id="badge-total-atemporal">0</span>
+            </div>
+            <div class="col-3">
+                <small class="text-muted d-block">Total General</small>
+                <span class="badge bg-primary fs-6" id="badge-total-general">0</span>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Tabla con altura optimizada -->
+    <div class="table-responsive" style="max-height: calc(100vh - 280px); overflow-y: auto;">
         <table class="table table-striped table-hover mb-0" id="tabla-compras-detalle">
             <thead class="table-dark sticky-header">
                 <tr>
@@ -90,27 +114,5 @@
                 </tr>
             </tbody>
         </table>
-    </div>
-    
-    <!-- Resumen en la parte inferior -->
-    <div class="mt-3 p-3 bg-light rounded d-none" id="resumen-compras-detalle">
-        <div class="row">
-            <div class="col-md-3 text-center">
-                <h6 class="text-warning">Total Verano</h6>
-                <span class="h4 text-warning" id="total-verano">0</span>
-            </div>
-            <div class="col-md-3 text-center">
-                <h6 class="text-info">Total Invierno</h6>
-                <span class="h4 text-info" id="total-invierno">0</span>
-            </div>
-            <div class="col-md-3 text-center">
-                <h6 class="text-success">Total Atemporal</h6>
-                <span class="h4 text-success" id="total-atemporal">0</span>
-            </div>
-            <div class="col-md-3 text-center">
-                <h6 class="text-primary">Total General</h6>
-                <span class="h4 text-primary" id="total-general">0</span>
-            </div>
-        </div>
     </div>
 </div>

@@ -158,24 +158,77 @@ class APIClient {
         }
     }
 
-    /**
-     * Obtener información del sistema (para debugging)
+     /**
+     * Exportar a Excel (abre en nueva ventana) - Versión simplificada
      */
-    static async obtenerInfoSistema() {
+    static async exportarExcel(solapa) {
         try {
-            const response = await APIClient.obtenerDatosBase();
-            return {
-                conectado: response.success,
-                temporada: response.info_temporada?.temporada_actual || null,
-                total_registros: response.total_registros || 0,
-                timestamp: new Date().toISOString()
-            };
+            // Para compras detalle, usar la exportación local
+            if (solapa === 'compras-detalle') {
+                if (typeof ComprasManager !== 'undefined' && ComprasManager.exportarExcel) {
+                    return ComprasManager.exportarExcel();
+                } else {
+                    throw new Error('ComprasManager no disponible');
+                }
+            }
+            
+            // Para otras solapas, usar la exportación del servidor
+            const url = `${APIClient.baseUrl}?accion=exportar&solapa=${solapa}`;
+            window.open(url, '_blank');
+            
         } catch (error) {
-            return {
-                conectado: false,
-                error: error.message,
-                timestamp: new Date().toISOString()
-            };
+            console.error('Error en exportación:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Exportar datos a CSV (función auxiliar)
+     */
+    static exportarCSV(datos, nombreArchivo, headers = null) {
+        try {
+            if (!datos || datos.length === 0) {
+                throw new Error('No hay datos para exportar');
+            }
+
+            // Usar headers proporcionados o extraer del primer objeto
+            const columnHeaders = headers || Object.keys(datos[0]);
+            
+            // Crear contenido CSV
+            const csvContent = [
+                columnHeaders.join(','),
+                ...datos.map(row => 
+                    columnHeaders.map(header => {
+                        const value = row[header] || '';
+                        // Escapar comillas y envolver en comillas si contiene comas
+                        if (typeof value === 'string' && (value.includes(',') || value.includes('"'))) {
+                            return '"' + value.replace(/"/g, '""') + '"';
+                        }
+                        return value;
+                    }).join(',')
+                )
+            ].join('\n');
+
+            // Crear y descargar archivo
+            const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            
+            link.setAttribute('href', url);
+            link.setAttribute('download', nombreArchivo || 'exportacion.csv');
+            link.style.visibility = 'hidden';
+            
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            // Limpiar URL
+            URL.revokeObjectURL(url);
+            
+            return true;
+        } catch (error) {
+            console.error('Error exportando CSV:', error);
+            throw error;
         }
     }
 

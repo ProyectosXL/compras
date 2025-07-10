@@ -228,4 +228,5 @@
             padding: 4px 2px !important;
         }
     }
+
 </style>

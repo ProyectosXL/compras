@@ -1,487 +1,627 @@
 
-/**
- * Gestor de Compras Pendientes
- * Maneja la funcionalidad específica de la solapa de compras pendientes
- */
+// Gestor de Compras Pendientes
+// Archivo: presupuestos/js/compras-manager.js
+
 class ComprasManager {
-    constructor() {
-        this.datos = [];
-        this.datosFiltrados = [];
-        this.filtros = {
-            proveedor: '',
-            rubro: '',
-            fecha_desde: '',
-            fecha_hasta: '',
-            temporada: ''
-        };
-        this.timeoutBusqueda = null;
-        this.inicializar();
-    }
+    static datos = [];
+    static datosFiltrados = [];
+    static filtrosActivos = {};
+    static timeoutBusqueda = null;
 
-    inicializar() {
-        this.configurarEventos();
-        this.cargarProveedores();
-        this.cargarRubros();
-        this.configurarFechasPorDefecto();
-    }
-
-    configurarEventos() {
-        // Evento de búsqueda
-        const searchInput = document.getElementById('search-compras-detalle');
-        if (searchInput) {
-            searchInput.addEventListener('input', (e) => {
-                this.busquedaInstantanea(e.target.value);
-            });
-        }
-
-        // Eventos de filtros
-        const filtroProveedor = document.getElementById('filtro-proveedor');
-        if (filtroProveedor) {
-            filtroProveedor.addEventListener('change', (e) => {
-                this.filtros.proveedor = e.target.value;
-                this.aplicarFiltros();
-            });
-        }
-
-        const filtroRubro = document.getElementById('filtro-rubro');
-        if (filtroRubro) {
-            filtroRubro.addEventListener('change', (e) => {
-                this.filtros.rubro = e.target.value;
-                this.aplicarFiltros();
-            });
-        }
-
-        const filtroTemporada = document.getElementById('filtro-temporada');
-        if (filtroTemporada) {
-            filtroTemporada.addEventListener('change', (e) => {
-                this.filtros.temporada = e.target.value;
-                this.aplicarFiltros();
-            });
-        }
-
-        // Eventos de fechas
-        const fechaDesde = document.getElementById('fecha-desde');
-        if (fechaDesde) {
-            fechaDesde.addEventListener('change', (e) => {
-                this.filtros.fecha_desde = e.target.value;
-                this.aplicarFiltros();
-            });
-        }
-
-        const fechaHasta = document.getElementById('fecha-hasta');
-        if (fechaHasta) {
-            fechaHasta.addEventListener('change', (e) => {
-                this.filtros.fecha_hasta = e.target.value;
-                this.aplicarFiltros();
-            });
-        }
-    }
-
-    configurarFechasPorDefecto() {
-        const fechaDesde = document.getElementById('fecha-desde');
-        const fechaHasta = document.getElementById('fecha-hasta');
-        
-        if (fechaDesde && fechaHasta) {
-            const hoy = new Date();
-            const hace30Dias = new Date();
-            hace30Dias.setDate(hoy.getDate() - 30);
-            
-            fechaDesde.value = hace30Dias.toISOString().split('T')[0];
-            fechaHasta.value = hoy.toISOString().split('T')[0];
-            
-            this.filtros.fecha_desde = fechaDesde.value;
-            this.filtros.fecha_hasta = fechaHasta.value;
-        }
-    }
-
-    async cargarDatos() {
+    /**
+     * Cargar datos de compras pendientes - CORREGIDA
+     */
+    static async cargarDatos() {
         try {
             UIUtils.mostrarLoading(true);
             
-            const response = await APIClient.get('compras-detalle', this.filtros);
+            // Llamar a la API para obtener compras pendientes
+            const response = await APIClient.llamarAPI('compras-detalle');
             
-            if (response.success) {
-                this.datos = response.data;
-                this.datosFiltrados = [...this.datos];
-                this.renderizarTabla();
-                this.actualizarContadores();
-                this.mostrarResumen();
-                UIUtils.mostrarAlerta(`${response.total_registros} compras cargadas`, 'success');
+            if (response.success && response.data) {
+                ComprasManager.datos = Array.isArray(response.data) ? response.data : [];
+                ComprasManager.datosFiltrados = [...ComprasManager.datos];
+                
+                console.log(`Datos cargados: ${ComprasManager.datos.length} registros`);
+                
+                // Renderizar tabla y actualizar UI
+                ComprasManager.renderizarTabla();
+                ComprasManager.actualizarContadores();
+                ComprasManager.mostrarResumen();
+                
+                // Cargar filtros DESPUÉS de tener los datos
+                await ComprasManager.cargarFiltros();
+                
+                UIUtils.mostrarAlerta(
+                    `${ComprasManager.datos.length} registros de compras cargados correctamente`,
+                    'success'
+                );
             } else {
-                throw new Error(response.message);
+                throw new Error(response.message || 'No se recibieron datos válidos');
             }
         } catch (error) {
             console.error('Error cargando compras:', error);
-            UIUtils.mostrarAlerta('Error al cargar compras: ' + error.message, 'danger');
+            
+            // Inicializar arrays vacíos para evitar errores
+            ComprasManager.datos = [];
+            ComprasManager.datosFiltrados = [];
+            
+            UIUtils.mostrarAlerta(
+                'Error al cargar datos de compras: ' + error.message,
+                'error'
+            );
         } finally {
             UIUtils.mostrarLoading(false);
         }
     }
 
-    async cargarProveedores() {
-        try {
-            const response = await APIClient.get('proveedores-compras');
-            
-            if (response.success) {
-                const select = document.getElementById('filtro-proveedor');
-                if (select) {
-                    // Limpiar opciones existentes (mantener "Todos")
-                    select.innerHTML = '<option value="">Todos los proveedores</option>';
-                    
-                    response.data.forEach(proveedor => {
-                        const option = document.createElement('option');
-                        option.value = proveedor.NOM_PROVEE;
-                        option.textContent = proveedor.NOM_PROVEE;
-                        select.appendChild(option);
-                    });
-                }
-            }
-        } catch (error) {
-            console.error('Error cargando proveedores:', error);
-        }
-    }
+    /**
+     * Renderizar tabla de compras
+     */
+    static renderizarTabla() {
+        const tbody = document.getElementById('tbody-compras-detalle');
+        if (!tbody) return;
 
-    async cargarRubros() {
-        try {
-            const response = await APIClient.get('rubros-compras');
-            
-            if (response.success) {
-                const select = document.getElementById('filtro-rubro');
-                if (select) {
-                    // Limpiar opciones existentes (mantener "Todos")
-                    select.innerHTML = '<option value="">Todos los rubros</option>';
-                    
-                    response.data.forEach(rubro => {
-                        const option = document.createElement('option');
-                        option.value = rubro.RUBRO;
-                        option.textContent = rubro.RUBRO;
-                        select.appendChild(option);
-                    });
-                }
-            }
-        } catch (error) {
-            console.error('Error cargando rubros:', error);
-        }
-    }
-
-    busquedaInstantanea(termino) {
-        // Cancelar búsqueda anterior
-        if (this.timeoutBusqueda) {
-            clearTimeout(this.timeoutBusqueda);
-        }
-
-        // Configurar nueva búsqueda con delay
-        this.timeoutBusqueda = setTimeout(() => {
-            this.realizarBusqueda(termino);
-        }, 300);
-    }
-
-    realizarBusqueda(termino) {
-        if (!termino || termino.length < 2) {
-            this.datosFiltrados = [...this.datos];
-            this.renderizarTabla();
-            this.actualizarContadores();
+        if (ComprasManager.datosFiltrados.length === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="12" class="text-center text-muted py-4">
+                        <i class="fas fa-inbox"></i><br>
+                        No hay registros para mostrar
+                    </td>
+                </tr>
+            `;
             return;
         }
 
-        const terminoLower = termino.toLowerCase();
-        
-        this.datosFiltrados = this.datos.filter(item => {
-            return (
-                (item.N_ORDEN_CO && item.N_ORDEN_CO.toString().toLowerCase().includes(terminoLower)) ||
-                (item.NOM_PROVEE && item.NOM_PROVEE.toLowerCase().includes(terminoLower)) ||
-                (item.COD_ARTICU && item.COD_ARTICU.toLowerCase().includes(terminoLower)) ||
-                (item.DESCRIPCIO && item.DESCRIPCIO.toLowerCase().includes(terminoLower)) ||
-                (item.RUBRO && item.RUBRO.toLowerCase().includes(terminoLower)) ||
-                (item.CATEGORIA_PADRE && item.CATEGORIA_PADRE.toLowerCase().includes(terminoLower))
-            );
-        });
+        const html = ComprasManager.datosFiltrados.map(item => {
+            const total = (item.VERANO || 0) + (item.INVIERNO || 0) + (item.ATEMPORAL || 0);
+            
+            return `
+                <tr class="fila-datos">
+                    <td class="text-center">${item.FEC_EMISIO || ''}</td>
+                    <td class="text-center">
+                        <strong>${item.N_ORDEN_CO || ''}</strong>
+                    </td>
+                    <td>${item.NOM_PROVEE || ''}</td>
+                    <td class="text-center">
+                        <code>${item.COD_ARTICU || ''}</code>
+                    </td>
+                    <td>${item.DESCRIPCIO || ''}</td>
+                    <td>
+                        <span class="badge bg-secondary">${item.RUBRO || ''}</span>
+                    </td>
+                    <td>${item.CATEGORIA_PADRE || ''}</td>
+                    <td class="text-end ${FormatoUtils.obtenerClaseValor(item.VERANO)}">
+                        ${FormatoUtils.formatearNumero(item.VERANO || 0)}
+                    </td>
+                    <td class="text-end ${FormatoUtils.obtenerClaseValor(item.INVIERNO)}">
+                        ${FormatoUtils.formatearNumero(item.INVIERNO || 0)}
+                    </td>
+                    <td class="text-end ${FormatoUtils.obtenerClaseValor(item.ATEMPORAL)}">
+                        ${FormatoUtils.formatearNumero(item.ATEMPORAL || 0)}
+                    </td>
+                    <td class="text-end ${FormatoUtils.obtenerClaseValor(total)}">
+                        <strong>${FormatoUtils.formatearNumero(total)}</strong>
+                    </td>
+                    <td class="text-center">
+                        <button class="btn btn-sm btn-outline-info" 
+                                onclick="ComprasManager.verDetalle('${item.N_ORDEN_CO}')"
+                                title="Ver detalle">
+                            <i class="fas fa-eye"></i>
+                        </button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
 
-        this.renderizarTabla();
-        this.actualizarContadores();
+        tbody.innerHTML = html;
     }
 
-    aplicarFiltros() {
-        let datosFiltrados = [...this.datos];
+    /**
+     * Actualizar contadores
+     */
+    static actualizarContadores() {
+        const contador = document.getElementById('count-compras-detalle');
+        if (contador) {
+            contador.textContent = `${FormatoUtils.formatearNumero(ComprasManager.datosFiltrados.length)} registros`;
+            contador.classList.add('actualizado');
+            setTimeout(() => contador.classList.remove('actualizado'), 500);
+        }
+    }
+
+    /**
+     * Cargar filtros (proveedores y rubros) - CORREGIDA
+     */
+    static async cargarFiltros() {
+        try {
+            // Verificar que hay datos cargados
+            if (!ComprasManager.datos || ComprasManager.datos.length === 0) {
+                console.warn('No hay datos para generar filtros');
+                return;
+            }
+
+            // Cargar proveedores únicos
+            const proveedores = [...new Set(
+                ComprasManager.datos
+                    .map(item => item.NOM_PROVEE)
+                    .filter(p => p && p.trim() !== '')
+            )].sort();
+            
+            const selectProveedor = document.getElementById('filtro-proveedor');
+            if (selectProveedor) {
+                selectProveedor.innerHTML = '<option value="">Todos los proveedores</option>';
+                proveedores.forEach(proveedor => {
+                    const option = document.createElement('option');
+                    option.value = proveedor;
+                    option.textContent = proveedor;
+                    selectProveedor.appendChild(option);
+                });
+                console.log(`Cargados ${proveedores.length} proveedores`);
+            }
+
+            // Cargar rubros únicos
+            const rubros = [...new Set(
+                ComprasManager.datos
+                    .map(item => item.RUBRO)
+                    .filter(r => r && r.trim() !== '')
+            )].sort();
+            
+            const selectRubro = document.getElementById('filtro-rubro');
+            if (selectRubro) {
+                selectRubro.innerHTML = '<option value="">Todos los rubros</option>';
+                rubros.forEach(rubro => {
+                    const option = document.createElement('option');
+                    option.value = rubro;
+                    option.textContent = rubro;
+                    selectRubro.appendChild(option);
+                });
+                console.log(`Cargados ${rubros.length} rubros`);
+            }
+            
+        } catch (error) {
+            console.error('Error cargando filtros:', error);
+            UIUtils.mostrarAlerta('Error al cargar filtros de búsqueda', 'warning');
+        }
+    }
+
+    /**
+     * Mostrar resumen de totales (ahora en la parte superior)
+     */
+    static mostrarResumen() {
+        const totales = ComprasManager.datosFiltrados.reduce((acc, item) => {
+            acc.verano += item.VERANO || 0;
+            acc.invierno += item.INVIERNO || 0;
+            acc.atemporal += item.ATEMPORAL || 0;
+            return acc;
+        }, { verano: 0, invierno: 0, atemporal: 0 });
+
+        const totalGeneral = totales.verano + totales.invierno + totales.atemporal;
+
+        // Actualizar badges en la parte superior
+        const badgeVerano = document.getElementById('badge-total-verano');
+        const badgeInvierno = document.getElementById('badge-total-invierno');
+        const badgeAtemporal = document.getElementById('badge-total-atemporal');
+        const badgeGeneral = document.getElementById('badge-total-general');
+
+        if (badgeVerano) badgeVerano.textContent = FormatoUtils.formatearNumero(totales.verano);
+        if (badgeInvierno) badgeInvierno.textContent = FormatoUtils.formatearNumero(totales.invierno);
+        if (badgeAtemporal) badgeAtemporal.textContent = FormatoUtils.formatearNumero(totales.atemporal);
+        if (badgeGeneral) badgeGeneral.textContent = FormatoUtils.formatearNumero(totalGeneral);
+
+        // Mostrar el contenedor de resumen
+        const contenedorResumen = document.getElementById('resumen-compras-superior');
+        if (contenedorResumen) {
+            contenedorResumen.classList.remove('d-none');
+        }
+    }
+
+    /**
+     * Búsqueda instantánea
+     */
+    static buscarInstantanea() {
+        const input = document.getElementById('search-compras-detalle');
+        if (!input) return;
+
+        const termino = input.value.toLowerCase().trim();
+        
+        if (termino.length === 0) {
+            ComprasManager.datosFiltrados = [...ComprasManager.datos];
+        } else {
+            ComprasManager.datosFiltrados = ComprasManager.datos.filter(item => {
+                return (
+                    (item.N_ORDEN_CO && item.N_ORDEN_CO.toLowerCase().includes(termino)) ||
+                    (item.NOM_PROVEE && item.NOM_PROVEE.toLowerCase().includes(termino)) ||
+                    (item.COD_ARTICU && item.COD_ARTICU.toLowerCase().includes(termino)) ||
+                    (item.DESCRIPCIO && item.DESCRIPCIO.toLowerCase().includes(termino)) ||
+                    (item.RUBRO && item.RUBRO.toLowerCase().includes(termino)) ||
+                    (item.CATEGORIA_PADRE && item.CATEGORIA_PADRE.toLowerCase().includes(termino))
+                );
+            });
+        }
+
+        ComprasManager.aplicarFiltros();
+    }
+
+    /**
+     * Filtrar por proveedor
+     */
+    static filtrarPorProveedor() {
+        const select = document.getElementById('filtro-proveedor');
+        if (!select) return;
+
+        ComprasManager.filtrosActivos.proveedor = select.value;
+        ComprasManager.aplicarFiltros();
+    }
+
+    /**
+     * Filtrar por rubro
+     */
+    static filtrarPorRubro() {
+        const select = document.getElementById('filtro-rubro');
+        if (!select) return;
+
+        ComprasManager.filtrosActivos.rubro = select.value;
+        ComprasManager.aplicarFiltros();
+    }
+
+    /**
+     * Filtrar por fecha
+     */
+    static filtrarPorFecha() {
+        const fechaDesde = document.getElementById('fecha-desde').value;
+        const fechaHasta = document.getElementById('fecha-hasta').value;
+
+        ComprasManager.filtrosActivos.fechaDesde = fechaDesde;
+        ComprasManager.filtrosActivos.fechaHasta = fechaHasta;
+        ComprasManager.aplicarFiltros();
+    }
+
+    /**
+     * Filtrar por temporada
+     */
+    static filtrarPorTemporada() {
+        const select = document.getElementById('filtro-temporada');
+        if (!select) return;
+
+        ComprasManager.filtrosActivos.temporada = select.value;
+        ComprasManager.aplicarFiltros();
+    }
+
+    /**
+     * Aplicar todos los filtros
+     */
+    static aplicarFiltros() {
+        let datos = [...ComprasManager.datos];
+
+        // Aplicar filtro de búsqueda
+        const termino = document.getElementById('search-compras-detalle').value.toLowerCase().trim();
+        if (termino.length > 0) {
+            datos = datos.filter(item => {
+                return (
+                    (item.N_ORDEN_CO && item.N_ORDEN_CO.toLowerCase().includes(termino)) ||
+                    (item.NOM_PROVEE && item.NOM_PROVEE.toLowerCase().includes(termino)) ||
+                    (item.COD_ARTICU && item.COD_ARTICU.toLowerCase().includes(termino)) ||
+                    (item.DESCRIPCIO && item.DESCRIPCIO.toLowerCase().includes(termino)) ||
+                    (item.RUBRO && item.RUBRO.toLowerCase().includes(termino)) ||
+                    (item.CATEGORIA_PADRE && item.CATEGORIA_PADRE.toLowerCase().includes(termino))
+                );
+            });
+        }
 
         // Aplicar filtro de proveedor
-        if (this.filtros.proveedor) {
-            datosFiltrados = datosFiltrados.filter(item => 
-                item.NOM_PROVEE && item.NOM_PROVEE.includes(this.filtros.proveedor)
+        if (ComprasManager.filtrosActivos.proveedor) {
+            datos = datos.filter(item => 
+                item.NOM_PROVEE === ComprasManager.filtrosActivos.proveedor
             );
         }
 
         // Aplicar filtro de rubro
-        if (this.filtros.rubro) {
-            datosFiltrados = datosFiltrados.filter(item => 
-                item.RUBRO && item.RUBRO.includes(this.filtros.rubro)
+        if (ComprasManager.filtrosActivos.rubro) {
+            datos = datos.filter(item => 
+                item.RUBRO === ComprasManager.filtrosActivos.rubro
+            );
+        }
+
+        // Aplicar filtro de fecha
+        if (ComprasManager.filtrosActivos.fechaDesde) {
+            datos = datos.filter(item => 
+                item.FEC_EMISIO >= ComprasManager.filtrosActivos.fechaDesde
+            );
+        }
+
+        if (ComprasManager.filtrosActivos.fechaHasta) {
+            datos = datos.filter(item => 
+                item.FEC_EMISIO <= ComprasManager.filtrosActivos.fechaHasta
             );
         }
 
         // Aplicar filtro de temporada
-        if (this.filtros.temporada) {
-            datosFiltrados = datosFiltrados.filter(item => {
-                switch (this.filtros.temporada) {
+        if (ComprasManager.filtrosActivos.temporada) {
+            datos = datos.filter(item => {
+                switch (ComprasManager.filtrosActivos.temporada) {
                     case 'verano':
-                        return item.VERANO > 0;
+                        return (item.VERANO || 0) > 0;
                     case 'invierno':
-                        return item.INVIERNO > 0;
+                        return (item.INVIERNO || 0) > 0;
                     case 'atemporal':
-                        return item.ATEMPORAL > 0;
+                        return (item.ATEMPORAL || 0) > 0;
                     default:
                         return true;
                 }
             });
         }
 
-        // Aplicar filtros de fecha
-        if (this.filtros.fecha_desde) {
-            datosFiltrados = datosFiltrados.filter(item => 
-                item.FEC_EMISIO >= this.filtros.fecha_desde
-            );
-        }
-
-        if (this.filtros.fecha_hasta) {
-            datosFiltrados = datosFiltrados.filter(item => 
-                item.FEC_EMISIO <= this.filtros.fecha_hasta
-            );
-        }
-
-        this.datosFiltrados = datosFiltrados;
-        this.renderizarTabla();
-        this.actualizarContadores();
-        this.mostrarResumen();
+        ComprasManager.datosFiltrados = datos;
+        ComprasManager.renderizarTabla();
+        ComprasManager.actualizarContadores();
+        ComprasManager.mostrarResumen();
     }
 
-    renderizarTabla() {
-        const tbody = document.getElementById('tbody-compras-detalle');
-        if (!tbody) return;
-
-        if (this.datosFiltrados.length === 0) {
-            tbody.innerHTML = `
-                <tr>
-                    <td colspan="12" class="text-center text-muted py-4">
-                        <i class="fas fa-info-circle"></i>
-                        No hay datos disponibles con los filtros aplicados
-                    </td>
-                </tr>
-            `;
-            return;
-        }
-
-        let html = '';
-        this.datosFiltrados.forEach((item, index) => {
-            const fechaFormateada = this.formatearFecha(item.FEC_EMISIO);
-            const claseFilaAlternada = index % 2 === 0 ? '' : 'table-secondary';
-            
-            html += `
-                <tr class="fila-datos ${claseFilaAlternada}" data-index="${index}">
-                    <td class="text-center">${fechaFormateada}</td>
-                    <td class="text-center">${item.N_ORDEN_CO || ''}</td>
-                    <td>${item.NOM_PROVEE || ''}</td>
-                    <td class="text-center">${item.COD_ARTICU || ''}</td>
-                    <td>${item.DESCRIPCIO || ''}</td>
-                    <td>${item.RUBRO || ''}</td>
-                    <td>${item.CATEGORIA_PADRE || ''}</td>
-                    <td class="text-end valor-warning">${FormatoUtils.formatearNumero(item.VERANO)}</td>
-                    <td class="text-end valor-info">${FormatoUtils.formatearNumero(item.INVIERNO)}</td>
-                    <td class="text-end valor-success">${FormatoUtils.formatearNumero(item.ATEMPORAL)}</td>
-                    <td class="text-end valor-primary fw-bold">${FormatoUtils.formatearNumero(item.TOTAL)}</td>
-                    <td class="text-center">
-                        <button class="btn btn-sm btn-outline-primary" onclick="ComprasManager.verDetalleOrden('${item.N_ORDEN_CO}')" title="Ver detalle">
-                            <i class="fas fa-eye"></i>
-                        </button>
-                    </td>
-                </tr>
-            `;
-        });
-
-        tbody.innerHTML = html;
-    }
-
-    formatearFecha(fecha) {
-        if (!fecha) return '';
-        
-        try {
-            const fechaObj = new Date(fecha);
-            return fechaObj.toLocaleDateString('es-AR', {
-                year: 'numeric',
-                month: '2-digit',
-                day: '2-digit'
-            });
-        } catch (error) {
-            return fecha;
-        }
-    }
-
-    actualizarContadores() {
-        const contador = document.getElementById('count-compras-detalle');
-        if (contador) {
-            contador.textContent = `${this.datosFiltrados.length} registros`;
-            contador.classList.add('actualizado');
-            setTimeout(() => contador.classList.remove('actualizado'), 500);
-        }
-    }
-
-    async mostrarResumen() {
-        try {
-            const response = await APIClient.get('resumen-compras', this.filtros);
-            
-            if (response.success) {
-                const resumen = response.data;
-                
-                // Actualizar totales en el resumen
-                document.getElementById('total-verano').textContent = FormatoUtils.formatearNumero(resumen.total_verano);
-                document.getElementById('total-invierno').textContent = FormatoUtils.formatearNumero(resumen.total_invierno);
-                document.getElementById('total-atemporal').textContent = FormatoUtils.formatearNumero(resumen.total_atemporal);
-                document.getElementById('total-general').textContent = FormatoUtils.formatearNumero(resumen.total_general);
-                
-                // Mostrar el resumen
-                const resumenContainer = document.getElementById('resumen-compras-detalle');
-                if (resumenContainer) {
-                    resumenContainer.classList.remove('d-none');
-                }
-            }
-        } catch (error) {
-            console.error('Error obteniendo resumen:', error);
-        }
-    }
-
-    limpiarFiltros() {
-        // Limpiar filtros
-        this.filtros = {
-            proveedor: '',
-            rubro: '',
-            fecha_desde: '',
-            fecha_hasta: '',
-            temporada: ''
-        };
-
-        // Limpiar formulario
+    /**
+     * Limpiar todos los filtros
+     */
+    static limpiarFiltros() {
+        // Limpiar inputs
         document.getElementById('search-compras-detalle').value = '';
         document.getElementById('filtro-proveedor').value = '';
         document.getElementById('filtro-rubro').value = '';
-        document.getElementById('filtro-temporada').value = '';
         document.getElementById('fecha-desde').value = '';
         document.getElementById('fecha-hasta').value = '';
+        document.getElementById('filtro-temporada').value = '';
 
-        // Recargar datos
-        this.datosFiltrados = [...this.datos];
-        this.renderizarTabla();
-        this.actualizarContadores();
-        this.mostrarResumen();
-        
-        UIUtils.mostrarAlerta('Filtros limpiados', 'info');
+        // Limpiar filtros activos
+        ComprasManager.filtrosActivos = {};
+
+        // Mostrar todos los datos
+        ComprasManager.datosFiltrados = [...ComprasManager.datos];
+        ComprasManager.renderizarTabla();
+        ComprasManager.actualizarContadores();
+        ComprasManager.mostrarResumen();
+
+        UIUtils.mostrarAlerta('Filtros limpiados', 'info', 2000);
     }
 
-    async exportarExcel() {
+    /**
+     * Ver detalle de una orden de compra
+     */
+    static verDetalle(numeroOrden) {
+        const items = ComprasManager.datos.filter(item => item.N_ORDEN_CO === numeroOrden);
+        
+        if (items.length === 0) {
+            UIUtils.mostrarAlerta('No se encontraron detalles para esta orden', 'warning');
+            return;
+        }
+
+        const modalHTML = `
+            <div class="modal fade" id="modal-detalle-compra" tabindex="-1">
+                <div class="modal-dialog modal-lg">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">
+                                <i class="fas fa-shopping-cart me-2"></i>
+                                Detalle Orden de Compra: ${numeroOrden}
+                            </h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <strong>Proveedor:</strong> ${items[0].NOM_PROVEE || 'N/A'}
+                                </div>
+                                <div class="col-md-6">
+                                    <strong>Fecha:</strong> ${items[0].FEC_EMISIO || 'N/A'}
+                                </div>
+                            </div>
+                            <div class="table-responsive">
+                                <table class="table table-striped table-sm">
+                                    <thead class="table-dark">
+                                        <tr>
+                                            <th>Código</th>
+                                            <th>Descripción</th>
+                                            <th>Rubro</th>
+                                            <th class="text-end">Verano</th>
+                                            <th class="text-end">Invierno</th>
+                                            <th class="text-end">Atemporal</th>
+                                            <th class="text-end">Total</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${items.map(item => {
+                                            const total = (item.VERANO || 0) + (item.INVIERNO || 0) + (item.ATEMPORAL || 0);
+                                            return `
+                                                <tr>
+                                                    <td><code>${item.COD_ARTICU || ''}</code></td>
+                                                    <td>${item.DESCRIPCIO || ''}</td>
+                                                    <td><span class="badge bg-secondary">${item.RUBRO || ''}</span></td>
+                                                    <td class="text-end ${FormatoUtils.obtenerClaseValor(item.VERANO)}">
+                                                        ${FormatoUtils.formatearNumero(item.VERANO || 0)}
+                                                    </td>
+                                                    <td class="text-end ${FormatoUtils.obtenerClaseValor(item.INVIERNO)}">
+                                                        ${FormatoUtils.formatearNumero(item.INVIERNO || 0)}
+                                                    </td>
+                                                    <td class="text-end ${FormatoUtils.obtenerClaseValor(item.ATEMPORAL)}">
+                                                        ${FormatoUtils.formatearNumero(item.ATEMPORAL || 0)}
+                                                    </td>
+                                                    <td class="text-end ${FormatoUtils.obtenerClaseValor(total)}">
+                                                        <strong>${FormatoUtils.formatearNumero(total)}</strong>
+                                                    </td>
+                                                </tr>
+                                            `;
+                                        }).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        // Remover modal anterior si existe
+        const modalAnterior = document.getElementById('modal-detalle-compra');
+        if (modalAnterior) {
+            modalAnterior.remove();
+        }
+
+        // Agregar nuevo modal
+        document.body.insertAdjacentHTML('beforeend', modalHTML);
+        
+        // Mostrar modal
+        const modal = new bootstrap.Modal(document.getElementById('modal-detalle-compra'));
+        modal.show();
+
+        // Limpiar modal al cerrar
+        document.getElementById('modal-detalle-compra').addEventListener('hidden.bs.modal', function() {
+            this.remove();
+        });
+    }
+
+    /**
+     * Exportar a Excel (simplificado usando tabla HTML)
+     */
+    static async exportarExcel() {
         try {
-            UIUtils.mostrarLoading(true);
+            if (ComprasManager.datosFiltrados.length === 0) {
+                UIUtils.mostrarAlerta('No hay datos para exportar', 'warning');
+                return;
+            }
+
+            UIUtils.mostrarAlerta('Generando archivo Excel...', 'info', 2000);
             
-            const params = new URLSearchParams({
-                accion: 'exportar',
-                solapa: 'compras-detalle',
-                ...this.filtros
+            // Crear datos para CSV/Excel
+            const datos = ComprasManager.datosFiltrados.map(item => {
+                const total = (item.VERANO || 0) + (item.INVIERNO || 0) + (item.ATEMPORAL || 0);
+                return {
+                    'Fecha Emisión': item.FEC_EMISIO || '',
+                    'N° Orden': item.N_ORDEN_CO || '',
+                    'Proveedor': item.NOM_PROVEE || '',
+                    'Código Artículo': item.COD_ARTICU || '',
+                    'Descripción': item.DESCRIPCIO || '',
+                    'Rubro': item.RUBRO || '',
+                    'Categoría': item.CATEGORIA_PADRE || '',
+                    'Verano': item.VERANO || 0,
+                    'Invierno': item.INVIERNO || 0,
+                    'Atemporal': item.ATEMPORAL || 0,
+                    'Total': total
+                };
             });
 
-            window.location.href = `api.php?${params.toString()}`;
+            // Convertir a CSV
+            const headers = Object.keys(datos[0]);
+            const csvContent = [
+                headers.join(','),
+                ...datos.map(row => 
+                    headers.map(header => {
+                        const value = row[header];
+                        // Escapar comillas y envolver en comillas si contiene comas
+                        if (typeof value === 'string' && (value.includes(',') || value.includes('"'))) {
+                            return '"' + value.replace(/"/g, '""') + '"';
+                        }
+                        return value;
+                    }).join(',')
+                )
+            ].join('\n');
+
+            // Crear y descargar archivo
+            const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
             
-            UIUtils.mostrarAlerta('Exportación iniciada', 'success');
+            link.setAttribute('href', url);
+            link.setAttribute('download', `compras_detalle_${new Date().toISOString().split('T')[0]}.csv`);
+            link.style.visibility = 'hidden';
+            
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            UIUtils.mostrarAlerta('Archivo exportado correctamente', 'success');
+            
         } catch (error) {
             console.error('Error exportando:', error);
-            UIUtils.mostrarAlerta('Error al exportar: ' + error.message, 'danger');
-        } finally {
-            UIUtils.mostrarLoading(false);
+            UIUtils.mostrarAlerta('Error al exportar: ' + error.message, 'error');
         }
     }
 
-    verDetalleOrden(numeroOrden) {
-        // Mostrar modal o ventana con detalle de la orden
-        UIUtils.mostrarAlerta(`Detalle de orden ${numeroOrden} - Funcionalidad en desarrollo`, 'info');
+    /**
+     * Obtener estadísticas de los datos
+     */
+    static obtenerEstadisticas() {
+        const stats = {
+            totalRegistros: ComprasManager.datos.length,
+            totalFiltrados: ComprasManager.datosFiltrados.length,
+            proveedoresUnicos: new Set(ComprasManager.datos.map(item => item.NOM_PROVEE)).size,
+            rubrosUnicos: new Set(ComprasManager.datos.map(item => item.RUBRO)).size,
+            ordenesUnicas: new Set(ComprasManager.datos.map(item => item.N_ORDEN_CO)).size,
+            totales: ComprasManager.datos.reduce((acc, item) => {
+                acc.verano += item.VERANO || 0;
+                acc.invierno += item.INVIERNO || 0;
+                acc.atemporal += item.ATEMPORAL || 0;
+                return acc;
+            }, { verano: 0, invierno: 0, atemporal: 0 })
+        };
+
+        stats.totalGeneral = stats.totales.verano + stats.totales.invierno + stats.totales.atemporal;
+
+        return stats;
     }
 
-    // Método estático para uso global
-    static async cargarDatos() {
-        if (window.comprasManager) {
-            await window.comprasManager.cargarDatos();
-        }
-    }
-
-    static limpiarFiltros() {
-        if (window.comprasManager) {
-            window.comprasManager.limpiarFiltros();
-        }
-    }
-
-    static async exportarExcel() {
-        if (window.comprasManager) {
-            await window.comprasManager.exportarExcel();
-        }
-    }
-
-    static verDetalleOrden(numeroOrden) {
-        if (window.comprasManager) {
-            window.comprasManager.verDetalleOrden(numeroOrden);
-        }
+    /**
+     * Función de debug para verificar datos
+     */
+    static debug() {
+        console.log('=== DEBUG COMPRAS MANAGER ===');
+        console.log('Datos:', ComprasManager.datos);
+        console.log('Datos filtrados:', ComprasManager.datosFiltrados);
+        console.log('Total datos:', ComprasManager.datos?.length || 0);
+        console.log('Primer elemento:', ComprasManager.datos?.[0]);
+        
+        // Verificar elementos DOM
+        const elementos = [
+            'filtro-proveedor',
+            'filtro-rubro', 
+            'search-compras-detalle',
+            'tbody-compras-detalle'
+        ];
+        
+        elementos.forEach(id => {
+            const elemento = document.getElementById(id);
+            console.log(`Elemento ${id}:`, elemento ? 'EXISTE' : 'NO EXISTE');
+        });
     }
 }
 
-// Inicializar el gestor cuando se carga el DOM
-document.addEventListener('DOMContentLoaded', function() {
-    // Solo inicializar si estamos en la página de presupuestos
-    if (document.getElementById('search-compras-detalle')) {
-        window.comprasManager = new ComprasManager();
-        console.log('✅ ComprasManager inicializado');
-    }
-});
 
-// Funciones globales para compatibilidad
+// Funciones globales para compatibilidad con HTML onclick
 function buscarComprasDetalle() {
-    if (window.comprasManager) {
-        const input = document.getElementById('search-compras-detalle');
-        if (input) {
-            window.comprasManager.busquedaInstantanea(input.value);
-        }
+    if (ComprasManager.timeoutBusqueda) {
+        clearTimeout(ComprasManager.timeoutBusqueda);
     }
+    
+    ComprasManager.timeoutBusqueda = setTimeout(() => {
+        ComprasManager.buscarInstantanea();
+    }, 300);
 }
 
 function filtrarPorProveedor() {
-    if (window.comprasManager) {
-        const select = document.getElementById('filtro-proveedor');
-        if (select) {
-            window.comprasManager.filtros.proveedor = select.value;
-            window.comprasManager.aplicarFiltros();
-        }
-    }
+    ComprasManager.filtrarPorProveedor();
 }
 
 function filtrarPorRubro() {
-    if (window.comprasManager) {
-        const select = document.getElementById('filtro-rubro');
-        if (select) {
-            window.comprasManager.filtros.rubro = select.value;
-            window.comprasManager.aplicarFiltros();
-        }
-    }
-}
-
-function filtrarPorTemporada() {
-    if (window.comprasManager) {
-        const select = document.getElementById('filtro-temporada');
-        if (select) {
-            window.comprasManager.filtros.temporada = select.value;
-            window.comprasManager.aplicarFiltros();
-        }
-    }
+    ComprasManager.filtrarPorRubro();
 }
 
 function filtrarPorFecha() {
-    if (window.comprasManager) {
-        const fechaDesde = document.getElementById('fecha-desde').value;
-        const fechaHasta = document.getElementById('fecha-hasta').value;
-        
-        window.comprasManager.filtros.fecha_desde = fechaDesde;
-        window.comprasManager.filtros.fecha_hasta = fechaHasta;
-        window.comprasManager.aplicarFiltros();
-    }
+    ComprasManager.filtrarPorFecha();
 }
+
+function filtrarPorTemporada() {
+    ComprasManager.filtrarPorTemporada();
+}
+
+// Hacer disponible globalmente
+window.ComprasManager = ComprasManager;

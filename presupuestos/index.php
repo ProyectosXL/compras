@@ -13,15 +13,16 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <link href="css/obtener-presupuesto.css" rel="stylesheet">
+    <link href="css/tabla-optimizada.css" rel="stylesheet">
     
     <!-- Estilos específicos -->
     <?php include 'components/styles.php'; ?>
 </head>
-<body>
-    <div class="container-fluid py-2 pb-1">
-        <div class="container-fluid py-2 pb-1" style="margin-bottom: 0; padding-bottom: 0.5rem;">
-            
-            <!-- Header -->
+<body style="margin: 0; padding: 0; height: 100vh; overflow-x: hidden;">
+    <div class="container-fluid flex-container">
+        
+        <!-- Header -->
+        <div class="flex-header">
             <?php include 'components/header.php'; ?>
             
             <!-- Información de Temporada -->
@@ -29,11 +30,14 @@
             
             <!-- Loading -->
             <?php include 'components/loading.php'; ?>
-            
+        </div>
+        
+        <!-- Contenido Principal -->
+        <div class="flex-content">
             <!-- Tabs Container -->
             <?php include 'components/tabs-container.php'; ?>
-            
         </div>
+        
     </div>
 
     <!-- Contenedores de componentes -->

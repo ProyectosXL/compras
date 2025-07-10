@@ -2,7 +2,7 @@
 <?php
 
 /**
- * Controlador principal simplificado que coordina las funcionalidades
+ * Controlador principal actualizado que incluye funcionalidades de compras
  */
 class MainController {
     
@@ -183,6 +183,23 @@ class MainController {
                 $this->obtenerStockProyectado();
                 break;
                 
+            // Compras detalle - NUEVO
+            case 'compras-detalle':
+                $this->delegarCompras($accion);
+                break;
+            case 'buscar-compras':
+                $this->delegarCompras($accion);
+                break;
+            case 'proveedores':
+                $this->delegarCompras($accion);
+                break;
+            case 'rubros-compras':
+                $this->delegarCompras($accion);
+                break;
+            case 'resumen-compras':
+                $this->delegarCompras($accion);
+                break;
+                
             // Funcionalidades de búsqueda
             case 'buscar':
             case 'rubros':
@@ -206,7 +223,8 @@ class MainController {
                     'message' => 'Acción no válida',
                     'acciones_disponibles' => [
                         'datos-base', 'compra-verano', 'compra-invierno', 
-                        'stock-proyectado', 'buscar', 'exportar', 'rubros'
+                        'stock-proyectado', 'compras-detalle', 'buscar', 
+                        'exportar', 'rubros', 'proveedores'
                     ]
                 ], 400);
                 break;
@@ -228,6 +246,32 @@ class MainController {
                     'success' => false,
                     'message' => 'Acción POST no válida'
                 ], 400);
+                break;
+        }
+    }
+    
+    /**
+     * Delegar funcionalidades de compras - NUEVO
+     */
+    private function delegarCompras($accion) {
+        require_once __DIR__ . '/ComprasController.php';
+        $comprasController = new ComprasController();
+        
+        switch ($accion) {
+            case 'compras-detalle':
+                $comprasController->obtenerComprasDetalle();
+                break;
+            case 'buscar-compras':
+                $comprasController->buscarComprasDetalle();
+                break;
+            case 'proveedores':
+                $comprasController->obtenerProveedores();
+                break;
+            case 'rubros-compras':
+                $comprasController->obtenerRubros();
+                break;
+            case 'resumen-compras':
+                $comprasController->obtenerResumenCompras();
                 break;
         }
     }

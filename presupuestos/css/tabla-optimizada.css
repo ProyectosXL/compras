@@ -1,0 +1,464 @@
+
+/* Optimizaciones específicas para altura de pantalla y tablas */
+/* Archivo: presupuestos/css/tabla-optimizada.css */
+
+/* Optimizar altura del contenedor principal */
+.container-fluid {
+    padding-left: 0.25rem;
+    padding-right: 0.25rem;
+    padding-top: 0.25rem;
+    padding-bottom: 0.25rem;
+    margin-bottom: 0 !important;
+}
+
+/* Header más compacto */
+.header-compacto {
+    padding: 0.5rem 0;
+    margin: -0.25rem -0.25rem 0.5rem -0.25rem;
+}
+
+.header-compacto h1 {
+    font-size: 1.2rem;
+    margin-bottom: 0;
+    line-height: 1.1;
+}
+
+.header-compacto .timezone-info {
+    font-size: 0.7rem;
+    margin-top: 0.1rem;
+}
+
+/* Información de temporada más compacta */
+.temporada-info {
+    padding: 0.4rem;
+    margin-bottom: 0.5rem;
+}
+
+.temporada-info h6 {
+    margin-bottom: 0.1rem;
+    font-size: 0.8rem;
+}
+
+.temporada-info .h5 {
+    font-size: 0.9rem;
+}
+
+/* Tabs más compactos */
+.nav-tabs {
+    padding: 0.2rem 0.4rem 0;
+    margin-bottom: 0;
+}
+
+.nav-tabs .nav-link {
+    padding: 0.4rem 0.6rem;
+    font-size: 0.8rem;
+    margin: 0 0.1rem;
+}
+
+/* Tab content optimizado para altura */
+.tab-content {
+    min-height: calc(100vh - 160px);
+    max-height: calc(100vh - 160px);
+    overflow: hidden;
+}
+
+.tab-pane {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Search container más compacto */
+.search-container {
+    padding: 0.4rem;
+    flex-shrink: 0;
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+}
+
+.search-container .row {
+    margin-bottom: 0.3rem;
+}
+
+.search-container .row:last-child {
+    margin-bottom: 0;
+}
+
+/* Formularios más compactos */
+.form-control-sm,
+.form-select-sm {
+    padding: 0.2rem 0.4rem;
+    font-size: 0.75rem;
+}
+
+.form-label-sm {
+    font-size: 0.7rem;
+    margin-bottom: 0.1rem;
+    font-weight: 600;
+}
+
+/* Botones más compactos */
+.btn-sm {
+    padding: 0.2rem 0.4rem;
+    font-size: 0.7rem;
+}
+
+.export-buttons {
+    gap: 0.2rem;
+}
+
+/* Resumen superior compacto */
+#resumen-compras-superior {
+    padding: 0.4rem;
+    flex-shrink: 0;
+}
+
+#resumen-compras-superior .badge {
+    font-size: 0.9rem;
+    padding: 0.4rem 0.6rem;
+    font-weight: 700;
+}
+
+#resumen-compras-superior small {
+    font-size: 0.75rem;
+    margin-bottom: 0.2rem;
+    font-weight: 600;
+}
+
+/* Tabla optimizada para altura */
+.table-responsive {
+    flex: 1;
+    overflow-y: auto;
+    max-height: none !important; /* Permitir que use todo el espacio disponible */
+    border: none;
+}
+
+/* Específico para compras detalle */
+#compras-detalle .table-responsive {
+    max-height: calc(100vh - 400px) !important;
+}
+
+/* Headers de tabla más compactos */
+.table thead th {
+    padding: 0.3rem 0.2rem;
+    font-size: 0.7rem;
+    line-height: 1.1;
+    vertical-align: middle;
+}
+
+/* Celdas de tabla más compactas */
+.table tbody td {
+    padding: 0.3rem 0.2rem;
+    font-size: 0.7rem;
+    line-height: 1.2;
+    vertical-align: middle;
+}
+
+/* Badge contador más compacto */
+.badge.fs-6 {
+    font-size: 0.7rem !important;
+    padding: 0.2rem 0.4rem;
+}
+
+/* Input de búsqueda más compacto */
+.input-group-text {
+    padding: 0.2rem 0.4rem;
+    font-size: 0.7rem;
+}
+
+.search-input-fast {
+    padding: 0.2rem 0.4rem;
+    font-size: 0.7rem;
+}
+
+/* Optimizaciones para responsive */
+@media (max-width: 768px) {
+    .container-fluid {
+        padding: 0.1rem;
+    }
+    
+    .header-compacto {
+        padding: 0.3rem 0;
+        margin: -0.1rem -0.1rem 0.3rem -0.1rem;
+    }
+    
+    .header-compacto h1 {
+        font-size: 1rem;
+    }
+    
+    .temporada-info {
+        padding: 0.2rem;
+        margin-bottom: 0.3rem;
+    }
+    
+    .nav-tabs {
+        padding: 0.1rem 0.2rem 0;
+    }
+    
+    .nav-tabs .nav-link {
+        padding: 0.2rem 0.3rem;
+        font-size: 0.7rem;
+        margin: 0;
+    }
+    
+    .search-container {
+        padding: 0.2rem;
+    }
+    
+    .tab-content {
+        min-height: calc(100vh - 120px);
+        max-height: calc(100vh - 120px);
+    }
+    
+    #compras-detalle .table-responsive {
+        max-height: calc(100vh - 400px) !important;
+    }
+    
+    .table thead th,
+    .table tbody td {
+        padding: 0.1rem 0.1rem;
+        font-size: 0.6rem;
+    }
+    
+    /* Ocultar columnas menos importantes en móvil */
+    .table th:nth-child(6),
+    .table td:nth-child(6),
+    .table th:nth-child(7),
+    .table td:nth-child(7) {
+        display: none;
+    }
+}
+
+@media (max-width: 576px) {
+    .tab-content {
+        min-height: calc(100vh - 100px);
+        max-height: calc(100vh - 100px);
+    }
+    
+    #compras-detalle .table-responsive {
+        max-height: calc(100vh - 400px) !important;
+    }
+    
+    /* Mostrar solo columnas esenciales */
+    .table th:nth-child(n+5),
+    .table td:nth-child(n+5) {
+        display: none;
+    }
+    
+    .table th:nth-child(11),
+    .table td:nth-child(11),
+    .table th:nth-child(12),
+    .table td:nth-child(12) {
+        display: table-cell; /* Mantener Total y Acciones */
+    }
+}
+
+/* Scroll personalizado más delgado */
+.table-responsive::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+.table-responsive::-webkit-scrollbar-track {
+    background: #f1f3f4;
+    border-radius: 3px;
+}
+
+.table-responsive::-webkit-scrollbar-thumb {
+    background: #c1c8cd;
+    border-radius: 3px;
+}
+
+.table-responsive::-webkit-scrollbar-thumb:hover {
+    background: #a0aec0;
+}
+
+/* Optimización para impresión */
+@media print {
+    .container-fluid {
+        padding: 0;
+        margin: 0;
+    }
+    
+    .header-compacto,
+    .search-container,
+    #resumen-compras-superior {
+        display: none !important;
+    }
+    
+    .table-responsive {
+        max-height: none !important;
+        overflow: visible !important;
+    }
+}
+
+/* Estados de carga optimizados */
+.loading {
+    padding: 1rem;
+    margin: 1rem auto;
+}
+
+.spinner-border {
+    width: 2rem;
+    height: 2rem;
+}
+
+/* Animaciones más suaves para mejor rendimiento */
+@media (prefers-reduced-motion: no-preference) {
+    .table tbody tr {
+        transition: background-color 0.1s ease;
+    }
+    
+    .btn,
+    .form-control,
+    .form-select {
+        transition: all 0.1s ease;
+    }
+}
+
+/* Mejorar contraste para accesibilidad */
+@media (prefers-contrast: high) {
+    .table thead th {
+        border: 2px solid #000;
+        background-color: #000;
+        color: #fff;
+    }
+    
+    .table tbody td {
+        border: 1px solid #000;
+    }
+    
+    .search-container {
+        border: 2px solid #000;
+    }
+}
+
+/* Forzar uso de GPU para animaciones suaves */
+.table tbody tr,
+.btn,
+.form-control,
+.form-select {
+    will-change: transform;
+    transform: translateZ(0);
+}
+
+/* Específico para solucionar el problema de altura */
+body {
+    overflow-x: hidden;
+    height: 100vh;
+}
+
+html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+}
+
+/* Contenedor principal ocupando toda la altura */
+.main-container {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+}
+
+/* Layout flex para aprovechar toda la altura */
+.flex-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.flex-header {
+    flex-shrink: 0;
+}
+
+.flex-content {
+    flex: 1;
+    overflow: hidden;
+}
+
+/* Para las otras solapas también */
+#verano .table-responsive,
+#invierno .table-responsive,
+#stock .table-responsive {
+    max-height: calc(100vh - 280px) !important;
+}
+
+/* Ajustes específicos para cada solapa */
+.tab-pane {
+    height: 100%;
+    overflow: hidden;
+}
+
+/* Asegurar que el contenido no se desborde */
+.tab-content {
+    overflow: hidden;
+}
+
+/* Optimización final para altura completa */
+#tabs-container {
+    height: calc(100vh - 140px);
+}
+
+#tabs-container .card {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+#tabs-container .card-body {
+    flex: 1;
+    overflow: hidden;
+    padding: 0;
+}
+
+/* Mejorar el scroll en dispositivos táctiles */
+.table-responsive {
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+}
+
+/* Evitar scroll horizontal innecesario */
+.table {
+    min-width: 100%;
+    width: max-content;
+}
+
+/* Optimizar para pantallas grandes */
+@media (min-width: 1200px) {
+    .container-fluid {
+        max-width: none;
+        padding-left: 0.5rem;
+        padding-right: 0.5rem;
+    }
+    
+    .header-compacto h1 {
+        font-size: 1.3rem;
+    }
+    
+    .table thead th,
+    .table tbody td {
+        font-size: 0.8rem;
+        padding: 0.4rem 0.3rem;
+    }
+}
+
+/* Utilidad para debug de altura (remover en producción) */
+.debug-height {
+    border: 2px solid red !important;
+    box-sizing: border-box;
+}
+
+.debug-height::before {
+    content: attr(class) " - H: " attr(data-height);
+    position: absolute;
+    background: red;
+    color: white;
+    font-size: 10px;
+    padding: 2px;
+    z-index: 9999;
+}
+
+.header-compacto .d-flex {
+    padding-left: 1rem;
+    padding-right: 1rem;
+}
