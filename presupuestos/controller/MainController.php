@@ -216,6 +216,15 @@ class MainController {
             case 'estadisticas-indices':
                 $this->delegarIndices($accion);
                 break;
+
+            // Ventas 6 meses
+            case 'ventas-6-meses':
+            case 'buscar-ventas':
+            case 'rubros-ventas':
+            case 'categorias-ventas':
+            case 'resumen-ventas':
+                $this->delegarVentas($accion);
+                break;
                 
             default:
                 $this->jsonResponse([
@@ -353,6 +362,32 @@ class MainController {
         
         echo json_encode($data, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
         exit;
+    }
+
+    /**
+     * Delegar funcionalidades de ventas - NUEVO
+     */
+    private function delegarVentas($accion) {
+        require_once __DIR__ . '/VentasController.php';
+        $ventasController = new VentasController();
+        
+        switch ($accion) {
+            case 'ventas-6-meses':
+                $ventasController->obtenerVentas6Meses();
+                break;
+            case 'buscar-ventas':
+                $ventasController->buscarVentas6Meses();
+                break;
+            case 'rubros-ventas':
+                $ventasController->obtenerRubrosVentas();
+                break;
+            case 'categorias-ventas':
+                $ventasController->obtenerCategoriasVentas();
+                break;
+            case 'resumen-ventas':
+                $ventasController->obtenerResumenVentas();
+                break;
+        }
     }
 }
 

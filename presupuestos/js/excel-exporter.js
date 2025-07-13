@@ -249,6 +249,38 @@ class ExcelExporter {
     }
 
     /**
+     * Preparar datos de ventas para Excel
+     */
+    static prepararDatosVentas(datos) {
+        return datos.map(item => {
+            const resultado = {
+                'Rubro': item.RUBRO || '',
+                'Categoría': item.CATEGORIA_PADRE || '',
+                'Ventas Últimos 60 días': item.VTA_ULT_60_DIAS || 0,
+                'Ventas Año Anterior': item.VTA_ULT_60_DIAS_ANO_ANT || 0,
+                'Índice Variación': item.INDICE_VARIACION || 1,
+                'Variación %': item.VARIACION_PORCENTUAL || 0,
+                'Estado': item.ESTADO || 'estable'
+            };
+
+            // Agregar columnas dinámicas de meses
+            Object.keys(item).forEach(key => {
+                if (key.startsWith('VTA_') && key.match(/VTA_\d+_\d{4}/)) {
+                    const partes = key.split('_');
+                    if (partes.length === 3) {
+                        const mes = parseInt(partes[1]);
+                        const ano = parseInt(partes[2]);
+                        const nombreMes = VentasManager.formatearNombreMes(mes, ano);
+                        resultado[nombreMes] = item[key] || 0;
+                    }
+                }
+            });
+
+            return resultado;
+        });
+    }
+
+    /**
      * Exportar solapa individual
      */
     static async exportarSolapa(solapa) {
@@ -282,6 +314,15 @@ class ExcelExporter {
                     datos = ExcelExporter.prepararDatosCompras(ComprasManager.datosFiltrados);
                     nombreHoja = 'Compras Detalle';
                     nombreArchivo = `compras_detalle_${ExcelExporter.obtenerFechaHora()}.xlsx`;
+                    break;
+                
+                case 'ventas-6-meses':
+                    if (typeof VentasManager === 'undefined' || !VentasManager.datosFiltrados || VentasManager.datosFiltrados.length === 0) {
+                        throw new Error('No hay datos de ventas disponibles');
+                    }
+                    datos = ExcelExporter.prepararDatosVentas(VentasManager.datosFiltrados);
+                    nombreHoja = 'Ventas 6 Meses';
+                    nombreArchivo = `ventas_6_meses_${ExcelExporter.obtenerFechaHora()}.xlsx`;
                     break;
                 
                 default:

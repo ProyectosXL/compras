@@ -353,7 +353,29 @@ class APIClient {
             tamaño_mb: (JSON.stringify([...APIClient.cache]).length / 1024 / 1024).toFixed(2)
         };
     }
-}
+
+    /**
+     * Obtener datos de ventas de 6 meses
+     */
+    static async obtenerVentas6Meses() {
+        return await APIClient.llamarAPI('ventas-6-meses');
+    }
+
+    /**
+     * Buscar en ventas de 6 meses
+     */
+    static async buscarVentas6Meses(termino, filtros = {}) {
+        const params = { q: termino, ...filtros };
+        return await APIClient.llamarAPI('buscar-ventas', params);
+    }
+
+    /**
+     * Obtener rubros de ventas
+     */
+    static async obtenerRubrosVentas() {
+        return await APIClient.llamarAPI('rubros-ventas');
+    }
+    }
 
 // Configurar interceptores al cargar
 document.addEventListener('DOMContentLoaded', function() {
