@@ -158,24 +158,16 @@ class APIClient {
         }
     }
 
-     /**
-     * Exportar a Excel (abre en nueva ventana) - Versión simplificada
+    /**
+     * Exportar a Excel usando el nuevo sistema unificado
      */
     static async exportarExcel(solapa) {
         try {
-            // Para compras detalle, usar la exportación local
-            if (solapa === 'compras-detalle') {
-                if (typeof ComprasManager !== 'undefined' && ComprasManager.exportarExcel) {
-                    return ComprasManager.exportarExcel();
-                } else {
-                    throw new Error('ComprasManager no disponible');
-                }
+            if (solapa === 'completo') {
+                await ExcelExporter.exportarPresupuestoCompleto();
+            } else {
+                await ExcelExporter.exportarSolapa(solapa);
             }
-            
-            // Para otras solapas, usar la exportación del servidor
-            const url = `${APIClient.baseUrl}?accion=exportar&solapa=${solapa}`;
-            window.open(url, '_blank');
-            
         } catch (error) {
             console.error('Error en exportación:', error);
             throw error;
