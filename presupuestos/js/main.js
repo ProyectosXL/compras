@@ -734,3 +734,171 @@ document.addEventListener('DOMContentLoaded', function() {
     console.log('Funciones disponibles: limpiarCache(), limpiarTablas(), reiniciarAplicacion(), actualizarHora()');
     console.log('✓ Actualizaciones automáticas DESHABILITADAS');
 });
+
+
+// Fix definitivo para forzar altura máxima en solapa ventas 6 meses
+
+function aplicarFixAlturaDefinitivo() {
+    const tabla = document.querySelector('#ventas-6-meses .table-responsive');
+    if (!tabla) {
+        console.log('❌ Tabla no encontrada');
+        return;
+    }
+    
+    console.log('🔧 Aplicando fix de altura definitivo...');
+    
+    // Remover cualquier estilo previo que pueda interferir
+    tabla.removeAttribute('style');
+    
+    // Aplicar estilos directamente con !important simulado
+    const estilos = {
+        maxHeight: '400px',
+        height: 'auto',
+        overflowY: 'auto',
+        overflowX: 'auto',
+        display: 'block',
+        width: '100%'
+    };
+    
+    Object.entries(estilos).forEach(([prop, value]) => {
+        tabla.style.setProperty(prop, value, 'important');
+    });
+    
+    // Verificar inmediatamente
+    setTimeout(() => {
+        console.log('📊 Verificación inmediata:');
+        console.log('  Max Height aplicado:', tabla.style.maxHeight);
+        console.log('  Altura visible:', tabla.clientHeight);
+        console.log('  Altura total:', tabla.scrollHeight);
+        console.log('  ¿Debería tener scroll ahora?:', tabla.scrollHeight > tabla.clientHeight);
+        
+        if (tabla.scrollHeight > tabla.clientHeight) {
+            console.log('✅ ¡SCROLL FUNCIONANDO!');
+        } else {
+            console.log('❌ Aún no funciona, probando altura más pequeña...');
+            tabla.style.setProperty('maxHeight', '300px', 'important');
+            
+            setTimeout(() => {
+                console.log('📊 Con altura 300px:');
+                console.log('  Altura visible:', tabla.clientHeight);
+                console.log('  Altura total:', tabla.scrollHeight);
+                console.log('  ¿Funciona ahora?:', tabla.scrollHeight > tabla.clientHeight);
+            }, 50);
+        }
+    }, 50);
+}
+
+// Override más agresivo del renderizado
+function configurarFixAgresivo() {
+    if (typeof VentasManager !== 'undefined') {
+        const originalRenderizar = VentasManager.renderizarTabla;
+        
+        VentasManager.renderizarTabla = function() {
+            // Ejecutar el renderizado original
+            originalRenderizar.call(this);
+            
+            // Aplicar fix inmediatamente después
+            setTimeout(() => {
+                aplicarFixAlturaDefinitivo();
+            }, 10);
+            
+            // Y también después de un delay para estar seguros
+            setTimeout(() => {
+                aplicarFixAlturaDefinitivo();
+            }, 100);
+        };
+        
+        // También interceptar la función de cargar datos
+        const originalCargar = VentasManager.cargarDatos;
+        
+        VentasManager.cargarDatos = async function() {
+            const resultado = await originalCargar.call(this);
+            
+            // Aplicar fix después de cargar
+            setTimeout(() => {
+                aplicarFixAlturaDefinitivo();
+            }, 200);
+            
+            return resultado;
+        };
+        
+        console.log('🔧 Override agresivo configurado');
+    }
+}
+
+// Aplicar via CSS también
+function aplicarFixCSS() {
+    // Crear estilo CSS dinámico
+    const styleElement = document.createElement('style');
+    styleElement.id = 'ventas-scroll-fix';
+    styleElement.textContent = `
+        #ventas-6-meses .table-responsive {
+            max-height: 450px !important;
+            overflow-y: auto !important;
+            overflow-x: auto !important;
+            display: block !important;
+        }
+    `;
+    
+    // Remover estilo previo si existe
+    const existingStyle = document.getElementById('ventas-scroll-fix');
+    if (existingStyle) {
+        existingStyle.remove();
+    }
+    
+    // Agregar al head
+    document.head.appendChild(styleElement);
+    console.log('🎨 CSS fix aplicado');
+}
+
+// Fix completo que combina todo
+function fixCompletoScrollVentas() {
+    console.log('🚀 Ejecutando fix completo...');
+    
+    // 1. Aplicar CSS
+    aplicarFixCSS();
+    
+    // 2. Aplicar JavaScript
+    setTimeout(() => {
+        aplicarFixAlturaDefinitivo();
+    }, 50);
+    
+    // 3. Verificar resultado
+    setTimeout(() => {
+        const tabla = document.querySelector('#ventas-6-meses .table-responsive');
+        if (tabla) {
+            console.log('📊 RESULTADO FINAL:');
+            console.log('  Altura visible:', tabla.clientHeight);
+            console.log('  Altura total:', tabla.scrollHeight);
+            console.log('  Scroll funciona:', tabla.scrollHeight > tabla.clientHeight);
+            console.log('  Max height aplicado:', getComputedStyle(tabla).maxHeight);
+            
+            if (tabla.scrollHeight > tabla.clientHeight) {
+                console.log('🎉 ¡ÉXITO! El scroll debería funcionar ahora');
+            } else {
+                console.log('🔧 Intentando con altura aún más pequeña...');
+                tabla.style.setProperty('maxHeight', '200px', 'important');
+            }
+        }
+    }, 200);
+}
+
+// Configurar cuando se carga la página
+document.addEventListener('DOMContentLoaded', function() {
+    configurarFixAgresivo();
+    
+    // Aplicar fix cuando se active la solapa
+    const ventasTab = document.getElementById('ventas-6-meses-tab');
+    if (ventasTab) {
+        ventasTab.addEventListener('shown.bs.tab', function() {
+            setTimeout(fixCompletoScrollVentas, 100);
+        });
+    }
+});
+
+// Hacer funciones disponibles globalmente
+window.aplicarFixAlturaDefinitivo = aplicarFixAlturaDefinitivo;
+window.fixCompletoScrollVentas = fixCompletoScrollVentas;
+
+console.log('🔧 Fix de altura definitivo cargado');
+console.log('📝 Ejecuta: fixCompletoScrollVentas()');

@@ -2,21 +2,21 @@
 <?php
 class Ventas {
 
-    private $cid_central;
+    private $cid_apps;
 
     function __construct(){
         require_once __DIR__.'/../../Class/conexion.php';
         $conexion = new Conexion();
-        $this->cid_central = $conexion->conectar('central');
+        $this->cid_apps = $conexion->conectar('apps');
     }
 
     private function getArray($sql){
         try {
-            if (!$this->cid_central) {
-                throw new Exception("Error de conexión a la base de datos central");
+            if (!$this->cid_apps) {
+                throw new Exception("Error de conexión a la base de datos");
             }
 
-            $stmt = sqlsrv_query($this->cid_central, $sql);
+            $stmt = sqlsrv_query($this->cid_apps, $sql);
             
             if ($stmt === false) {
                 throw new Exception("Error en la consulta: " . print_r(sqlsrv_errors(), true));
@@ -30,110 +30,45 @@ class Ventas {
             return $v;
         }
         catch (Exception $e) {
-            error_log("Error en getArray Ventas: " . $e->getMessage());
+            error_log("Error en getArray: " . $e->getMessage());
             return [];
         }
     }
 
     /**
-     * Obtiene las ventas de los últimos 6 meses con variación - TEMPORAL CON MESES DINÁMICOS
+     * Obtiene las ventas de los últimos 6 meses con variación
      */
     public function obtenerVentas6Meses($filtros = []){
         try {
-            // Calcular los últimos 6 meses (excluyendo el actual)
-            $mesesColumnas = [];
-            for ($i = 6; $i >= 1; $i--) {
-                $fecha = new DateTime();
-                $fecha->modify("-{$i} months");
-                $mes = $fecha->format('n'); // Mes sin ceros iniciales
-                $ano = $fecha->format('Y');
-                $mesesColumnas["VTA_{$mes}_{$ano}"] = rand(10, 100);
+            $sql = "EXEC RO_SP_VENTAS_6_MESES_CON_VARIACION";
+            $datos = $this->getArray($sql);
+            
+            if (empty($datos)) {
+                return [];
             }
             
-            // DATOS DE PRUEBA TEMPORAL con columnas dinámicas
-            $datosBase = [
-                [
-                    'RUBRO' => 'ACCESORIOS DE VINILICO',
-                    'CATEGORIA_PADRE' => 'TARJETERO',
-                    'VTA_ULT_60_DIAS' => 150,
-                    'VTA_ULT_60_DIAS_ANO_ANT' => 120,
-                    'INDICE_VARIACION' => 1.25
-                ],
-                [
-                    'RUBRO' => 'BILLETERAS DE VINILICO',
-                    'CATEGORIA_PADRE' => 'BILLETERA',
-                    'VTA_ULT_60_DIAS' => 89,
-                    'VTA_ULT_60_DIAS_ANO_ANT' => 110,
-                    'INDICE_VARIACION' => 0.81
-                ],
-                [
-                    'RUBRO' => 'MOCHILAS',
-                    'CATEGORIA_PADRE' => 'MOCHILA URBANA',
-                    'VTA_ULT_60_DIAS' => 200,
-                    'VTA_ULT_60_DIAS_ANO_ANT' => 185,
-                    'INDICE_VARIACION' => 1.08
-                ],
-                [
-                    'RUBRO' => 'CARTERAS DE VINILICO',
-                    'CATEGORIA_PADRE' => 'CARTERA',
-                    'VTA_ULT_60_DIAS' => 75,
-                    'VTA_ULT_60_DIAS_ANO_ANT' => 95,
-                    'INDICE_VARIACION' => 0.79
-                ],
-                [
-                    'RUBRO' => 'RIÑONERAS',
-                    'CATEGORIA_PADRE' => 'RIÑONERA',
-                    'VTA_ULT_60_DIAS' => 130,
-                    'VTA_ULT_60_DIAS_ANO_ANT' => 85,
-                    'INDICE_VARIACION' => 1.53
-                ]
-            ];
-            
-            // Agregar columnas dinámicas de meses a cada registro
-            $datosTemporales = [];
-            foreach ($datosBase as $registro) {
-                // Agregar columnas de meses con valores aleatorios variados
-                $registroConMeses = array_merge($registro, []);
-                
-                foreach ($mesesColumnas as $columna => $valorBase) {
-                    // Variar los valores según el índice de variación del producto
-                    $factor = $registro['INDICE_VARIACION'];
-                    $variacion = rand(-20, 20) / 100; // ±20%
-                    $registroConMeses[$columna] = max(0, round($valorBase * $factor * (1 + $variacion)));
-                }
-                
-                $datosTemporales[] = $registroConMeses;
-            }
-
-            error_log("Columnas generadas: " . implode(', ', array_keys($mesesColumnas)));
-            
-            return $datosTemporales;
+            return $datos;
 
         } catch (Exception $e) {
             error_log("Error en obtenerVentas6Meses: " . $e->getMessage());
             return [
                 'error' => true,
-                'mensaje' => $e->getMessage()
+                'mensaje' => 'Error al ejecutar consulta de ventas: ' . $e->getMessage()
             ];
         }
     }
 
     /**
      * Buscar en ventas por término
-     * @param string $termino Término de búsqueda
-     * @param array $filtros Filtros adicionales
-     * @return array Resultados de búsqueda
      */
     public function buscarVentas6Meses($termino, $filtros = []){
         try {
-            // Primero obtener todos los datos
             $datos = $this->obtenerVentas6Meses($filtros);
             
             if (isset($datos['error'])) {
                 return $datos;
             }
 
-            // Filtrar por término de búsqueda
             $terminoLower = strtolower($termino);
             $resultados = array_filter($datos, function($item) use ($terminoLower) {
                 $rubro = strtolower($item['RUBRO'] ?? '');
@@ -156,18 +91,9 @@ class Ventas {
 
     /**
      * Obtener rubros únicos
-     * @return array Lista de rubros
      */
     public function obtenerRubrosVentas(){
         try {
-            $sql = "SELECT DISTINCT RUBRO 
-                    FROM (
-                        EXEC RO_SP_VENTAS_6_MESES_CON_VARIACION
-                    ) AS ventas
-                    WHERE RUBRO IS NOT NULL 
-                    ORDER BY RUBRO";
-            
-            // Como no podemos usar el SP en una subconsulta, obtenemos todos los datos y extraemos rubros
             $datos = $this->obtenerVentas6Meses();
             if (isset($datos['error'])) {
                 return $datos;
@@ -175,8 +101,9 @@ class Ventas {
 
             $rubros = [];
             foreach ($datos as $item) {
-                if (!empty($item['RUBRO']) && !in_array($item['RUBRO'], $rubros)) {
-                    $rubros[] = $item['RUBRO'];
+                $rubro = $item['RUBRO'] ?? '';
+                if (!empty($rubro) && !in_array($rubro, $rubros)) {
+                    $rubros[] = $rubro;
                 }
             }
             
@@ -197,11 +124,9 @@ class Ventas {
 
     /**
      * Obtener categorías únicas
-     * @return array Lista de categorías
      */
     public function obtenerCategoriasVentas(){
         try {
-            // Obtener todos los datos y extraer categorías
             $datos = $this->obtenerVentas6Meses();
             if (isset($datos['error'])) {
                 return $datos;
@@ -209,8 +134,9 @@ class Ventas {
 
             $categorias = [];
             foreach ($datos as $item) {
-                if (!empty($item['CATEGORIA_PADRE']) && !in_array($item['CATEGORIA_PADRE'], $categorias)) {
-                    $categorias[] = $item['CATEGORIA_PADRE'];
+                $categoria = $item['CATEGORIA_PADRE'] ?? '';
+                if (!empty($categoria) && !in_array($categoria, $categorias)) {
+                    $categorias[] = $categoria;
                 }
             }
             
@@ -231,8 +157,6 @@ class Ventas {
 
     /**
      * Obtener resumen de ventas
-     * @param array $filtros Filtros aplicados
-     * @return array Resumen de totales
      */
     public function obtenerResumenVentas($filtros = []){
         try {
@@ -253,10 +177,10 @@ class Ventas {
             ];
 
             foreach ($datos as $item) {
-                $resumen['ventas_actuales_total'] += $item['VTA_ULT_60_DIAS'] ?? 0;
-                $resumen['ventas_anteriores_total'] += $item['VTA_ULT_60_DIAS_ANO_ANT'] ?? 0;
+                $resumen['ventas_actuales_total'] += (float)($item['VTA_ULT_60_DIAS'] ?? 0);
+                $resumen['ventas_anteriores_total'] += (float)($item['VTA_ULT_60_DIAS_ANO_ANT'] ?? 0);
                 
-                $indice = $item['INDICE_VARIACION'] ?? 1;
+                $indice = (float)($item['INDICE_VARIACION'] ?? 1);
                 if ($indice > 1.2) {
                     $resumen['items_mejorados']++;
                 } elseif ($indice < 0.8) {
@@ -266,9 +190,11 @@ class Ventas {
                 }
             }
 
-            // Calcular variación promedio
             if ($resumen['ventas_anteriores_total'] > 0) {
-                $resumen['variacion_promedio'] = (($resumen['ventas_actuales_total'] - $resumen['ventas_anteriores_total']) / $resumen['ventas_anteriores_total']) * 100;
+                $resumen['variacion_promedio'] = round(
+                    (($resumen['ventas_actuales_total'] - $resumen['ventas_anteriores_total']) / $resumen['ventas_anteriores_total']) * 100,
+                    2
+                );
             }
 
             return $resumen;
@@ -283,45 +209,19 @@ class Ventas {
     }
 
     /**
-     * Aplicar filtros a los datos
-     * @param array $datos Datos originales
-     * @param array $filtros Filtros a aplicar
-     * @return array Datos filtrados
-     */
-    private function aplicarFiltros($datos, $filtros) {
-        $resultado = $datos;
-
-        if (!empty($filtros['rubro'])) {
-            $resultado = array_filter($resultado, function($item) use ($filtros) {
-                return stripos($item['RUBRO'] ?? '', $filtros['rubro']) !== false;
-            });
-        }
-
-        if (!empty($filtros['categoria'])) {
-            $resultado = array_filter($resultado, function($item) use ($filtros) {
-                return stripos($item['CATEGORIA_PADRE'] ?? '', $filtros['categoria']) !== false;
-            });
-        }
-
-        return array_values($resultado);
-    }
-
-    /**
      * Función de prueba para verificar la conexión
-     * @return array Resultado de la prueba de conexión
      */
     public function probarConexion(){
         try {
-            if (!$this->cid_central) {
+            if (!$this->cid_apps) {
                 return [
                     'conexion' => false,
-                    'mensaje' => 'No se pudo establecer conexión con la base de datos central'
+                    'mensaje' => 'No se pudo establecer conexión con la base de datos apps'
                 ];
             }
 
-            // Realizar una consulta simple para probar la conexión
-            $sql = "SELECT GETDATE() as fecha_actual, @@SERVERNAME as servidor";
-            $stmt = sqlsrv_query($this->cid_central, $sql);
+            $sql = "SELECT GETDATE() as fecha_actual, @@SERVERNAME as servidor, DB_NAME() as base_datos";
+            $stmt = sqlsrv_query($this->cid_apps, $sql);
             
             if ($stmt === false) {
                 return [
@@ -335,7 +235,7 @@ class Ventas {
 
             return [
                 'conexion' => true,
-                'mensaje' => 'Conexión exitosa',
+                'mensaje' => 'Conexión exitosa a base apps',
                 'datos' => $resultado
             ];
 
@@ -351,8 +251,8 @@ class Ventas {
      * Destructor para cerrar la conexión
      */
     public function __destruct(){
-        if ($this->cid_central) {
-            sqlsrv_close($this->cid_central);
+        if ($this->cid_apps) {
+            sqlsrv_close($this->cid_apps);
         }
     }
 }

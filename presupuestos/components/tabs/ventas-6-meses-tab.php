@@ -69,8 +69,8 @@
         </div>
     </div>
     
-    <!-- Tabla con altura optimizada -->
-    <div class="table-responsive" style="max-height: calc(100vh - 280px); overflow-y: auto;">
+    <!-- Tabla SIN altura fija inline - igual que las otras solapas -->
+    <div class="table-responsive">
         <table class="table table-striped table-hover mb-0" id="tabla-ventas-6-meses">
             <thead class="table-dark sticky-header">
                 <tr>

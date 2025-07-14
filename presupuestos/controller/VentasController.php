@@ -14,6 +14,40 @@ class VentasController {
     }
     
     /**
+     * Obtener datos de ventas de 6 meses - MÉTODO FALTANTE AGREGADO
+     */
+    public function obtenerVentas6Meses() {
+        try {
+            $filtros = $this->obtenerFiltros();
+            $datos = $this->ventas->obtenerVentas6Meses($filtros);
+            
+            if (isset($datos['error'])) {
+                $this->jsonResponse([
+                    'success' => false,
+                    'message' => $datos['mensaje']
+                ], 500);
+                return;
+            }
+            
+            $datosProcesados = $this->procesarDatosVentas($datos);
+            
+            $this->jsonResponse([
+                'success' => true,
+                'message' => 'Datos de ventas de 6 meses obtenidos correctamente',
+                'data' => $datosProcesados,
+                'total_registros' => count($datosProcesados),
+                'columnas_meses' => $this->extraerColumnasMeses($datosProcesados)
+            ]);
+            
+        } catch (Exception $e) {
+            $this->jsonResponse([
+                'success' => false,
+                'message' => 'Error al obtener ventas: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+    
+    /**
      * Buscar en ventas de 6 meses
      */
     public function buscarVentas6Meses() {
@@ -223,6 +257,54 @@ class VentasController {
         }
         
         return $resultado;
+    }
+    
+    /**
+     * Extraer información de columnas de meses para el frontend
+     */
+    private function extraerColumnasMeses($datos) {
+        if (empty($datos)) return [];
+        
+        $columnas = [];
+        $primer = $datos[0];
+        
+        foreach (array_keys($primer) as $key) {
+            if (preg_match('/^VTA_(\d+)_(\d{4})$/', $key, $matches)) {
+                $mes = (int)$matches[1];
+                $ano = (int)$matches[2];
+                
+                if ($mes >= 1 && $mes <= 12) {
+                    $columnas[] = [
+                        'campo' => $key,
+                        'mes' => $mes,
+                        'ano' => $ano,
+                        'nombre' => $this->formatearNombreMes($mes, $ano)
+                    ];
+                }
+            }
+        }
+        
+        // Ordenar por fecha
+        usort($columnas, function($a, $b) {
+            $fechaA = mktime(0, 0, 0, $a['mes'], 1, $a['ano']);
+            $fechaB = mktime(0, 0, 0, $b['mes'], 1, $b['ano']);
+            return $fechaA - $fechaB;
+        });
+        
+        return $columnas;
+    }
+    
+    /**
+     * Formatear nombre del mes
+     */
+    private function formatearNombreMes($mes, $ano) {
+        $meses = [
+            1 => 'Ene', 2 => 'Feb', 3 => 'Mar', 4 => 'Abr',
+            5 => 'May', 6 => 'Jun', 7 => 'Jul', 8 => 'Ago',
+            9 => 'Sep', 10 => 'Oct', 11 => 'Nov', 12 => 'Dic'
+        ];
+        
+        return $meses[$mes] . ' ' . $ano;
     }
     
     /**
