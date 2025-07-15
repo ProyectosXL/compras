@@ -27,13 +27,13 @@
                 <li class="nav-item" role="presentation">
                     <button class="nav-link" id="compras-detalle-tab" data-bs-toggle="tab" 
                             data-bs-target="#compras-detalle" type="button" role="tab">
-                        <i class="fas fa-shopping-cart me-2"></i>Compras Pendientes
+                        <i class="fas fa-shopping-cart me-2"></i>OC Pendientes de Ingreso
                     </button>
                 </li>
                 <li class="nav-item" role="presentation">
                     <button class="nav-link" id="ventas-6-meses-tab" data-bs-toggle="tab" 
                             data-bs-target="#ventas-6-meses" type="button" role="tab">
-                        <i class="fas fa-chart-line me-2"></i>Ventas 6 Meses
+                        <i class="fas fa-chart-line me-2"></i>Venta Sucursales (Últ. 6 Meses)
                     </button>
                 </li>
             </ul>
