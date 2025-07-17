@@ -229,4 +229,23 @@
         }
     }
 
+    .country-switch {
+    font-size: 1rem;
+    }
+
+    .country-switch .form-check-input {
+        background-color: rgba(255, 255, 255, 0.2);
+        border-color: rgba(255, 255, 255, 0.5);
+    }
+
+    .country-switch .form-check-input:checked {
+        background-color: #28a745;
+        border-color: #28a745;
+    }
+
+    .country-switch .form-check-label {
+        cursor: pointer;
+        user-select: none;
+    }
+
 </style>

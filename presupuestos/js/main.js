@@ -33,7 +33,7 @@ class PresupuestoApp {
     init() {
         this.actualizarUltimaActualizacion();
         this.configurarEventListeners();
-        // ELIMINADO: this.configurarIntervalos(); - Sin actualizaciones automáticas
+        this.configurarSwitchPais();
         this.cargarPreferenciasUsuario();
         this.estado.inicializado = true;
         console.log('PresupuestoApp inicializado correctamente');
@@ -118,6 +118,43 @@ class PresupuestoApp {
                 this.cargarDatos();
             }
         });
+    }
+
+    /**
+     * Configurar switch de país
+     */
+    configurarSwitchPais() {
+        // Cargar país guardado
+        const paisGuardado = StorageUtils.obtener('pais_seleccionado') || 'argentina';
+        this.aplicarConfiguracionPais(paisGuardado);
+        
+        // Configurar el switch según el país guardado
+        const switchPais = document.getElementById('country-switch');
+        if (switchPais) {
+            switchPais.checked = paisGuardado === 'uruguay';
+        }
+    }
+
+    /**
+     * Aplicar configuración de país
+     */
+    aplicarConfiguracionPais(pais) {
+        const titulo = document.getElementById('titulo-sistema');
+        const label = document.getElementById('country-label');
+        const switchPais = document.getElementById('country-switch');
+        
+        if (pais === 'uruguay') {
+            if (titulo) titulo.textContent = 'Sistema de Presupuesto de Compras - Uruguay';
+            if (label) label.innerHTML = '<i class="fas fa-flag me-1"></i>Uruguay';
+            if (switchPais) switchPais.checked = true;
+        } else {
+            if (titulo) titulo.textContent = 'Sistema de Presupuesto de Compras - Argentina';
+            if (label) label.innerHTML = '<i class="fas fa-flag me-1"></i>Argentina';
+            if (switchPais) switchPais.checked = false;
+        }
+        
+        // Guardar selección
+        StorageUtils.guardar('pais_seleccionado', pais, 30 * 24 * 60 * 60 * 1000); // 30 días
     }
 
     /**
@@ -902,3 +939,41 @@ window.fixCompletoScrollVentas = fixCompletoScrollVentas;
 
 console.log('🔧 Fix de altura definitivo cargado');
 console.log('📝 Ejecuta: fixCompletoScrollVentas()');
+
+// Función global para el switch
+async function cambiarPais() {
+    try {
+        const switchPais = document.getElementById('country-switch');
+        const pais = switchPais.checked ? 'uruguay' : 'argentina';
+        
+        // Llamar a la API para cambiar el país
+        const response = await APIClient.llamarAPI('cambiar_pais', { pais: pais });
+        
+        if (response.success) {
+            // Aplicar cambios en el frontend
+            window.presupuestoApp.aplicarConfiguracionPais(pais);
+            
+            // Mostrar alerta de cambio
+            UIUtils.mostrarAlerta(
+                `País cambiado a ${pais === 'uruguay' ? 'Uruguay' : 'Argentina'}. Los datos se cargarán desde la base correspondiente.`,
+                'success',
+                3000
+            );
+            
+            // Limpiar cache para forzar recarga desde nueva base
+            APIClient.limpiarCache();
+        } else {
+            throw new Error(response.message || 'Error cambiando país');
+        }
+        
+    } catch (error) {
+        console.error('Error cambiando país:', error);
+        UIUtils.mostrarAlerta('Error al cambiar país: ' + error.message, 'error');
+        
+        // Revertir el switch si hay error
+        const switchPais = document.getElementById('country-switch');
+        if (switchPais) {
+            switchPais.checked = !switchPais.checked;
+        }
+    }
+}

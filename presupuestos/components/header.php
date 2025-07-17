@@ -8,11 +8,15 @@
                     <div>
                         <h1>
                             <i class="fas fa-calculator me-2"></i>
-                            Sistema de Presupuesto de Compras
+                            <span id="titulo-sistema">Sistema de Presupuesto de Compras - Argentina</span>
                         </h1>
-                        <div class="timezone-info">
-                            <i class="fas fa-clock me-1"></i>
-                            <span id="fecha-hora-actual">--</span> (GMT-3 Argentina)
+                        <div class="country-switch mt-1">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="country-switch" onchange="cambiarPais()">
+                                <label class="form-check-label text-white" for="country-switch" id="country-label">
+                                    <i class="fas fa-flag me-1"></i>Argentina
+                                </label>
+                            </div>
                         </div>
                     </div>
                     <div class="export-buttons">

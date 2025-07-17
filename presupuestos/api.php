@@ -2,26 +2,6 @@
 <?php
 /**
  * API REST para el Sistema de Presupuesto de Compras - Versión 2.0
- * 
- * Endpoints principales:
- * GET /presupuestos/api.php?accion=datos-base - Obtener datos base del presupuesto
- * GET /presupuestos/api.php?accion=compra-verano - Datos para solapa Compra Proyectada Verano
- * GET /presupuestos/api.php?accion=compra-invierno - Datos para solapa Compra Proyectada Invierno
- * GET /presupuestos/api.php?accion=stock-proyectado - Datos para solapa Stock Proyectado
- * 
- * Endpoints de búsqueda:
- * GET /presupuestos/api.php?accion=buscar&q=termino&solapa=verano - Buscar por rubro/categoría
- * GET /presupuestos/api.php?accion=rubros - Obtener lista de rubros únicos
- * GET /presupuestos/api.php?accion=filtrar-rubro&rubro=NOMBRE&solapa=verano - Filtrar por rubro
- * 
- * Endpoints de exportación:
- * GET /presupuestos/api.php?accion=exportar&solapa=verano - Exportar a Excel (verano/invierno/stock/completo)
- * 
- * Endpoints de índices:
- * POST /presupuestos/api.php?accion=actualizar-indice - Actualizar índice de variación
- * POST /presupuestos/api.php?accion=actualizar-multiples-indices - Actualizar múltiples índices
- * POST /presupuestos/api.php?accion=resetear-indices - Resetear índices a valor por defecto
- * GET /presupuestos/api.php?accion=estadisticas-indices - Obtener estadísticas de índices
  */
 
 // Configurar headers para CORS y JSON
@@ -33,6 +13,24 @@ header('Access-Control-Allow-Headers: Content-Type, Authorization');
 // Manejar preflight requests
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     http_response_code(200);
+    exit;
+}
+
+// Manejar cambio de país ANTES de incluir otros archivos
+if (isset($_GET['accion']) && $_GET['accion'] === 'cambiar_pais') {
+    if (session_status() === PHP_SESSION_NONE) {
+        session_start();
+    }
+    
+    $pais = $_GET['pais'] ?? 'argentina';
+    $_SESSION['pais_seleccionado'] = strtolower($pais);
+    
+    echo json_encode([
+        'success' => true,
+        'message' => "País cambiado a " . ($pais === 'uruguay' ? 'Uruguay' : 'Argentina'),
+        'pais' => $pais,
+        'servidor' => $pais === 'uruguay' ? 'apps_uy' : 'apps'
+    ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
     exit;
 }
 

@@ -17,6 +17,12 @@ class APIClient {
                 url.searchParams.append(key, parametros[key]);
             });
 
+            // Agregar país actual SOLO si no es la acción de cambiar país
+            if (accion !== 'cambiar_pais') {
+                const paisActual = StorageUtils.obtener('pais_seleccionado') || 'argentina';
+                url.searchParams.append('pais', paisActual);
+            }
+
             const options = {
                 method: metodo,
                 headers: {
@@ -28,7 +34,18 @@ class APIClient {
                 options.body = JSON.stringify(body);
             }
 
+            console.log('API Call URL:', url.toString()); // Debug
+
             const response = await fetch(url, options);
+            
+            // Verificar si la respuesta es HTML (error de PHP)
+            const contentType = response.headers.get('content-type');
+            if (contentType && contentType.includes('text/html')) {
+                const htmlText = await response.text();
+                console.error('Respuesta HTML recibida:', htmlText);
+                throw new Error('El servidor devolvió HTML en lugar de JSON. Revisar errores de PHP.');
+            }
+
             const data = await response.json();
 
             if (!response.ok) {
@@ -38,6 +55,7 @@ class APIClient {
             return data;
         } catch (error) {
             console.error('Error en llamada API:', error);
+            console.error('URL que falló:', url?.toString());
             throw error;
         }
     }
@@ -375,7 +393,16 @@ class APIClient {
     static async obtenerRubrosVentas() {
         return await APIClient.llamarAPI('rubros-ventas');
     }
+
+    /**
+     * Cambiar país
+     */
+    static async cambiarPais(pais) {
+        return await APIClient.llamarAPI('cambiar_pais', { pais: pais });
     }
+
+
+}
 
 // Configurar interceptores al cargar
 document.addEventListener('DOMContentLoaded', function() {
