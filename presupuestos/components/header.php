@@ -20,6 +20,9 @@
                         </div>
                     </div>
                     <div class="export-buttons">
+                        <button class="btn btn-info" data-bs-toggle="modal" data-bs-target="#ayudaRubrosModal">
+                            <i class="fas fa-question-circle me-1"></i> Ayuda
+                        </button>
                         <button type="button" class="btn btn-light" onclick="cargarDatos()">
                             <i class="fas fa-sync-alt me-1"></i> Cargar Datos
                         </button>
