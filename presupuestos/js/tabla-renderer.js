@@ -59,54 +59,43 @@ const TablaRendererUtils = {
     },
 
     buscarVentaHistoricaCorrecta(item, temporada) {
-        const anoActual = new Date().getFullYear() % 100;
+        const anoActual = new Date().getFullYear() % 100; // 25 para 2025
         
         if (temporada === 'VERANO') {
-            for (let i = 1; i <= 3; i++) {
-                let anoInicialAnterior = (anoActual - i) < 0 ? (anoActual - i + 100) : (anoActual - i);
-                let anoFinalAnterior = (anoActual - i + 1) < 0 ? (anoActual - i + 1 + 100) : (anoActual - i + 1);
-                
-                const anoInicialStr = anoInicialAnterior.toString().padStart(2, '0');
-                const anoFinalStr = anoFinalAnterior.toString().padStart(2, '0');
-                
-                const posiblesColumnas = [
-                    `VERANO ${anoInicialStr}-${anoFinalStr}`,
-                    `VERANO ${anoInicialStr}`,
-                    `VERANO_${anoInicialStr}`,
-                    `VERANO${anoInicialStr}`,
-                    `VTA_VERANO_${anoInicialStr}`,
-                    `VTA_VERANO${anoInicialStr}`
-                ];
-                
-                for (const columna of posiblesColumnas) {
-                    if (item[columna] && !isNaN(item[columna]) && item[columna] > 0) {
-                        return parseFloat(item[columna]);
-                    }
-                }
+            // Buscar VTA_VERANO_25 (el último verano completo)
+            const columnaVerano = `VTA_VERANO_${anoActual}`;
+            if (item[columnaVerano] && !isNaN(item[columnaVerano])) {
+                console.log(`✅ VERANO encontrado: ${columnaVerano} = ${item[columnaVerano]}`);
+                return parseFloat(item[columnaVerano]);
             }
-        } else {
-            for (let i = 1; i <= 3; i++) {
-                let anoObjetivo = anoActual - i;
-                if (anoObjetivo < 0) anoObjetivo += 100;
-                
-                const anoStr = anoObjetivo.toString().padStart(2, '0');
-                
-                const posiblesColumnas = [
-                    `INVIERNO ${anoStr}`,
-                    `INVIERNO_${anoStr}`,
-                    `INVIERNO${anoStr}`,
-                    `VTA_INVIERNO_${anoStr}`,
-                    `VTA_INVIERNO${anoStr}`
-                ];
-                
-                for (const columna of posiblesColumnas) {
-                    if (item[columna] && !isNaN(item[columna]) && item[columna] > 0) {
-                        return parseFloat(item[columna]);
-                    }
-                }
+            
+            // Si no encuentra el actual, buscar el anterior
+            const anoAnterior = anoActual - 1;
+            const columnaVeranoAnterior = `VTA_VERANO_${anoAnterior}`;
+            if (item[columnaVeranoAnterior] && !isNaN(item[columnaVeranoAnterior])) {
+                console.log(`✅ VERANO anterior encontrado: ${columnaVeranoAnterior} = ${item[columnaVeranoAnterior]}`);
+                return parseFloat(item[columnaVeranoAnterior]);
+            }
+            
+        } else if (temporada === 'INVIERNO') {
+            // Buscar VTA_INVIERNO_24 (el último invierno completo)
+            const anoInvierno = anoActual - 1; // 24 para buscar INVIERNO 24
+            const columnaInvierno = `VTA_INVIERNO_${anoInvierno}`;
+            if (item[columnaInvierno] && !isNaN(item[columnaInvierno])) {
+                console.log(`✅ INVIERNO encontrado: ${columnaInvierno} = ${item[columnaInvierno]}`);
+                return parseFloat(item[columnaInvierno]);
+            }
+            
+            // Si no encuentra, buscar el anterior
+            const anoInviernoAnterior = anoInvierno - 1;
+            const columnaInviernoAnterior = `VTA_INVIERNO_${anoInviernoAnterior}`;
+            if (item[columnaInviernoAnterior] && !isNaN(item[columnaInviernoAnterior])) {
+                console.log(`✅ INVIERNO anterior encontrado: ${columnaInviernoAnterior} = ${item[columnaInviernoAnterior]}`);
+                return parseFloat(item[columnaInviernoAnterior]);
             }
         }
         
+        console.warn(`❌ No se encontró venta ${temporada} anterior`);
         return 0;
     },
 

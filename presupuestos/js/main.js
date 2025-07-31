@@ -238,6 +238,7 @@ class PresupuestoApp {
                 if (verano.success) {
                     this.datos.verano = verano.data;
                     this.renderizarSolapaSegura('verano', verano.data, verano.etiquetas);
+                    this.cargarFiltrosPresupuesto('verano', verano.data);
                     UIUtils.actualizarContador('count-verano', verano.data.length);
                     
                     // AGREGAR ESTA LÍNEA - Actualizar totales de compra proyectada
@@ -258,6 +259,7 @@ class PresupuestoApp {
                 if (invierno.success) {
                     this.datos.invierno = invierno.data;
                     this.renderizarSolapaSegura('invierno', invierno.data, invierno.etiquetas);
+                    this.cargarFiltrosPresupuesto('invierno', invierno.data);
                     UIUtils.actualizarContador('count-invierno', invierno.data.length);
                     
                     // AGREGAR ESTA LÍNEA - Actualizar totales de compra proyectada
@@ -278,6 +280,7 @@ class PresupuestoApp {
                 if (stock.success) {
                     this.datos.stock = stock.data;
                     this.renderizarSolapaSegura('stock', stock.data);
+                    this.cargarFiltrosPresupuesto('stock', stock.data);
                     UIUtils.actualizarContador('count-stock', stock.data.length);
                     console.log('✓ Datos de stock cargados');
                 } else {
@@ -697,6 +700,87 @@ class PresupuestoApp {
         console.table(info);
         return info;
     }
+
+    /**
+     * Cargar filtros para solapas de presupuesto - CORREGIDO CON REINTENTOS
+     */
+    cargarFiltrosPresupuesto(solapa, datos) {
+        // Función interna para intentar cargar
+        const intentarCargar = (intento = 1) => {
+            try {
+                if (!datos || datos.length === 0) {
+                    console.warn(`No hay datos para filtros en ${solapa}`);
+                    return;
+                }
+                
+                console.log(`🔄 Intento ${intento}: Cargando filtros para ${solapa} con ${datos.length} registros`);
+                
+                // Verificar que el tab pane existe
+                const tabPane = document.getElementById(solapa);
+                if (!tabPane) {
+                    console.error(`❌ Tab pane ${solapa} no encontrado`);
+                    if (intento < 3) {
+                        setTimeout(() => intentarCargar(intento + 1), 1000);
+                    }
+                    return;
+                }
+                
+                // Cargar rubros únicos
+                const rubros = [...new Set(
+                    datos.map(item => item.RUBRO).filter(r => r && r.trim() !== '')
+                )].sort();
+                
+                const selectRubro = document.getElementById(`filtro-rubro-${solapa}`);
+                if (selectRubro) {
+                    selectRubro.innerHTML = '<option value="">Todos los rubros</option>';
+                    rubros.forEach(rubro => {
+                        const option = document.createElement('option');
+                        option.value = rubro;
+                        option.textContent = rubro;
+                        selectRubro.appendChild(option);
+                    });
+                    console.log(`✅ Cargados ${rubros.length} rubros para ${solapa}`);
+                } else {
+                    console.error(`❌ Select de rubros no encontrado: filtro-rubro-${solapa}`);
+                    if (intento < 3) {
+                        setTimeout(() => intentarCargar(intento + 1), 1000);
+                        return;
+                    }
+                }
+                
+                // Cargar categorías únicas
+                const categorias = [...new Set(
+                    datos.map(item => item.CATEGORIA_PADRE || item.CATEGORIA).filter(c => c && c.trim() !== '')
+                )].sort();
+                
+                const selectCategoria = document.getElementById(`filtro-categoria-${solapa}`);
+                if (selectCategoria) {
+                    selectCategoria.innerHTML = '<option value="">Todas las categorías</option>';
+                    categorias.forEach(categoria => {
+                        const option = document.createElement('option');
+                        option.value = categoria;
+                        option.textContent = categoria;
+                        selectCategoria.appendChild(option);
+                    });
+                    console.log(`✅ Cargadas ${categorias.length} categorías para ${solapa}`);
+                } else {
+                    console.error(`❌ Select de categorías no encontrado: filtro-categoria-${solapa}`);
+                    if (intento < 3) {
+                        setTimeout(() => intentarCargar(intento + 1), 1000);
+                    }
+                }
+                
+            } catch (error) {
+                console.error(`Error cargando filtros para ${solapa} (intento ${intento}):`, error);
+                if (intento < 3) {
+                    setTimeout(() => intentarCargar(intento + 1), 1000);
+                }
+            }
+        };
+        
+        // Iniciar con delay inicial
+        setTimeout(() => intentarCargar(1), 500);
+    }
 }
 
 // Crear instancia global
@@ -715,8 +799,8 @@ function exportarExcel(solapa) {
     window.presupuestoApp.exportarExcel(solapa);
 }
 
-function editarIndice(rubro, categoria, indiceActual, solapa, index) {
-    IndiceEditor.editarIndice(rubro, categoria, indiceActual, solapa, index);
+function editarIndice(rubro, categoria, indiceActual, solapa, index, temporada = 'verano') {
+    IndiceEditor.editarIndice(rubro, categoria, indiceActual, solapa, index, temporada);
 }
 
 function guardarNuevoIndice() {
@@ -759,6 +843,64 @@ function limpiarTablas() {
 function actualizarHora() {
     window.presupuestoApp.actualizarUltimaActualizacion();
     UIUtils.mostrarAlerta('Hora actualizada', 'info', 1000);
+}
+
+// Funciones de filtros para presupuesto
+async function filtrarPorRubroPresupuesto(solapa) {
+    const select = document.getElementById(`filtro-rubro-${solapa}`);
+    if (!select) return;
+    
+    const rubro = select.value;
+    if (!rubro) {
+        window.presupuestoApp.resetearBusqueda(solapa);
+        return;
+    }
+    
+    try {
+        const response = await APIClient.filtrarPorRubro(rubro, solapa);
+        if (response.success) {
+            window.presupuestoApp.renderizarSolapaSegura(solapa, response.data);
+            UIUtils.actualizarContador(`count-${solapa}`, response.data.length);
+            UIUtils.mostrarAlerta(`Filtrado por rubro: ${rubro}`, 'info', 2000);
+        }
+    } catch (error) {
+        console.error('Error filtrando por rubro:', error);
+        UIUtils.mostrarAlerta('Error al filtrar por rubro', 'error');
+    }
+}
+
+async function filtrarPorCategoriaPresupuesto(solapa) {
+    const select = document.getElementById(`filtro-categoria-${solapa}`);
+    if (!select) return;
+    
+    const categoria = select.value;
+    if (!categoria) {
+        window.presupuestoApp.resetearBusqueda(solapa);
+        return;
+    }
+    
+    try {
+        const datos = window.presupuestoApp.getDatos(solapa);
+        const datosFiltrados = datos.filter(item => 
+            item.CATEGORIA_PADRE === categoria || item.CATEGORIA === categoria
+        );
+        
+        window.presupuestoApp.renderizarSolapaSegura(solapa, datosFiltrados);
+        UIUtils.actualizarContador(`count-${solapa}`, datosFiltrados.length);
+        UIUtils.mostrarAlerta(`Filtrado por categoría: ${categoria}`, 'info', 2000);
+    } catch (error) {
+        console.error('Error filtrando por categoría:', error);
+        UIUtils.mostrarAlerta('Error al filtrar por categoría', 'error');
+    }
+}
+
+function limpiarFiltrosPresupuesto(solapa) {
+    document.getElementById(`search-${solapa}`).value = '';
+    document.getElementById(`filtro-rubro-${solapa}`).value = '';
+    document.getElementById(`filtro-categoria-${solapa}`).value = '';
+    
+    window.presupuestoApp.resetearBusqueda(solapa);
+    UIUtils.mostrarAlerta('Filtros limpiados', 'info', 2000);
 }
 
 // Inicializar cuando el DOM esté listo
@@ -976,4 +1118,12 @@ async function cambiarPais() {
             switchPais.checked = !switchPais.checked;
         }
     }
+
+    // Función global para mostrar historial de índices
+    function mostrarHistorialIndices() {
+        IndiceEditor.mostrarHistorialCambios();
+    }
+
+    window.mostrarHistorialIndices = mostrarHistorialIndices;
+
 }

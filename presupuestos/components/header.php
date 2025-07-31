@@ -30,6 +30,9 @@
                                 style="display: none;" id="btn-export-completo-header">
                             <i class="fas fa-file-excel me-1"></i> Excel Completo
                         </button>
+                        <button class="btn btn-outline-light btn-sm" onclick="mostrarHistorialIndices()" title="Ver historial de cambios de índices">
+                            <i class="fas fa-history"></i>
+                        </button>
                     </div>
                 </div>
             </div>

@@ -165,7 +165,7 @@ class ExcelExporter {
     }
 
     /**
-     * Preparar datos de presupuesto para Excel
+     * Preparar datos de presupuesto para Excel - CORREGIDO
      */
     static prepararDatosPresupuesto(datos, solapa) {
         if (!datos || datos.length === 0) return [];
@@ -180,23 +180,74 @@ class ExcelExporter {
 
             // Agregar campos específicos según la solapa
             if (solapa === 'stock') {
-                resultado['Stock Actual'] = item.STOCK_ACTUAL || 0;
-                resultado['Stock a Guardar'] = item.STOCK_GUARDAR || 0;
-                resultado['Compras Verano'] = item.COMPRAS_VERANO || 0;
-                resultado['Compras Invierno'] = item.COMPRAS_INVIERNO || 0;
-                resultado['Compras Atemporal'] = item.COMPRAS_ATEMPORAL || 0;
+                resultado['Stock Actual'] = item.STOCK || item.CANT_STOCK || 0;
+                resultado['Stock a Guardar'] = item.STOCK_GUARDAR || item.CANT_STOCK_GUARDAR || 0;
+                resultado['Compras Verano'] = item.COMPRAS_VERANO || item.CANT_PEND_OC_VERANO || 0;
+                resultado['Compras Invierno'] = item.COMPRAS_INVIERNO || item.CANT_PEND_OC_INVIERNO || 0;
+                resultado['Compras Atemporal'] = item.COMPRAS_ATEMPORAL || item.CANT_PEND_OC_ATEMPORAL || 0;
                 resultado['Stock Cobertura'] = item.STOCK_COBERTURA || 0;
             } else {
-                // Para verano e invierno
-                resultado['Venta Anterior Verano'] = item.VENTA_ANT_VERANO || 0;
+                // Para verano e invierno - buscar ventas históricas
+                const ventaVeranoAnterior = ExcelExporter.buscarVentaHistorica(item, 'VERANO');
+                const ventaInviernoAnterior = ExcelExporter.buscarVentaHistorica(item, 'INVIERNO');
+                
+                resultado['Venta Anterior Verano'] = ventaVeranoAnterior;
                 resultado['Venta Proyectada Verano'] = item.VENTA_PROY_VERANO || 0;
-                resultado['Venta Anterior Invierno'] = item.VENTA_ANT_INVIERNO || 0;
+                resultado['Venta Anterior Invierno'] = ventaInviernoAnterior;
                 resultado['Venta Proyectada Invierno'] = item.VENTA_PROY_INVIERNO || 0;
                 resultado['Compra Proyectada'] = item.COMPRA_PROYECTADA || 0;
+                
+                // Agregar todas las columnas históricas disponibles
+                Object.keys(item).forEach(key => {
+                    if ((key.includes('VERANO') || key.includes('INVIERNO')) && 
+                        key !== 'VENTA_PROY_VERANO' && key !== 'VENTA_PROY_INVIERNO' &&
+                        !isNaN(parseFloat(item[key]))) {
+                        resultado[key] = item[key];
+                    }
+                });
             }
 
             return resultado;
         });
+    }
+
+    /**
+     * Buscar venta histórica para Excel - CORREGIDO CON FORMATO DINÁMICO
+     */
+    static buscarVentaHistorica(item, temporada) {
+        const anoActual = new Date().getFullYear() % 100; // 25 para 2025
+        
+        if (temporada === 'VERANO') {
+            // Buscar VTA_VERANO_25 (el último verano completo)
+            const columnaVerano = `VTA_VERANO_${anoActual}`;
+            if (item.hasOwnProperty(columnaVerano) && !isNaN(item[columnaVerano])) {
+                return parseFloat(item[columnaVerano]);
+            }
+            
+            // Si no encuentra el actual, buscar el anterior
+            const anoAnterior = anoActual - 1;
+            const columnaVeranoAnterior = `VTA_VERANO_${anoAnterior}`;
+            if (item.hasOwnProperty(columnaVeranoAnterior) && !isNaN(item[columnaVeranoAnterior])) {
+                return parseFloat(item[columnaVeranoAnterior]);
+            }
+            
+        } else if (temporada === 'INVIERNO') {
+            // Buscar VTA_INVIERNO_24 (el último invierno completo)
+            const anoInvierno = anoActual - 1; // 24
+            const columnaInvierno = `VTA_INVIERNO_${anoInvierno}`;
+            if (item.hasOwnProperty(columnaInvierno) && !isNaN(item[columnaInvierno])) {
+                return parseFloat(item[columnaInvierno]);
+            }
+            
+            // Si no encuentra, buscar el anterior
+            const anoInviernoAnterior = anoInvierno - 1;
+            const columnaInviernoAnterior = `VTA_INVIERNO_${anoInviernoAnterior}`;
+            if (item.hasOwnProperty(columnaInviernoAnterior) && !isNaN(item[columnaInviernoAnterior])) {
+                return parseFloat(item[columnaInviernoAnterior]);
+            }
+        }
+        
+        return 0;
     }
 
     /**
