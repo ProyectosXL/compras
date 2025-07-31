@@ -476,25 +476,37 @@ class IndiceEditor {
         
         const celdas = fila.children;
         
+        // Actualizar índice de verano (columna 3)
         if (celdas[3]) {
             const input = celdas[3].querySelector('.indice-input');
             if (input) {
-                input.value = registroActualizado.INDICE_VARIACION.toFixed(2);
+                input.value = (registroActualizado.INDICE_VARIACION || 1.0).toFixed(2);
             }
         }
         
+        // Actualizar índice de invierno (columna 6)
+        if (celdas[6]) {
+            const input = celdas[6].querySelector('.indice-input');
+            if (input) {
+                const indiceInvierno = registroActualizado.INDICE_VARIACION_INVIERNO || registroActualizado.INDICE_VARIACION || 1.0;
+                input.value = indiceInvierno.toFixed(2);
+            }
+        }
+        
+        // Actualizar ventas proyectadas
         if (celdas[5]) {
             celdas[5].textContent = FormatoUtils.formatearNumero(registroActualizado.VENTA_PROY_VERANO || 0);
         }
         
-        if (celdas[7]) {
-            celdas[7].textContent = FormatoUtils.formatearNumero(registroActualizado.VENTA_PROY_INVIERNO || 0);
+        if (celdas[8]) {
+            celdas[8].textContent = FormatoUtils.formatearNumero(registroActualizado.VENTA_PROY_INVIERNO || 0);
         }
         
-        if (celdas[8]) {
+        // Actualizar compra proyectada
+        if (celdas[9]) {
             const compraProyectada = registroActualizado.COMPRA_PROYECTADA || 0;
-            celdas[8].textContent = FormatoUtils.formatearNumero(compraProyectada);
-            celdas[8].className = `text-end bg-success-subtle text-success-emphasis fw-bold ${FormatoUtils.obtenerClaseValor(compraProyectada)}`;
+            celdas[9].textContent = FormatoUtils.formatearNumero(compraProyectada);
+            celdas[9].className = `text-end bg-success-subtle text-success-emphasis fw-bold ${FormatoUtils.obtenerClaseValor(compraProyectada)}`;
         }
     }
 

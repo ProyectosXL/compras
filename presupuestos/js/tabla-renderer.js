@@ -247,14 +247,15 @@ class TablaRenderer {
     }
 
     /**
-     * Crear fila completa para compras (verano/invierno)
+     * Crear fila completa para compras (verano/invierno) - CORREGIDO PARA DOS ÍNDICES
      */
     static crearFilaCompraCompleta(item, index, todosLosDatos, solapa) {
         const tr = document.createElement('tr');
         tr.className = 'fila-datos';
         
         const stockProyectado = FormatoUtils.formatearNumero(item.STOCK_PROYECTADO || 0);
-        const indiceVariacion = parseFloat(item.INDICE_VARIACION || 1.0);
+        const indiceVariacionVerano = parseFloat(item.INDICE_VARIACION || 1.0);
+        const indiceVariacionInvierno = parseFloat(item.INDICE_VARIACION_INVIERNO || indiceVariacionVerano);
         const ventaProyVerano = FormatoUtils.formatearNumero(item.VENTA_PROY_VERANO || 0);
         const ventaProyInvierno = FormatoUtils.formatearNumero(item.VENTA_PROY_INVIERNO || 0);
         const compraProyectada = item.COMPRA_PROYECTADA || 0;
@@ -268,12 +269,16 @@ class TablaRenderer {
             <td class="fw-medium">${item.RUBRO || ''}</td>
             <td>${item.CATEGORIA_PADRE || ''}</td>
             <td class="text-end">${stockProyectado}</td>
-            <td class="text-center editable-cell" onclick="editarIndice('${TablaRendererUtils.escaparComillas(item.RUBRO)}', '${TablaRendererUtils.escaparComillas(item.CATEGORIA_PADRE)}', ${indiceVariacion}, '${solapa}', ${index})">
-                <input type="number" class="indice-input" value="${indiceVariacion.toFixed(2)}" 
+            <td class="text-center editable-cell" onclick="editarIndice('${TablaRendererUtils.escaparComillas(item.RUBRO)}', '${TablaRendererUtils.escaparComillas(item.CATEGORIA_PADRE)}', ${indiceVariacionVerano}, '${solapa}', ${index}, 'verano')">
+                <input type="number" class="indice-input" value="${indiceVariacionVerano.toFixed(2)}" 
                     step="0.01" min="0" max="10" readonly>
             </td>
             <td class="text-end bg-info-subtle" title="Venta histórica verano anterior">${FormatoUtils.formatearNumero(ventaVeranoAnterior)}</td>
             <td class="text-end bg-primary-subtle text-primary-emphasis fw-bold" title="Venta proyectada verano">${ventaProyVerano}</td>
+            <td class="text-center editable-cell" onclick="editarIndice('${TablaRendererUtils.escaparComillas(item.RUBRO)}', '${TablaRendererUtils.escaparComillas(item.CATEGORIA_PADRE)}', ${indiceVariacionInvierno}, '${solapa}', ${index}, 'invierno')">
+                <input type="number" class="indice-input" value="${indiceVariacionInvierno.toFixed(2)}" 
+                    step="0.01" min="0" max="10" readonly>
+            </td>
             <td class="text-end bg-info-subtle" title="Venta histórica invierno anterior">${FormatoUtils.formatearNumero(ventaInviernoAnterior)}</td>
             <td class="text-end bg-primary-subtle text-primary-emphasis fw-bold" title="Venta proyectada invierno">${ventaProyInvierno}</td>
             <td class="text-end bg-success-subtle text-success-emphasis fw-bold ${claseCompra}" title="Compra proyectada">${FormatoUtils.formatearNumero(compraProyectada)}</td>
