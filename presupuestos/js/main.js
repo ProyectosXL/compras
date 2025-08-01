@@ -800,6 +800,7 @@ function exportarExcel(solapa) {
 }
 
 function editarIndice(rubro, categoria, indiceActual, solapa, index, temporada = 'verano') {
+    console.log('🚀 Función global editarIndice llamada con temporada:', temporada);
     IndiceEditor.editarIndice(rubro, categoria, indiceActual, solapa, index, temporada);
 }
 
@@ -1127,3 +1128,29 @@ async function cambiarPais() {
     window.mostrarHistorialIndices = mostrarHistorialIndices;
 
 }
+
+// Función temporal para inspeccionar onclick de celdas editables
+function inspeccionarOnclickCeldas() {
+    const celdasEditables = document.querySelectorAll('.editable-cell');
+    
+    console.group('🔍 INSPECCIÓN ONCLICK CELDAS EDITABLES');
+    celdasEditables.forEach((celda, index) => {
+        const fila = celda.closest('tr');
+        const posicionEnFila = Array.from(fila.children).indexOf(celda);
+        const onclick = celda.getAttribute('onclick');
+        
+        console.log(`Celda ${index}:`);
+        console.log(`  Posición en fila: ${posicionEnFila}`);
+        console.log(`  Onclick: ${onclick}`);
+        
+        // Extraer temporada del onclick
+        const matchTemporada = onclick?.match(/'(verano|invierno)'\)$/);
+        const temporada = matchTemporada ? matchTemporada[1] : 'NO ENCONTRADA';
+        console.log(`  Temporada detectada: ${temporada}`);
+        console.log('---');
+    });
+    console.groupEnd();
+}
+
+// Hacer disponible globalmente
+window.inspeccionarOnclickCeldas = inspeccionarOnclickCeldas;

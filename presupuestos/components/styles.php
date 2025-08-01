@@ -248,4 +248,45 @@
         user-select: none;
     }
 
+    /* Estilos para índices modificados */
+    .indice-modificado {
+        background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%) !important;
+        border: 2px solid #ffc107 !important;
+        border-radius: 4px !important;
+    }
+
+    .input-modificado {
+        background: transparent !important;
+        font-weight: bold !important;
+        color: #856404 !important;
+    }
+
+    .indicador-cambio {
+        animation: pulse-indicator 2s infinite;
+    }
+
+    @keyframes pulse-indicator {
+        0% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.7; transform: scale(1.1); }
+        100% { opacity: 1; transform: scale(1); }
+    }
+
+    .celda-actualizada {
+        animation: highlight-update 1s ease-in-out;
+    }
+
+    @keyframes highlight-update {
+        0% { background-color: rgba(40, 167, 69, 0.3); }
+        50% { background-color: rgba(40, 167, 69, 0.1); }
+        100% { background-color: transparent; }
+    }
+
+    /* Tooltip personalizado para valores originales */
+    .tooltip-inner {
+        background-color: #343a40;
+        color: white;
+        font-weight: bold;
+        border-radius: 4px;
+    }
+
 </style>

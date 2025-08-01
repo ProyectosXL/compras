@@ -15,12 +15,13 @@ class IndiceEditor {
             const registro = datos[IndiceEditor.indiceEditando.index];
             const temporada = IndiceEditor.indiceEditando.temporada || 'verano';
             
-            console.log('=== DEBUG CÁLCULO CON DOS ÍNDICES ===');
+            console.log('=== DEBUG CÁLCULO CORREGIDO ===');
             console.log(`Rubro: ${registro.RUBRO}`);
             console.log(`Categoría: ${registro.CATEGORIA_PADRE}`);
             console.log(`Editando índice de: ${temporada}`);
+            console.log(`Nuevo índice recibido: ${nuevoIndice}`);
             
-            // Actualizar el índice correspondiente
+            // Actualizar el índice correspondiente PRIMERO
             if (temporada === 'verano') {
                 registro.INDICE_VARIACION = parseFloat(nuevoIndice.toFixed(2));
                 registro._editado = true;
@@ -31,52 +32,87 @@ class IndiceEditor {
                 registro._indiceOriginalInvierno = registro._indiceOriginalInvierno || IndiceEditor.indiceEditando.indiceActual;
             }
             
-            // Extraer ventas históricas
-            const ventaVeranoAnterior = IndiceEditor.extraerVentaAnteriorCorregida(registro, 'VERANO');
-            const ventaInviernoAnterior = IndiceEditor.extraerVentaAnteriorCorregida(registro, 'INVIERNO');
-            
-            console.log(`Venta Verano Anterior (VTA_VERANO_25): ${ventaVeranoAnterior}`);
-            console.log(`Venta Invierno Anterior (VTA_INVIERNO_24): ${ventaInviernoAnterior}`);
+            // Leer las ventas anteriores de la tabla
+            const tbody = document.getElementById(`tbody-${IndiceEditor.indiceEditando.solapa}`);
+            const fila = tbody ? tbody.children[IndiceEditor.indiceEditando.index] : null;
+
+            let ventaVeranoAnterior = 0;
+            let ventaInviernoAnterior = 0;
+
+            if (fila && fila.children.length >= 10) {
+                const celdaVeranoAnterior = fila.children[4];   // "Venta Ver.Anterior"
+                const celdaInviernoAnterior = fila.children[7]; // "Venta Inv.Anterior"
+                
+                if (celdaVeranoAnterior) {
+                    const textoVerano = celdaVeranoAnterior.textContent.trim();
+                    ventaVeranoAnterior = FormatoUtils.parsearNumero(textoVerano) || 0;
+                }
+                
+                if (celdaInviernoAnterior) {
+                    const textoInvierno = celdaInviernoAnterior.textContent.trim();
+                    ventaInviernoAnterior = FormatoUtils.parsearNumero(textoInvierno) || 0;
+                }
+            } else {
+                // Fallback
+                ventaVeranoAnterior = IndiceEditor.extraerVentaAnteriorCorregida(registro, 'VERANO');
+                ventaInviernoAnterior = IndiceEditor.extraerVentaAnteriorCorregida(registro, 'INVIERNO');
+            }
             
             const stockProyectado = parseFloat(registro.STOCK_PROYECTADO || 0);
             
-            // Obtener índices separados
-            const indiceVerano = parseFloat(registro.INDICE_VARIACION || 1.0);
-            const indiceInvierno = parseFloat(registro.INDICE_VARIACION_INVIERNO || indiceVerano);
-            
-            console.log(`Índice Verano: ${indiceVerano}`);
-            console.log(`Índice Invierno: ${indiceInvierno}`);
+            // CORRECCIÓN: Solo usar el índice que se está editando, mantener el otro sin cambios
+            let indiceVerano, indiceInvierno;
+
+            if (temporada === 'verano') {
+                // Solo actualizar índice de verano, mantener invierno como estaba
+                indiceVerano = parseFloat(registro.INDICE_VARIACION || 1.0);
+                indiceInvierno = parseFloat(registro.INDICE_VARIACION_INVIERNO || 1.0);
+            } else {
+                // Solo actualizar índice de invierno, mantener verano como estaba
+                indiceVerano = parseFloat(registro.INDICE_VARIACION || 1.0);
+                indiceInvierno = parseFloat(registro.INDICE_VARIACION_INVIERNO || 1.0);
+            }
+
+            console.log(`Venta Verano Anterior: ${ventaVeranoAnterior}`);
+            console.log(`Venta Invierno Anterior: ${ventaInviernoAnterior}`);
+            console.log(`Temporada editada: ${temporada}`);
+            console.log(`Índice Verano (${temporada === 'verano' ? 'EDITADO' : 'sin cambio'}): ${indiceVerano}`);
+            console.log(`Índice Invierno (${temporada === 'invierno' ? 'EDITADO' : 'sin cambio'}): ${indiceInvierno}`);
+            console.log(`Stock Proyectado: ${stockProyectado}`);
             
             const fechaActual = new Date();
             const temporadaActual = IndiceEditor.determinarTemporadaActual(fechaActual);
             
-            // CALCULAR VENTA PROYECTADA VERANO con índice específico
+            // CALCULAR VENTA PROYECTADA VERANO (temporada actual + próxima)
             let nuevaVentaVerano;
             if (temporadaActual.tipo === 'VERANO' && temporadaActual.enCurso) {
-                const diasRestantesVerano = IndiceEditor.calcularDiasRestantesVerano(fechaActual);
-                const diasTotalVerano = 180;
-                nuevaVentaVerano = Math.round((ventaVeranoAnterior / diasTotalVerano) * diasRestantesVerano * indiceVerano);
-                console.log(`VERANO PROPORCIONAL: (${ventaVeranoAnterior} / ${diasTotalVerano}) * ${diasRestantesVerano} * ${indiceVerano} = ${nuevaVentaVerano}`);
+                // Si estamos en verano: venta completa actual + próximo verano
+                const ventaCompletaActual = Math.round(ventaVeranoAnterior * indiceVerano);
+                const ventaProximoVerano = Math.round(ventaVeranoAnterior * indiceVerano);
+                nuevaVentaVerano = ventaCompletaActual + ventaProximoVerano;
+                console.log(`VERANO (ACTUAL + PRÓXIMO): ${ventaVeranoAnterior} * ${indiceVerano} + ${ventaVeranoAnterior} * ${indiceVerano} = ${nuevaVentaVerano}`);
             } else {
+                // Si no estamos en verano: solo próximo verano
                 nuevaVentaVerano = Math.round(ventaVeranoAnterior * indiceVerano);
-                console.log(`VERANO NORMAL: ${ventaVeranoAnterior} * ${indiceVerano} = ${nuevaVentaVerano}`);
+                console.log(`VERANO PRÓXIMO: ${ventaVeranoAnterior} * ${indiceVerano} = ${nuevaVentaVerano}`);
             }
-            
-            // CALCULAR VENTA PROYECTADA INVIERNO con índice específico
+
+            // CALCULAR VENTA PROYECTADA INVIERNO (temporada actual + próxima)
             let nuevaVentaInvierno;
             if (temporadaActual.tipo === 'INVIERNO' && temporadaActual.enCurso) {
-                const diasRestantesInvierno = IndiceEditor.calcularDiasRestantesInvierno(fechaActual);
-                const diasTotalInvierno = 180;
-                nuevaVentaInvierno = Math.round((ventaInviernoAnterior / diasTotalInvierno) * diasRestantesInvierno * indiceInvierno);
-                console.log(`INVIERNO PROPORCIONAL: (${ventaInviernoAnterior} / ${diasTotalInvierno}) * ${diasRestantesInvierno} * ${indiceInvierno} = ${nuevaVentaInvierno}`);
+                // Si estamos en invierno: venta completa actual + próximo invierno
+                const ventaCompletaActual = Math.round(ventaInviernoAnterior * indiceInvierno);
+                const ventaProximoInvierno = Math.round(ventaInviernoAnterior * indiceInvierno);
+                nuevaVentaInvierno = ventaCompletaActual + ventaProximoInvierno;
+                console.log(`INVIERNO (ACTUAL + PRÓXIMO): ${ventaInviernoAnterior} * ${indiceInvierno} + ${ventaInviernoAnterior} * ${indiceInvierno} = ${nuevaVentaInvierno}`);
             } else {
+                // Si no estamos en invierno: solo próximo invierno
                 nuevaVentaInvierno = Math.round(ventaInviernoAnterior * indiceInvierno);
-                console.log(`INVIERNO NORMAL: ${ventaInviernoAnterior} * ${indiceInvierno} = ${nuevaVentaInvierno}`);
+                console.log(`INVIERNO PRÓXIMO: ${ventaInviernoAnterior} * ${indiceInvierno} = ${nuevaVentaInvierno}`);
             }
             
             const nuevaCompraProyectada = Math.round(stockProyectado - nuevaVentaVerano - nuevaVentaInvierno);
             
-            console.log(`Stock Proyectado: ${stockProyectado}`);
             console.log(`Compra Proyectada: ${stockProyectado} - ${nuevaVentaVerano} - ${nuevaVentaInvierno} = ${nuevaCompraProyectada}`);
             console.log('=== FIN DEBUG ===');
             
@@ -174,7 +210,7 @@ class IndiceEditor {
     }
 
     /**
-     * NUEVO: Calcular días restantes de temporada de verano (CORREGIDO)
+     * CORREGIDO: Calcular días restantes de temporada de verano usando días reales
      */
     static calcularDiasRestantesVerano(fecha) {
         const mes = fecha.getMonth() + 1;
@@ -196,11 +232,13 @@ class IndiceEditor {
         }
         
         const diferencia = finVerano - fecha;
-        return Math.ceil(diferencia / (1000 * 60 * 60 * 24));
+        const diasRestantes = Math.ceil(diferencia / (1000 * 60 * 60 * 24));
+        console.log(`Días restantes VERANO: ${diasRestantes}`);
+        return diasRestantes;
     }
 
     /**
-     * NUEVO: Calcular días restantes de temporada de invierno (CORREGIDO)
+     * CORREGIDO: Calcular días restantes de temporada de invierno usando días reales
      */
     static calcularDiasRestantesInvierno(fecha) {
         const mes = fecha.getMonth() + 1;
@@ -217,7 +255,9 @@ class IndiceEditor {
         }
         
         const diferencia = finInvierno - fecha;
-        return Math.ceil(diferencia / (1000 * 60 * 60 * 24));
+        const diasRestantes = Math.ceil(diferencia / (1000 * 60 * 60 * 24));
+        console.log(`Días restantes INVIERNO: ${diasRestantes}`);
+        return diasRestantes;
     }
 
     /**
@@ -475,34 +515,50 @@ class IndiceEditor {
         if (!registroActualizado) return;
         
         const celdas = fila.children;
+        const temporadaEditada = IndiceEditor.indiceEditando.temporada || 'verano';
         
-        // Actualizar índice de verano (columna 3)
-        if (celdas[3]) {
-            const input = celdas[3].querySelector('.indice-input');
-            if (input) {
-                input.value = (registroActualizado.INDICE_VARIACION || 1.0).toFixed(2);
+        console.log(`🔄 Actualizando fila - temporada editada: ${temporadaEditada}`);
+        
+        // CORRECCIÓN: Solo actualizar el índice que se editó
+        if (temporadaEditada === 'verano') {
+            // Solo actualizar índice de verano (celda 3)
+            if (celdas[3]) {
+                const input = celdas[3].querySelector('.indice-input');
+                if (input) {
+                    input.value = (registroActualizado.INDICE_VARIACION || 1.0).toFixed(2);
+                    console.log(`✅ Índice VERANO actualizado: ${input.value}`);
+                }
             }
+            
+            // NO tocar el índice de invierno (celda 6) - mantener su valor actual
+            console.log(`⚠️ Índice INVIERNO mantenido sin cambios`);
+            
+        } else if (temporadaEditada === 'invierno') {
+            // Solo actualizar índice de invierno (celda 6)
+            if (celdas[6]) {
+                const input = celdas[6].querySelector('.indice-input');
+                if (input) {
+                    const indiceInvierno = registroActualizado.INDICE_VARIACION_INVIERNO || 1.0;
+                    input.value = indiceInvierno.toFixed(2);
+                    console.log(`✅ Índice INVIERNO actualizado: ${input.value}`);
+                }
+            }
+            
+            // NO tocar el índice de verano (celda 3) - mantener su valor actual
+            console.log(`⚠️ Índice VERANO mantenido sin cambios`);
         }
         
-        // Actualizar índice de invierno (columna 6)
-        if (celdas[6]) {
-            const input = celdas[6].querySelector('.indice-input');
-            if (input) {
-                const indiceInvierno = registroActualizado.INDICE_VARIACION_INVIERNO || registroActualizado.INDICE_VARIACION || 1.0;
-                input.value = indiceInvierno.toFixed(2);
-            }
-        }
-        
-        // Actualizar ventas proyectadas
+        // Actualizar venta proyectada verano (celda 5)
         if (celdas[5]) {
             celdas[5].textContent = FormatoUtils.formatearNumero(registroActualizado.VENTA_PROY_VERANO || 0);
         }
         
+        // Actualizar venta proyectada invierno (celda 8)
         if (celdas[8]) {
             celdas[8].textContent = FormatoUtils.formatearNumero(registroActualizado.VENTA_PROY_INVIERNO || 0);
         }
         
-        // Actualizar compra proyectada
+        // Actualizar compra proyectada (celda 9)
         if (celdas[9]) {
             const compraProyectada = registroActualizado.COMPRA_PROYECTADA || 0;
             celdas[9].textContent = FormatoUtils.formatearNumero(compraProyectada);
@@ -717,6 +773,55 @@ class IndiceEditor {
             }
         }
     }
+
+    /**
+     * NUEVO: Función temporal para debug - agregar al final de la clase IndiceEditor
+     */
+    static debugEstructuraTabla(solapa) {
+        const tabla = document.getElementById(`tabla-${solapa}`);
+        const thead = tabla.querySelector('thead tr');
+        const tbody = tabla.querySelector('tbody');
+        const primeraFila = tbody.children[0];
+        
+        console.group(`🔍 DEBUG ESTRUCTURA TABLA ${solapa.toUpperCase()}`);
+        
+        // Mostrar headers
+        console.log('HEADERS:');
+        Array.from(thead.children).forEach((th, i) => {
+            console.log(`${i}: "${th.textContent.trim()}" (clases: ${th.className})`);
+        });
+        
+        // Mostrar primera fila de datos
+        if (primeraFila) {
+            console.log('\nPRIMERA FILA:');
+            Array.from(primeraFila.children).forEach((td, i) => {
+                console.log(`${i}: "${td.textContent.trim()}" (clases: ${td.className})`);
+            });
+        }
+        
+        console.groupEnd();
+    }
+
+    /**
+     * NUEVO: Calcular días totales reales de una temporada
+     */
+    static calcularDiasTotalesTemporada(temporada, ano = null) {
+        if (!ano) ano = new Date().getFullYear();
+        
+        if (temporada === 'VERANO') {
+            // VERANO: 1 agosto año anterior al 31 enero año actual
+            const inicioVerano = new Date(ano - 1, 7, 1); // 1 agosto año anterior
+            const finVerano = new Date(ano, 0, 31); // 31 enero año actual
+            const diferencia = finVerano - inicioVerano;
+            return Math.ceil(diferencia / (1000 * 60 * 60 * 24)) + 1;
+        } else {
+            // INVIERNO: 1 febrero al 31 julio del mismo año
+            const inicioInvierno = new Date(ano, 1, 1); // 1 febrero
+            const finInvierno = new Date(ano, 6, 31); // 31 julio
+            const diferencia = finInvierno - inicioInvierno;
+            return Math.ceil(diferencia / (1000 * 60 * 60 * 24)) + 1;
+        }
+    }
 }
 
 // Inicializar cuando el DOM esté listo
@@ -736,3 +841,8 @@ document.addEventListener('DOMContentLoaded', function() {
     console.log('  simularFecha(8, 15) // Agosto (verano)');
     console.log('  simularFecha(3, 15) // Marzo (invierno)');
 });
+
+// Función global para debug de estructura de tabla
+window.debugEstructuraTabla = (solapa) => IndiceEditor.debugEstructuraTabla(solapa);
+
+

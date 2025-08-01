@@ -247,7 +247,7 @@ class TablaRenderer {
     }
 
     /**
-     * Crear fila completa para compras (verano/invierno) - CORREGIDO PARA DOS ÍNDICES
+     * Crear fila completa para compras (verano/invierno) - CON EVENT LISTENERS
      */
     static crearFilaCompraCompleta(item, index, todosLosDatos, solapa) {
         const tr = document.createElement('tr');
@@ -265,24 +265,50 @@ class TablaRenderer {
         
         const claseCompra = FormatoUtils.obtenerClaseValor(compraProyectada);
         
+        // Crear elementos TD para los índices editables
+        const celdaIndiceVerano = document.createElement('td');
+        celdaIndiceVerano.className = 'text-center editable-cell';
+        celdaIndiceVerano.innerHTML = `<input type="number" class="indice-input" value="${indiceVariacionVerano.toFixed(2)}" step="0.01" min="0" max="10" readonly>`;
+        celdaIndiceVerano.setAttribute('data-temporada', 'verano');
+        celdaIndiceVerano.setAttribute('data-indice', indiceVariacionVerano);
+        
+        const celdaIndiceInvierno = document.createElement('td');
+        celdaIndiceInvierno.className = 'text-center editable-cell';
+        celdaIndiceInvierno.innerHTML = `<input type="number" class="indice-input" value="${indiceVariacionInvierno.toFixed(2)}" step="0.01" min="0" max="10" readonly>`;
+        celdaIndiceInvierno.setAttribute('data-temporada', 'invierno');
+        celdaIndiceInvierno.setAttribute('data-indice', indiceVariacionInvierno);
+        
+        // Agregar event listeners
+        celdaIndiceVerano.addEventListener('click', () => {
+            console.log('🔥 CLICK VERANO - Temporada: verano');
+            IndiceEditor.editarIndice(item.RUBRO, item.CATEGORIA_PADRE, indiceVariacionVerano, solapa, index, 'verano');
+        });
+        
+        celdaIndiceInvierno.addEventListener('click', () => {
+            console.log('❄️ CLICK INVIERNO - Temporada: invierno');
+            IndiceEditor.editarIndice(item.RUBRO, item.CATEGORIA_PADRE, indiceVariacionInvierno, solapa, index, 'invierno');
+        });
+        
+        // Crear HTML base sin los índices editables
         tr.innerHTML = `
             <td class="fw-medium">${item.RUBRO || ''}</td>
             <td>${item.CATEGORIA_PADRE || ''}</td>
             <td class="text-end">${stockProyectado}</td>
-            <td class="text-center editable-cell" onclick="editarIndice('${TablaRendererUtils.escaparComillas(item.RUBRO)}', '${TablaRendererUtils.escaparComillas(item.CATEGORIA_PADRE)}', ${indiceVariacionVerano}, '${solapa}', ${index}, 'verano')">
-                <input type="number" class="indice-input" value="${indiceVariacionVerano.toFixed(2)}" 
-                    step="0.01" min="0" max="10" readonly>
-            </td>
+            <td class="placeholder-verano"></td>
             <td class="text-end bg-info-subtle" title="Venta histórica verano anterior">${FormatoUtils.formatearNumero(ventaVeranoAnterior)}</td>
             <td class="text-end bg-primary-subtle text-primary-emphasis fw-bold" title="Venta proyectada verano">${ventaProyVerano}</td>
-            <td class="text-center editable-cell" onclick="editarIndice('${TablaRendererUtils.escaparComillas(item.RUBRO)}', '${TablaRendererUtils.escaparComillas(item.CATEGORIA_PADRE)}', ${indiceVariacionInvierno}, '${solapa}', ${index}, 'invierno')">
-                <input type="number" class="indice-input" value="${indiceVariacionInvierno.toFixed(2)}" 
-                    step="0.01" min="0" max="10" readonly>
-            </td>
+            <td class="placeholder-invierno"></td>
             <td class="text-end bg-info-subtle" title="Venta histórica invierno anterior">${FormatoUtils.formatearNumero(ventaInviernoAnterior)}</td>
             <td class="text-end bg-primary-subtle text-primary-emphasis fw-bold" title="Venta proyectada invierno">${ventaProyInvierno}</td>
             <td class="text-end bg-success-subtle text-success-emphasis fw-bold ${claseCompra}" title="Compra proyectada">${FormatoUtils.formatearNumero(compraProyectada)}</td>
         `;
+        
+        // Reemplazar placeholders con las celdas con event listeners
+        const placeholderVerano = tr.querySelector('.placeholder-verano');
+        const placeholderInvierno = tr.querySelector('.placeholder-invierno');
+        
+        placeholderVerano.replaceWith(celdaIndiceVerano);
+        placeholderInvierno.replaceWith(celdaIndiceInvierno);
         
         // Agregar columnas históricas dinámicas
         const columnasHistoricas = TablaRendererUtils.extraerColumnasVentasHistoricas(todosLosDatos);
@@ -298,6 +324,8 @@ class TablaRenderer {
             
             tr.appendChild(td);
         });
+        
+        console.log(`✅ Fila creada con event listeners para ${item.RUBRO} - ${item.CATEGORIA_PADRE}`);
         
         return tr;
     }
