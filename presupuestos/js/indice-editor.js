@@ -13,113 +13,24 @@ class IndiceEditor {
         
         if (datos[IndiceEditor.indiceEditando.index]) {
             const registro = datos[IndiceEditor.indiceEditando.index];
-            const temporada = IndiceEditor.indiceEditando.temporada || 'verano';
+            const solapa = IndiceEditor.indiceEditando.solapa;
             
-            console.log('=== DEBUG CÁLCULO CORREGIDO ===');
-            console.log(`Rubro: ${registro.RUBRO}`);
-            console.log(`Categoría: ${registro.CATEGORIA_PADRE}`);
-            console.log(`Editando índice de: ${temporada}`);
-            console.log(`Nuevo índice recibido: ${nuevoIndice}`);
+            console.log(`🔄 Delegando cálculo a calculadora específica de ${solapa.toUpperCase()}`);
             
-            // Actualizar el índice correspondiente PRIMERO
-            if (temporada === 'verano') {
-                registro.INDICE_VARIACION = parseFloat(nuevoIndice.toFixed(2));
-                registro._editado = true;
-                registro._indiceOriginal = registro._indiceOriginal || IndiceEditor.indiceEditando.indiceActual;
+            // Delegar a la calculadora específica según la solapa
+            let registroActualizado;
+            
+            if (solapa === 'verano') {
+                registroActualizado = CalculadoraVerano.actualizarDatosSolapa(nuevoIndice, IndiceEditor.indiceEditando, registro);
+            } else if (solapa === 'invierno') {
+                registroActualizado = CalculadoraInvierno.actualizarDatosSolapa(nuevoIndice, IndiceEditor.indiceEditando, registro);
             } else {
-                registro.INDICE_VARIACION_INVIERNO = parseFloat(nuevoIndice.toFixed(2));
-                registro._editadoInvierno = true;
-                registro._indiceOriginalInvierno = registro._indiceOriginalInvierno || IndiceEditor.indiceEditando.indiceActual;
+                console.error('Solapa no reconocida:', solapa);
+                return;
             }
             
-            // Leer las ventas anteriores de la tabla
-            const tbody = document.getElementById(`tbody-${IndiceEditor.indiceEditando.solapa}`);
-            const fila = tbody ? tbody.children[IndiceEditor.indiceEditando.index] : null;
-
-            let ventaVeranoAnterior = 0;
-            let ventaInviernoAnterior = 0;
-
-            if (fila && fila.children.length >= 10) {
-                const celdaVeranoAnterior = fila.children[4];   // "Venta Ver.Anterior"
-                const celdaInviernoAnterior = fila.children[7]; // "Venta Inv.Anterior"
-                
-                if (celdaVeranoAnterior) {
-                    const textoVerano = celdaVeranoAnterior.textContent.trim();
-                    ventaVeranoAnterior = FormatoUtils.parsearNumero(textoVerano) || 0;
-                }
-                
-                if (celdaInviernoAnterior) {
-                    const textoInvierno = celdaInviernoAnterior.textContent.trim();
-                    ventaInviernoAnterior = FormatoUtils.parsearNumero(textoInvierno) || 0;
-                }
-            } else {
-                // Fallback
-                ventaVeranoAnterior = IndiceEditor.extraerVentaAnteriorCorregida(registro, 'VERANO');
-                ventaInviernoAnterior = IndiceEditor.extraerVentaAnteriorCorregida(registro, 'INVIERNO');
-            }
-            
-            const stockProyectado = parseFloat(registro.STOCK_PROYECTADO || 0);
-            
-            // CORRECCIÓN: Solo usar el índice que se está editando, mantener el otro sin cambios
-            let indiceVerano, indiceInvierno;
-
-            if (temporada === 'verano') {
-                // Solo actualizar índice de verano, mantener invierno como estaba
-                indiceVerano = parseFloat(registro.INDICE_VARIACION || 1.0);
-                indiceInvierno = parseFloat(registro.INDICE_VARIACION_INVIERNO || 1.0);
-            } else {
-                // Solo actualizar índice de invierno, mantener verano como estaba
-                indiceVerano = parseFloat(registro.INDICE_VARIACION || 1.0);
-                indiceInvierno = parseFloat(registro.INDICE_VARIACION_INVIERNO || 1.0);
-            }
-
-            console.log(`Venta Verano Anterior: ${ventaVeranoAnterior}`);
-            console.log(`Venta Invierno Anterior: ${ventaInviernoAnterior}`);
-            console.log(`Temporada editada: ${temporada}`);
-            console.log(`Índice Verano (${temporada === 'verano' ? 'EDITADO' : 'sin cambio'}): ${indiceVerano}`);
-            console.log(`Índice Invierno (${temporada === 'invierno' ? 'EDITADO' : 'sin cambio'}): ${indiceInvierno}`);
-            console.log(`Stock Proyectado: ${stockProyectado}`);
-            
-            const fechaActual = new Date();
-            const temporadaActual = IndiceEditor.determinarTemporadaActual(fechaActual);
-            
-            // CALCULAR VENTA PROYECTADA VERANO (temporada actual + próxima)
-            let nuevaVentaVerano;
-            if (temporadaActual.tipo === 'VERANO' && temporadaActual.enCurso) {
-                // Si estamos en verano: venta completa actual + próximo verano
-                const ventaCompletaActual = Math.round(ventaVeranoAnterior * indiceVerano);
-                const ventaProximoVerano = Math.round(ventaVeranoAnterior * indiceVerano);
-                nuevaVentaVerano = ventaCompletaActual + ventaProximoVerano;
-                console.log(`VERANO (ACTUAL + PRÓXIMO): ${ventaVeranoAnterior} * ${indiceVerano} + ${ventaVeranoAnterior} * ${indiceVerano} = ${nuevaVentaVerano}`);
-            } else {
-                // Si no estamos en verano: solo próximo verano
-                nuevaVentaVerano = Math.round(ventaVeranoAnterior * indiceVerano);
-                console.log(`VERANO PRÓXIMO: ${ventaVeranoAnterior} * ${indiceVerano} = ${nuevaVentaVerano}`);
-            }
-
-            // CALCULAR VENTA PROYECTADA INVIERNO (temporada actual + próxima)
-            let nuevaVentaInvierno;
-            if (temporadaActual.tipo === 'INVIERNO' && temporadaActual.enCurso) {
-                // Si estamos en invierno: venta completa actual + próximo invierno
-                const ventaCompletaActual = Math.round(ventaInviernoAnterior * indiceInvierno);
-                const ventaProximoInvierno = Math.round(ventaInviernoAnterior * indiceInvierno);
-                nuevaVentaInvierno = ventaCompletaActual + ventaProximoInvierno;
-                console.log(`INVIERNO (ACTUAL + PRÓXIMO): ${ventaInviernoAnterior} * ${indiceInvierno} + ${ventaInviernoAnterior} * ${indiceInvierno} = ${nuevaVentaInvierno}`);
-            } else {
-                // Si no estamos en invierno: solo próximo invierno
-                nuevaVentaInvierno = Math.round(ventaInviernoAnterior * indiceInvierno);
-                console.log(`INVIERNO PRÓXIMO: ${ventaInviernoAnterior} * ${indiceInvierno} = ${nuevaVentaInvierno}`);
-            }
-            
-            const nuevaCompraProyectada = Math.round(stockProyectado - nuevaVentaVerano - nuevaVentaInvierno);
-            
-            console.log(`Compra Proyectada: ${stockProyectado} - ${nuevaVentaVerano} - ${nuevaVentaInvierno} = ${nuevaCompraProyectada}`);
-            console.log('=== FIN DEBUG ===');
-            
-            // Actualizar valores calculados
-            registro.VENTA_PROY_VERANO = nuevaVentaVerano;
-            registro.VENTA_PROY_INVIERNO = nuevaVentaInvierno;
-            registro.COMPRA_PROYECTADA = nuevaCompraProyectada;
+            // Actualizar los datos en memoria
+            datos[IndiceEditor.indiceEditando.index] = registroActualizado;
         }
     }
 
