@@ -206,6 +206,7 @@ class IndiceEditor {
     static init() {
         IndiceEditor.configurarModal();
         IndiceEditor.configurarEventListeners();
+        IndiceEditor.configurarEventosRestaurar();
     }
 
     static configurarModal() {
@@ -480,6 +481,144 @@ class IndiceEditor {
         console.log(`En curso: ${temporada.enCurso}`);
         
         return { fecha: fechaSimulada, temporada };
+    }
+
+    /**
+     * NUEVA: Marcar índice como editado visualmente
+     */
+    static marcarIndiceEditado(solapa, index, temporada, nuevoValor) {
+        const tbody = document.getElementById(`tbody-${solapa}`);
+        const fila = tbody.children[index];
+        
+        if (!fila) return;
+        
+        // Determinar qué celda corresponde según la temporada
+        let celdaIndice;
+        if (temporada === 'verano') {
+            celdaIndice = fila.children[4]; // Índice Ver. Variación
+        } else if (temporada === 'invierno') {
+            celdaIndice = fila.children[7]; // Índice Inv. Variación
+        }
+        
+        if (celdaIndice) {
+            // Agregar clases de resaltado
+            celdaIndice.classList.add('indice-editado', 'animate-pulse');
+            
+            // Cambiar el estilo del input
+            const input = celdaIndice.querySelector('.indice-input');
+            if (input) {
+                input.classList.add('input-editado');
+                
+                // Agregar tooltip con valor original si no existe
+                if (!input.hasAttribute('data-valor-original')) {
+                    // Obtener valor original del registro
+                    const app = window.presupuestoApp;
+                    const datos = app.getDatos(solapa);
+                    const registro = datos[index];
+                    const valorOriginal = TablaRendererUtils.obtenerIndiceOriginal(registro);
+                    
+                    input.setAttribute('data-valor-original', valorOriginal.toFixed(2));
+                    input.setAttribute('title', `Valor original: ${valorOriginal.toFixed(2)} | Valor actual: ${nuevoValor.toFixed(2)}`);
+                } else {
+                    // Actualizar tooltip con nuevo valor
+                    const valorOriginal = input.getAttribute('data-valor-original');
+                    input.setAttribute('title', `Valor original: ${valorOriginal} | Valor actual: ${nuevoValor.toFixed(2)}`);
+                }
+            }
+            
+            // Remover animación después de 2 segundos
+            setTimeout(() => {
+                celdaIndice.classList.remove('animate-pulse');
+            }, 2000);
+            
+            console.log(`🎨 Índice ${temporada} marcado como editado en fila ${index}`);
+        }
+    }
+
+    /**
+     * NUEVA: Restaurar índice a valor original
+     */
+    static restaurarIndiceOriginal(solapa, index, temporada) {
+        const app = window.presupuestoApp;
+        const datos = app.getDatos(solapa);
+        const registro = datos[index];
+        
+        if (!registro) return;
+        
+        // Obtener valor original
+        const valorOriginal = TablaRendererUtils.obtenerIndiceOriginal(registro);
+        
+        // Restaurar en el registro
+        if (temporada === 'verano') {
+            registro.INDICE_VARIACION = valorOriginal;
+        } else if (temporada === 'invierno') {
+            registro.INDICE_VARIACION_INVIERNO = valorOriginal;
+        }
+        
+        // Actualizar visualmente
+        const tbody = document.getElementById(`tbody-${solapa}`);
+        const fila = tbody.children[index];
+        
+        if (fila) {
+            let celdaIndice;
+            if (temporada === 'verano') {
+                celdaIndice = fila.children[4];
+            } else if (temporada === 'invierno') {
+                celdaIndice = fila.children[7];
+            }
+            
+            if (celdaIndice) {
+                // Remover clases de edición
+                celdaIndice.classList.remove('indice-editado');
+                
+                const input = celdaIndice.querySelector('.indice-input');
+                if (input) {
+                    input.classList.remove('input-editado');
+                    input.value = valorOriginal.toFixed(2);
+                    input.removeAttribute('title');
+                    input.removeAttribute('data-valor-original');
+                }
+            }
+        }
+        
+        // Recalcular con el valor original
+        IndiceEditor.actualizarDatosMemoriaFrontendCorregido(valorOriginal);
+        IndiceEditor.actualizarFilaTablaSoloFrontendCorregido();
+        IndiceEditor.marcarIndiceEditado(
+            IndiceEditor.indiceEditando.solapa,
+            IndiceEditor.indiceEditando.index,
+            IndiceEditor.indiceEditando.temporada,
+            nuevoIndice
+        );
+                
+        UIUtils.mostrarAlerta(`Índice ${temporada} restaurado al valor original: ${valorOriginal.toFixed(2)}`, 'info');
+        
+        console.log(`🔄 Índice ${temporada} restaurado a valor original: ${valorOriginal.toFixed(2)}`);
+    }
+
+    /**
+     * NUEVO: Configurar eventos de doble clic para restaurar
+     */
+    static configurarEventosRestaurar() {
+        document.addEventListener('dblclick', function(event) {
+            if (event.target.classList.contains('input-editado')) {
+                const celda = event.target.closest('td');
+                if (celda && celda.classList.contains('indice-editado')) {
+                    const fila = celda.closest('tr');
+                    const tbody = fila.parentNode;
+                    const index = Array.from(tbody.children).indexOf(fila);
+                    
+                    // Determinar solapa y temporada
+                    const tablaId = tbody.closest('table').id;
+                    const solapa = tablaId.replace('tabla-', '');
+                    const temporada = celda.getAttribute('data-temporada');
+                    
+                    if (confirm(`¿Restaurar índice ${temporada} al valor original?`)) {
+                        IndiceEditor.restaurarIndiceOriginal(solapa, index, temporada);
+                    }
+                }
+            }
+        });
     }
 }
 

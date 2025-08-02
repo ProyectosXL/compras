@@ -248,45 +248,70 @@
         user-select: none;
     }
 
-    /* Estilos para índices modificados */
-    .indice-modificado {
+    /* Estilos para índices editados */
+    .indice-editado {
         background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%) !important;
         border: 2px solid #ffc107 !important;
         border-radius: 4px !important;
+        position: relative;
     }
 
-    .input-modificado {
+    .indice-editado::after {
+        content: '✏️';
+        position: absolute;
+        top: 2px;
+        right: 2px;
+        font-size: 0.7rem;
+        opacity: 0.8;
+    }
+
+    .input-editado {
         background: transparent !important;
         font-weight: bold !important;
         color: #856404 !important;
+        text-shadow: 0 1px 1px rgba(255, 255, 255, 0.5);
     }
 
-    .indicador-cambio {
-        animation: pulse-indicator 2s infinite;
+    .animate-pulse {
+        animation: pulse-editado 1.5s ease-in-out;
     }
 
-    @keyframes pulse-indicator {
-        0% { opacity: 1; transform: scale(1); }
-        50% { opacity: 0.7; transform: scale(1.1); }
-        100% { opacity: 1; transform: scale(1); }
+    @keyframes pulse-editado {
+        0% { 
+            transform: scale(1); 
+            box-shadow: 0 0 0 0 rgba(255, 193, 7, 0.7);
+        }
+        50% { 
+            transform: scale(1.05); 
+            box-shadow: 0 0 0 10px rgba(255, 193, 7, 0);
+        }
+        100% { 
+            transform: scale(1); 
+            box-shadow: 0 0 0 0 rgba(255, 193, 7, 0);
+        }
     }
 
-    .celda-actualizada {
-        animation: highlight-update 1s ease-in-out;
-    }
-
-    @keyframes highlight-update {
-        0% { background-color: rgba(40, 167, 69, 0.3); }
-        50% { background-color: rgba(40, 167, 69, 0.1); }
-        100% { background-color: transparent; }
-    }
-
-    /* Tooltip personalizado para valores originales */
-    .tooltip-inner {
-        background-color: #343a40;
+    /* Botón para restaurar valor original */
+    .btn-restaurar-original {
+        position: absolute;
+        top: -5px;
+        right: -5px;
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        background: #dc3545;
         color: white;
-        font-weight: bold;
-        border-radius: 4px;
+        border: none;
+        font-size: 0.6rem;
+        padding: 0;
+        line-height: 1;
+        cursor: pointer;
+        opacity: 0;
+        transition: opacity 0.3s ease;
+    }
+
+    .indice-editado:hover .btn-restaurar-original {
+        opacity: 1;
     }
 
 </style>
