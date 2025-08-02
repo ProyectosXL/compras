@@ -82,9 +82,9 @@ class PresupuestoCalculos {
     }
     
     /**
-     * CORREGIDO: Calcula la venta proyectada para INVIERNO (temporada actual + próxima)
+     * CORREGIDO: Calcula la venta proyectada para INVIERNO según contexto de temporada
      */
-    public static function calcularVentaProyectadaInvierno($ventaInviernoAnterior, $indiceVariacion, $fecha = null) {
+    public static function calcularVentaProyectadaInvierno($ventaInviernoAnterior, $indiceVariacion, $fecha = null, $contextoSolapa = 'invierno') {
         // Validar datos de entrada
         $ventaInviernoAnterior = (float)$ventaInviernoAnterior;
         $indiceVariacion = (float)$indiceVariacion;
@@ -100,27 +100,49 @@ class PresupuestoCalculos {
         
         $temporadaActual = self::obtenerTemporadaActual($fecha);
         
-        // CORRECCIÓN: Si estamos en invierno, incluir temporada actual completa + próxima
-        if ($temporadaActual['temporada'] === 'INVIERNO') {
-            // Venta completa actual + próximo invierno
-            $ventaCompletaActual = round($ventaInviernoAnterior * $indiceVariacion);
-            $ventaProximoInvierno = round($ventaInviernoAnterior * $indiceVariacion);
-            $ventaProyectada = $ventaCompletaActual + $ventaProximoInvierno;
-            
-            error_log("INVIERNO PHP (ACTUAL + PRÓXIMO): $ventaInviernoAnterior * $indiceVariacion + $ventaInviernoAnterior * $indiceVariacion = $ventaProyectada");
+        if ($contextoSolapa === 'invierno') {
+            // SOLAPA COMPRA PROYECTADA INVIERNO
+            if ($temporadaActual['temporada'] === 'INVIERNO') {
+                // Contexto: Transitando invierno
+                // Proporcional Invierno Actual + Próximo Invierno Completo
+                $diasRestantes = self::calcularDiasRestantesTemporada($fecha);
+                $diasTotales = self::calcularDiasTotalesInvierno();
+                $proporcion = $diasRestantes / $diasTotales;
+                
+                $inviernoActualProporcional = round($ventaInviernoAnterior * $indiceVariacion * $proporcion);
+                $proximoInviernoCompleto = round($ventaInviernoAnterior * $indiceVariacion);
+                $ventaProyectada = $inviernoActualProporcional + $proximoInviernoCompleto;
+                
+                error_log("INVIERNO PHP (Solapa Inv - Transitando Inv): Proporcional ($inviernoActualProporcional) + Completo ($proximoInviernoCompleto) = $ventaProyectada");
+            } else {
+                // Contexto: Transitando verano - Próximo Invierno Completo
+                $ventaProyectada = round($ventaInviernoAnterior * $indiceVariacion);
+                error_log("INVIERNO PHP (Solapa Inv - Transitando Ver): Próximo completo = $ventaProyectada");
+            }
         } else {
-            // Solo próximo invierno
-            $ventaProyectada = round($ventaInviernoAnterior * $indiceVariacion);
-            error_log("INVIERNO PHP (SOLO PRÓXIMO): $ventaInviernoAnterior * $indiceVariacion = $ventaProyectada");
+            // SOLAPA COMPRA PROYECTADA VERANO
+            if ($temporadaActual['temporada'] === 'INVIERNO') {
+                // Contexto: Transitando invierno - Proporcional Invierno Actual
+                $diasRestantes = self::calcularDiasRestantesTemporada($fecha);
+                $diasTotales = self::calcularDiasTotalesInvierno();
+                $proporcion = $diasRestantes / $diasTotales;
+                
+                $ventaProyectada = round($ventaInviernoAnterior * $indiceVariacion * $proporcion);
+                error_log("INVIERNO PHP (Solapa Ver - Transitando Inv): Proporcional = $ventaProyectada");
+            } else {
+                // Contexto: Transitando verano - Próximo Invierno Completo
+                $ventaProyectada = round($ventaInviernoAnterior * $indiceVariacion);
+                error_log("INVIERNO PHP (Solapa Ver - Transitando Ver): Próximo completo = $ventaProyectada");
+            }
         }
         
         return $ventaProyectada;
     }
     
-    /**
-     * CORREGIDO: Calcula la venta proyectada para VERANO (temporada actual + próxima)
-     */
-    public static function calcularVentaProyectadaVerano($ventaVeranoAnterior, $indiceVariacion, $fecha = null) {
+    /*
+    * CORREGIDO: Calcula la venta proyectada para VERANO según contexto de temporada
+    */
+    public static function calcularVentaProyectadaVerano($ventaVeranoAnterior, $indiceVariacion, $fecha = null, $contextoSolapa = 'verano') {
         // Validar datos de entrada
         $ventaVeranoAnterior = (float)$ventaVeranoAnterior;
         $indiceVariacion = (float)$indiceVariacion;
@@ -136,18 +158,40 @@ class PresupuestoCalculos {
         
         $temporadaActual = self::obtenerTemporadaActual($fecha);
         
-        // CORRECCIÓN: Si estamos en verano, incluir temporada actual completa + próxima
-        if ($temporadaActual['temporada'] === 'VERANO') {
-            // Venta completa actual + próximo verano
-            $ventaCompletaActual = round($ventaVeranoAnterior * $indiceVariacion);
-            $ventaProximoVerano = round($ventaVeranoAnterior * $indiceVariacion);
-            $ventaProyectada = $ventaCompletaActual + $ventaProximoVerano;
-            
-            error_log("VERANO PHP (ACTUAL + PRÓXIMO): $ventaVeranoAnterior * $indiceVariacion + $ventaVeranoAnterior * $indiceVariacion = $ventaProyectada");
+        if ($contextoSolapa === 'verano') {
+            // SOLAPA COMPRA PROYECTADA VERANO
+            if ($temporadaActual['temporada'] === 'VERANO') {
+                // Contexto: Transitando verano
+                // Proporcional Verano Actual + Próximo Verano Completo
+                $diasRestantes = self::calcularDiasRestantesTemporada($fecha);
+                $diasTotales = self::calcularDiasTotalesVerano();
+                $proporcion = $diasRestantes / $diasTotales;
+                
+                $veranoActualProporcional = round($ventaVeranoAnterior * $indiceVariacion * $proporcion);
+                $proximoVeranoCompleto = round($ventaVeranoAnterior * $indiceVariacion);
+                $ventaProyectada = $veranoActualProporcional + $proximoVeranoCompleto;
+                
+                error_log("VERANO PHP (Solapa Ver - Transitando Ver): Proporcional ($veranoActualProporcional) + Completo ($proximoVeranoCompleto) = $ventaProyectada");
+            } else {
+                // Contexto: Transitando invierno - Próximo Verano Completo
+                $ventaProyectada = round($ventaVeranoAnterior * $indiceVariacion);
+                error_log("VERANO PHP (Solapa Ver - Transitando Inv): Próximo completo = $ventaProyectada");
+            }
         } else {
-            // Solo próximo verano
-            $ventaProyectada = round($ventaVeranoAnterior * $indiceVariacion);
-            error_log("VERANO PHP (SOLO PRÓXIMO): $ventaVeranoAnterior * $indiceVariacion = $ventaProyectada");
+            // SOLAPA COMPRA PROYECTADA INVIERNO
+            if ($temporadaActual['temporada'] === 'VERANO') {
+                // Contexto: Transitando verano - Proporcional Verano Actual
+                $diasRestantes = self::calcularDiasRestantesTemporada($fecha);
+                $diasTotales = self::calcularDiasTotalesVerano();
+                $proporcion = $diasRestantes / $diasTotales;
+                
+                $ventaProyectada = round($ventaVeranoAnterior * $indiceVariacion * $proporcion);
+                error_log("VERANO PHP (Solapa Inv - Transitando Ver): Proporcional = $ventaProyectada");
+            } else {
+                // Contexto: Transitando invierno - Próximo Verano Completo
+                $ventaProyectada = round($ventaVeranoAnterior * $indiceVariacion);
+                error_log("VERANO PHP (Solapa Inv - Transitando Inv): Próximo completo = $ventaProyectada");
+            }
         }
         
         return $ventaProyectada;
@@ -216,36 +260,34 @@ class PresupuestoCalculos {
     }
     
     /**
-     * CORREGIDO: Procesa un registro individual para la solapa de compra proyectada
+     * CORREGIDO: Procesar registro individual para compra proyectada con contexto de solapa
      */
-    public static function procesarRegistroCompraProyectada($registro, $stockProyectado, $temporadaProyectada, $fecha = null) {
+    public static function procesarRegistroCompraProyectada($registro, $stockProyectado, $temporadaProyectada, $fecha = null, $contextoSolapa = null) {
         $temporadaActual = self::obtenerTemporadaActual($fecha);
         $indiceVariacion = (float)($registro['INDICE_VARIACION'] ?? 1.0);
+        $indiceVariacionInvierno = (float)($registro['INDICE_VARIACION_INVIERNO'] ?? $indiceVariacion);
         
-        // CORRECCIÓN: Buscar ventas de temporadas anteriores con mejor lógica
+        // Extraer ventas anteriores
         $ventaVeranoAnterior = self::extraerVentaAnterior($registro, 'VERANO');
         $ventaInviernoAnterior = self::extraerVentaAnterior($registro, 'INVIERNO');
         
-        // Debug para diagnóstico
+        // Debug
         error_log("Debug - Procesando registro: " . ($registro['RUBRO'] ?? 'Unknown'));
+        error_log("Debug - Contexto Solapa: " . ($contextoSolapa ?? 'no especificado'));
         error_log("Debug - Venta Verano Anterior: $ventaVeranoAnterior");
         error_log("Debug - Venta Invierno Anterior: $ventaInviernoAnterior");
-        error_log("Debug - Índice Variación: $indiceVariacion");
+        error_log("Debug - Índice Verano: $indiceVariacion");
+        error_log("Debug - Índice Invierno: $indiceVariacionInvierno");
         error_log("Debug - Temporada Actual: " . $temporadaActual['codigo']);
         
-        // CORRECCIÓN: Usar índices separados para cada temporada
-        $indiceVerano = (float)($registro['INDICE_VARIACION'] ?? 1.0);
-        $indiceInvierno = (float)($registro['INDICE_VARIACION_INVIERNO'] ?? $indiceVerano);
-
-        // Calcular ventas proyectadas con índices separados
-        $ventaProyVerano = self::calcularVentaProyectadaVerano($ventaVeranoAnterior, $indiceVerano, $fecha);
-        $ventaProyInvierno = self::calcularVentaProyectadaInvierno($ventaInviernoAnterior, $indiceInvierno, $fecha);
-
-        error_log("PHP - Índice Verano: $indiceVerano, Índice Invierno: $indiceInvierno");
+        // Determinar contexto de solapa si no se especifica
+        if (!$contextoSolapa) {
+            $contextoSolapa = ($temporadaProyectada === 'VERANO') ? 'verano' : 'invierno';
+        }
         
-        // Debug de resultados
-        error_log("Debug - Venta Proy Verano: $ventaProyVerano");
-        error_log("Debug - Venta Proy Invierno: $ventaProyInvierno");
+        // Calcular ventas proyectadas con contexto específico
+        $ventaProyVerano = self::calcularVentaProyectadaVerano($ventaVeranoAnterior, $indiceVariacion, $fecha, $contextoSolapa);
+        $ventaProyInvierno = self::calcularVentaProyectadaInvierno($ventaInviernoAnterior, $indiceVariacionInvierno, $fecha, $contextoSolapa);
         
         // Calcular compra proyectada
         $compraProyectada = self::calcularCompraProyectada($stockProyectado, $ventaProyVerano, $ventaProyInvierno);
@@ -255,7 +297,8 @@ class PresupuestoCalculos {
             'venta_proy_invierno' => $ventaProyInvierno,
             'compra_proyectada' => $compraProyectada,
             'temporada_actual' => $temporadaActual,
-            'dias_restantes' => self::calcularDiasRestantesTemporada($fecha)
+            'dias_restantes' => self::calcularDiasRestantesTemporada($fecha),
+            'contexto_aplicado' => $contextoSolapa
         ];
     }
     
@@ -375,6 +418,30 @@ class PresupuestoCalculos {
         if ($indice > 10) return 10; // Máximo 1000% de variación
         
         return round($indice, 4);
+    }
+
+    /**
+     * NUEVO: Calcular días totales de una temporada
+     */
+    private static function calcularDiasTotalesVerano() {
+        // Verano: 1 agosto año anterior al 31 enero año actual
+        $anoActual = date('Y');
+        $inicioVerano = new DateTime(($anoActual - 1) . '-08-01');
+        $finVerano = new DateTime($anoActual . '-01-31');
+        $diferencia = $finVerano->diff($inicioVerano);
+        return $diferencia->days + 1;
+    }
+
+    /**
+     * NUEVO: Calcular días totales de invierno
+     */
+    private static function calcularDiasTotalesInvierno() {
+        // Invierno: 1 febrero al 31 julio del mismo año
+        $anoActual = date('Y');
+        $inicioInvierno = new DateTime($anoActual . '-02-01');
+        $finInvierno = new DateTime($anoActual . '-07-31');
+        $diferencia = $finInvierno->diff($inicioInvierno);
+        return $diferencia->days + 1;
     }
     
     /**

@@ -1,5 +1,5 @@
 
-// Editor de índices de variación - CORREGIDO PARA TEMPORADA ACTUAL
+// Editor de índices de variación - SIMPLIFICADO Y CORREGIDO
 // Archivo: presupuestos/js/indice-editor.js
 
 class IndiceEditor {
@@ -7,6 +7,9 @@ class IndiceEditor {
     static historialCambios = [];
     static modalInstancia = null;
 
+    /**
+     * CORREGIDO: Actualizar datos en memoria delegando a calculadoras específicas
+     */
     static actualizarDatosMemoriaFrontendCorregido(nuevoIndice) {
         const app = window.presupuestoApp;
         const datos = app.getDatos(IndiceEditor.indiceEditando.solapa);
@@ -21,8 +24,10 @@ class IndiceEditor {
             let registroActualizado;
             
             if (solapa === 'verano') {
+                // Usar calculadora de verano
                 registroActualizado = CalculadoraVerano.actualizarDatosSolapa(nuevoIndice, IndiceEditor.indiceEditando, registro);
             } else if (solapa === 'invierno') {
+                // Usar calculadora de invierno
                 registroActualizado = CalculadoraInvierno.actualizarDatosSolapa(nuevoIndice, IndiceEditor.indiceEditando, registro);
             } else {
                 console.error('Solapa no reconocida:', solapa);
@@ -31,17 +36,110 @@ class IndiceEditor {
             
             // Actualizar los datos en memoria
             datos[IndiceEditor.indiceEditando.index] = registroActualizado;
+            
+            console.log(`✅ Datos actualizados en memoria para ${registro.RUBRO} - ${registro.CATEGORIA_PADRE}`);
         }
     }
 
     /**
-     * NUEVO: Determinar temporada actual con más precisión
+     * SIMPLIFICADO: Actualizar fila usando calculadoras específicas
+     */
+    static actualizarFilaTablaSoloFrontendCorregido() {
+        const solapa = IndiceEditor.indiceEditando.solapa;
+        
+        console.log(`🔄 Actualizando fila en tabla ${solapa}`);
+        
+        // Delegar a la calculadora específica para actualizar la fila
+        if (solapa === 'verano') {
+            CalculadoraVerano.actualizarFilaTabla(IndiceEditor.indiceEditando, 
+                window.presupuestoApp.getDatos(solapa)[IndiceEditor.indiceEditando.index]);
+        } else if (solapa === 'invierno') {
+            CalculadoraInvierno.actualizarFilaTabla(IndiceEditor.indiceEditando, 
+                window.presupuestoApp.getDatos(solapa)[IndiceEditor.indiceEditando.index]);
+        } else {
+            console.error('Solapa no reconocida para actualización de fila:', solapa);
+        }
+    }
+
+    /**
+     * Mostrar preview del cálculo indicando método
+     */
+    static mostrarPreviewCalculo(nuevoIndice) {
+        if (!IndiceEditor.indiceEditando || isNaN(nuevoIndice)) return;
+        
+        const indiceFormateado = parseFloat(nuevoIndice.toFixed(2));
+        const diferencia = indiceFormateado - IndiceEditor.indiceEditando.indiceActual;
+        const porcentajeCambio = (diferencia / IndiceEditor.indiceEditando.indiceActual) * 100;
+        
+        let previewElement = document.getElementById('preview-calculo');
+        if (!previewElement) {
+            previewElement = document.createElement('div');
+            previewElement.id = 'preview-calculo';
+            previewElement.className = 'mt-2 p-2 bg-light rounded';
+            document.querySelector('#modalEditarIndice .modal-body').appendChild(previewElement);
+        }
+        
+        // Determinar método de cálculo actual
+        const fechaActual = new Date();
+        const temporadaActual = IndiceEditor.determinarTemporadaActual(fechaActual);
+        const solapa = IndiceEditor.indiceEditando.solapa;
+        
+        let infoCalculoVerano = '';
+        let infoCalculoInvierno = '';
+        
+        // Lógica específica según solapa y temporada
+        if (solapa === 'verano') {
+            if (temporadaActual.tipo === 'VERANO' && temporadaActual.enCurso) {
+                const diasRestantes = IndiceEditor.calcularDiasRestantesVerano(fechaActual);
+                infoCalculoVerano = `<span class="text-primary">🔥 VERANO: Proporcional actual + Próximo completo (${diasRestantes} días restantes)</span>`;
+                infoCalculoInvierno = `<span class="text-muted">❄️ INVIERNO: Próximo completo</span>`;
+            } else {
+                infoCalculoVerano = `<span class="text-muted">🔥 VERANO: Próximo completo</span>`;
+                if (temporadaActual.tipo === 'INVIERNO') {
+                    const diasRestantes = IndiceEditor.calcularDiasRestantesInvierno(fechaActual);
+                    infoCalculoInvierno = `<span class="text-info">❄️ INVIERNO: Proporcional (${diasRestantes} días restantes)</span>`;
+                } else {
+                    infoCalculoInvierno = `<span class="text-muted">❄️ INVIERNO: Próximo completo</span>`;
+                }
+            }
+        } else if (solapa === 'invierno') {
+            if (temporadaActual.tipo === 'INVIERNO' && temporadaActual.enCurso) {
+                const diasRestantes = IndiceEditor.calcularDiasRestantesInvierno(fechaActual);
+                infoCalculoVerano = `<span class="text-muted">🔥 VERANO: Próximo completo</span>`;
+                infoCalculoInvierno = `<span class="text-info">❄️ INVIERNO: Proporcional actual + Próximo completo (${diasRestantes} días restantes)</span>`;
+            } else {
+                if (temporadaActual.tipo === 'VERANO') {
+                    const diasRestantes = IndiceEditor.calcularDiasRestantesVerano(fechaActual);
+                    infoCalculoVerano = `<span class="text-primary">🔥 VERANO: Proporcional (${diasRestantes} días restantes)</span>`;
+                } else {
+                    infoCalculoVerano = `<span class="text-muted">🔥 VERANO: Próximo completo</span>`;
+                }
+                infoCalculoInvierno = `<span class="text-muted">❄️ INVIERNO: Próximo completo</span>`;
+            }
+        }
+        
+        let mensaje = `Cambio: ${diferencia.toFixed(2)} `;
+        mensaje += `(${porcentajeCambio > 0 ? '+' : ''}${porcentajeCambio.toFixed(1)}%)`;
+        
+        previewElement.innerHTML = `
+            <small class="text-muted">
+                <strong>Preview de Cálculo (Solapa ${solapa.toUpperCase()}):</strong><br>
+                Índice anterior: ${IndiceEditor.indiceEditando.indiceActual.toFixed(2)}<br>
+                Índice nuevo: ${indiceFormateado.toFixed(2)}<br>
+                ${mensaje}<br><br>
+                <strong>Método por temporada:</strong><br>
+                ${infoCalculoVerano}<br>
+                ${infoCalculoInvierno}
+            </small>
+        `;
+    }
+
+    /**
+     * Determinar temporada actual con más precisión
      */
     static determinarTemporadaActual(fecha) {
         const mes = fecha.getMonth() + 1; // 1-12
-        const dia = fecha.getDate();
         
-        // Definir rangos exactos de temporadas
         if (mes >= 8 || mes === 1) {
             // VERANO: Agosto a Enero
             return {
@@ -67,61 +165,7 @@ class IndiceEditor {
     }
 
     /**
-     * CORREGIDO: Mostrar preview del cálculo indicando método
-     */
-    static mostrarPreviewCalculo(nuevoIndice) {
-        if (!IndiceEditor.indiceEditando || isNaN(nuevoIndice)) return;
-        
-        const indiceFormateado = parseFloat(nuevoIndice.toFixed(2));
-        const diferencia = indiceFormateado - IndiceEditor.indiceEditando.indiceActual;
-        const porcentajeCambio = (diferencia / IndiceEditor.indiceEditando.indiceActual) * 100;
-        
-        let previewElement = document.getElementById('preview-calculo');
-        if (!previewElement) {
-            previewElement = document.createElement('div');
-            previewElement.id = 'preview-calculo';
-            previewElement.className = 'mt-2 p-2 bg-light rounded';
-            document.querySelector('#modalEditarIndice .modal-body').appendChild(previewElement);
-        }
-        
-        // CORRECCIÓN: Determinar método de cálculo actual
-        const fechaActual = new Date();
-        const temporadaActual = IndiceEditor.determinarTemporadaActual(fechaActual);
-        
-        let infoCalculoVerano = '';
-        let infoCalculoInvierno = '';
-        
-        if (temporadaActual.tipo === 'VERANO' && temporadaActual.enCurso) {
-            const diasRestantes = IndiceEditor.calcularDiasRestantesVerano(fechaActual);
-            infoCalculoVerano = `<span class="text-primary">🔥 VERANO: Cálculo proporcional (${diasRestantes} días restantes)</span>`;
-            infoCalculoInvierno = `<span class="text-muted">❄️ INVIERNO: Cálculo normal</span>`;
-        } else if (temporadaActual.tipo === 'INVIERNO' && temporadaActual.enCurso) {
-            const diasRestantes = IndiceEditor.calcularDiasRestantesInvierno(fechaActual);
-            infoCalculoVerano = `<span class="text-muted">🔥 VERANO: Cálculo normal</span>`;
-            infoCalculoInvierno = `<span class="text-info">❄️ INVIERNO: Cálculo proporcional (${diasRestantes} días restantes)</span>`;
-        } else {
-            infoCalculoVerano = `<span class="text-muted">🔥 VERANO: Cálculo normal</span>`;
-            infoCalculoInvierno = `<span class="text-muted">❄️ INVIERNO: Cálculo normal</span>`;
-        }
-        
-        let mensaje = `Cambio: ${diferencia.toFixed(2)} `;
-        mensaje += `(${porcentajeCambio > 0 ? '+' : ''}${porcentajeCambio.toFixed(1)}%)`;
-        
-        previewElement.innerHTML = `
-            <small class="text-muted">
-                <strong>Preview de Cálculo:</strong><br>
-                Índice anterior: ${IndiceEditor.indiceEditando.indiceActual.toFixed(2)}<br>
-                Índice nuevo: ${indiceFormateado.toFixed(2)}<br>
-                ${mensaje}<br><br>
-                <strong>Método por temporada:</strong><br>
-                ${infoCalculoVerano}<br>
-                ${infoCalculoInvierno}
-            </small>
-        `;
-    }
-
-    /**
-     * CORREGIDO: Calcular días restantes de temporada de verano usando días reales
+     * Calcular días restantes de temporada de verano
      */
     static calcularDiasRestantesVerano(fecha) {
         const mes = fecha.getMonth() + 1;
@@ -129,175 +173,36 @@ class IndiceEditor {
         
         let finVerano;
         if (mes >= 8) {
-            // Estamos en agosto-diciembre, el verano termina el 31 de enero del año siguiente
             finVerano = new Date(ano + 1, 0, 31, 23, 59, 59);
         } else if (mes === 1) {
-            // Estamos en enero, el verano termina el 31 de enero del mismo año
             finVerano = new Date(ano, 0, 31, 23, 59, 59);
         } else {
-            return 0; // No estamos en temporada de verano
-        }
-        
-        if (fecha > finVerano) {
             return 0;
         }
         
-        const diferencia = finVerano - fecha;
-        const diasRestantes = Math.ceil(diferencia / (1000 * 60 * 60 * 24));
-        console.log(`Días restantes VERANO: ${diasRestantes}`);
-        return diasRestantes;
+        if (fecha > finVerano) return 0;
+        return Math.ceil((finVerano - fecha) / (1000 * 60 * 60 * 24));
     }
 
     /**
-     * CORREGIDO: Calcular días restantes de temporada de invierno usando días reales
+     * Calcular días restantes de temporada de invierno
      */
     static calcularDiasRestantesInvierno(fecha) {
         const mes = fecha.getMonth() + 1;
         const ano = fecha.getFullYear();
         
-        if (mes < 2 || mes > 7) {
-            return 0; // No estamos en temporada de invierno
-        }
+        if (mes < 2 || mes > 7) return 0;
         
-        const finInvierno = new Date(ano, 6, 31, 23, 59, 59); // 31 de julio
+        const finInvierno = new Date(ano, 6, 31, 23, 59, 59);
+        if (fecha > finInvierno) return 0;
         
-        if (fecha > finInvierno) {
-            return 0;
-        }
-        
-        const diferencia = finInvierno - fecha;
-        const diasRestantes = Math.ceil(diferencia / (1000 * 60 * 60 * 24));
-        console.log(`Días restantes INVIERNO: ${diasRestantes}`);
-        return diasRestantes;
+        return Math.ceil((finInvierno - fecha) / (1000 * 60 * 60 * 24));
     }
 
-    /**
-     * CORREGIDO: Extraer venta anterior con búsqueda mejorada
-     */
-    static extraerVentaAnteriorCorregida(registro, temporada) {
-        const anoActual = new Date().getFullYear() % 100;
-        
-        if (temporada === 'VERANO') {
-            // Para VERANO, buscar formato XX-XX del año anterior
-            for (let i = 1; i <= 3; i++) {
-                let anoInicialAnterior = (anoActual - i) < 0 ? (anoActual - i + 100) : (anoActual - i);
-                let anoFinalAnterior = (anoActual - i + 1) < 0 ? (anoActual - i + 1 + 100) : (anoActual - i + 1);
-                
-                const anoInicialStr = anoInicialAnterior.toString().padStart(2, '0');
-                const anoFinalStr = anoFinalAnterior.toString().padStart(2, '0');
-                
-                const posiblesColumnas = [
-                    `VERANO ${anoInicialStr}-${anoFinalStr}`,
-                    `VERANO ${anoInicialStr}`,
-                    `VERANO_${anoInicialStr}`,
-                    `VERANO${anoInicialStr}`,
-                    `VTA_VERANO_${anoInicialStr}`,
-                    `VTA_VERANO${anoInicialStr}`
-                ];
-                
-                for (const columna of posiblesColumnas) {
-                    if (registro[columna] && !isNaN(registro[columna]) && registro[columna] > 0) {
-                        console.log(`Encontrada columna VERANO: ${columna} = ${registro[columna]}`);
-                        return parseFloat(registro[columna]);
-                    }
-                }
-            }
-        } else {
-            // Para INVIERNO, mantener búsqueda simple por año
-            for (let i = 1; i <= 3; i++) {
-                let anoObjetivo = anoActual - i;
-                if (anoObjetivo < 0) anoObjetivo += 100;
-                
-                const anoStr = anoObjetivo.toString().padStart(2, '0');
-                
-                const posiblesColumnas = [
-                    `INVIERNO ${anoStr}`,
-                    `INVIERNO_${anoStr}`,
-                    `INVIERNO${anoStr}`,
-                    `VTA_INVIERNO_${anoStr}`,
-                    `VTA_INVIERNO${anoStr}`
-                ];
-                
-                for (const columna of posiblesColumnas) {
-                    if (registro[columna] && !isNaN(registro[columna]) && registro[columna] > 0) {
-                        console.log(`Encontrada columna INVIERNO: ${columna} = ${registro[columna]}`);
-                        return parseFloat(registro[columna]);
-                    }
-                }
-            }
-        }
-        
-        // Búsqueda genérica como fallback
-        for (const [columna, valor] of Object.entries(registro)) {
-            if (columna.includes(temporada) && !isNaN(valor) && valor > 0) {
-                console.log(`Columna genérica encontrada: ${columna} = ${valor}`);
-                return parseFloat(valor);
-            }
-        }
-        
-        console.log(`No se encontró venta anterior para ${temporada}`);
-        return 0;
-    }
+    // ==========================================
+    // MÉTODOS DE INTERFAZ (SIN CAMBIOS MAYORES)
+    // ==========================================
 
-    // NUEVO: Función de diagnóstico mejorada
-    static diagnosticarTemporadas() {
-        const fechaActual = new Date();
-        const temporada = IndiceEditor.determinarTemporadaActual(fechaActual);
-        
-        const info = {
-            fecha_actual: fechaActual.toLocaleDateString('es-AR'),
-            mes: fechaActual.getMonth() + 1,
-            dia: fechaActual.getDate(),
-            temporada_detectada: temporada.tipo,
-            temporada_en_curso: temporada.enCurso,
-            descripcion: temporada.descripcion,
-            calculo_verano: null,
-            calculo_invierno: null,
-            dias_restantes_verano: null,
-            dias_restantes_invierno: null
-        };
-        
-        if (temporada.tipo === 'VERANO' && temporada.enCurso) {
-            info.calculo_verano = 'PROPORCIONAL';
-            info.calculo_invierno = 'NORMAL';
-            info.dias_restantes_verano = IndiceEditor.calcularDiasRestantesVerano(fechaActual);
-        } else if (temporada.tipo === 'INVIERNO' && temporada.enCurso) {
-            info.calculo_verano = 'NORMAL';
-            info.calculo_invierno = 'PROPORCIONAL';
-            info.dias_restantes_invierno = IndiceEditor.calcularDiasRestantesInvierno(fechaActual);
-        } else {
-            info.calculo_verano = 'NORMAL';
-            info.calculo_invierno = 'NORMAL';
-        }
-        
-        console.group('🌡️ DIAGNÓSTICO TEMPORADAS CORREGIDO');
-        console.table(info);
-        console.groupEnd();
-        
-        return info;
-    }
-
-    // NUEVO: Función para simular cambio de fecha (testing)
-    static simularFecha(mes, dia = 15) {
-        const fechaSimulada = new Date(2025, mes - 1, dia);
-        const temporada = IndiceEditor.determinarTemporadaActual(fechaSimulada);
-        
-        console.log(`🎯 SIMULACIÓN FECHA: ${fechaSimulada.toLocaleDateString('es-AR')}`);
-        console.log(`Temporada: ${temporada.tipo} (${temporada.descripcion})`);
-        console.log(`En curso: ${temporada.enCurso}`);
-        
-        if (temporada.tipo === 'VERANO') {
-            const dias = IndiceEditor.calcularDiasRestantesVerano(fechaSimulada);
-            console.log(`Días restantes verano: ${dias}`);
-        } else if (temporada.tipo === 'INVIERNO') {
-            const dias = IndiceEditor.calcularDiasRestantesInvierno(fechaSimulada);
-            console.log(`Días restantes invierno: ${dias}`);
-        }
-        
-        return { fecha: fechaSimulada, temporada };
-    }
-
-    // Resto de métodos mantener como estaban...
     static init() {
         IndiceEditor.configurarModal();
         IndiceEditor.configurarEventListeners();
@@ -345,7 +250,7 @@ class IndiceEditor {
             indiceActual: indiceActual,
             solapa: solapa,
             index: index,
-            temporada: temporada // NUEVO: identificar qué índice se está editando
+            temporada: temporada
         };
         
         const tituloTemporada = temporada === 'verano' ? 'Verano' : 'Invierno';
@@ -387,18 +292,21 @@ class IndiceEditor {
         try {
             await new Promise(resolve => setTimeout(resolve, 500));
             
+            // Usar métodos simplificados
             IndiceEditor.actualizarDatosMemoriaFrontendCorregido(nuevoIndice);
             IndiceEditor.actualizarFilaTablaSoloFrontendCorregido();
             IndiceEditor.registrarCambio(nuevoIndice);
             
-            // AGREGAR ESTAS LÍNEAS - Notificar cambio a totales
+            // Notificar cambio a totales si es necesario
             if (['verano', 'invierno'].includes(IndiceEditor.indiceEditando.solapa)) {
-                TotalesCompra.onIndiceActualizado(
-                    IndiceEditor.indiceEditando.solapa,
-                    IndiceEditor.indiceEditando.rubro,
-                    IndiceEditor.indiceEditando.categoria,
-                    nuevoIndice
-                );
+                if (typeof TotalesCompra !== 'undefined') {
+                    TotalesCompra.onIndiceActualizado(
+                        IndiceEditor.indiceEditando.solapa,
+                        IndiceEditor.indiceEditando.rubro,
+                        IndiceEditor.indiceEditando.categoria,
+                        nuevoIndice
+                    );
+                }
             }
             
             UIUtils.mostrarAlerta('Índice actualizado correctamente', 'success');
@@ -410,70 +318,6 @@ class IndiceEditor {
         } finally {
             IndiceEditor.mostrarLoadingBoton(btnGuardar, false, textoOriginal);
             TablaRenderer.resaltarFila(IndiceEditor.indiceEditando.solapa, IndiceEditor.indiceEditando.index, false);
-        }
-    }
-
-    static actualizarFilaTablaSoloFrontendCorregido() {
-        const tbody = document.getElementById(`tbody-${IndiceEditor.indiceEditando.solapa}`);
-        const fila = tbody.children[IndiceEditor.indiceEditando.index];
-        
-        if (!fila) return;
-        
-        const app = window.presupuestoApp;
-        const datos = app.getDatos(IndiceEditor.indiceEditando.solapa);
-        const registroActualizado = datos[IndiceEditor.indiceEditando.index];
-        
-        if (!registroActualizado) return;
-        
-        const celdas = fila.children;
-        const temporadaEditada = IndiceEditor.indiceEditando.temporada || 'verano';
-        
-        console.log(`🔄 Actualizando fila - temporada editada: ${temporadaEditada}`);
-        
-        // CORRECCIÓN: Solo actualizar el índice que se editó
-        if (temporadaEditada === 'verano') {
-            // Solo actualizar índice de verano (celda 3)
-            if (celdas[3]) {
-                const input = celdas[3].querySelector('.indice-input');
-                if (input) {
-                    input.value = (registroActualizado.INDICE_VARIACION || 1.0).toFixed(2);
-                    console.log(`✅ Índice VERANO actualizado: ${input.value}`);
-                }
-            }
-            
-            // NO tocar el índice de invierno (celda 6) - mantener su valor actual
-            console.log(`⚠️ Índice INVIERNO mantenido sin cambios`);
-            
-        } else if (temporadaEditada === 'invierno') {
-            // Solo actualizar índice de invierno (celda 6)
-            if (celdas[6]) {
-                const input = celdas[6].querySelector('.indice-input');
-                if (input) {
-                    const indiceInvierno = registroActualizado.INDICE_VARIACION_INVIERNO || 1.0;
-                    input.value = indiceInvierno.toFixed(2);
-                    console.log(`✅ Índice INVIERNO actualizado: ${input.value}`);
-                }
-            }
-            
-            // NO tocar el índice de verano (celda 3) - mantener su valor actual
-            console.log(`⚠️ Índice VERANO mantenido sin cambios`);
-        }
-        
-        // Actualizar venta proyectada verano (celda 5)
-        if (celdas[5]) {
-            celdas[5].textContent = FormatoUtils.formatearNumero(registroActualizado.VENTA_PROY_VERANO || 0);
-        }
-        
-        // Actualizar venta proyectada invierno (celda 8)
-        if (celdas[8]) {
-            celdas[8].textContent = FormatoUtils.formatearNumero(registroActualizado.VENTA_PROY_INVIERNO || 0);
-        }
-        
-        // Actualizar compra proyectada (celda 9)
-        if (celdas[9]) {
-            const compraProyectada = registroActualizado.COMPRA_PROYECTADA || 0;
-            celdas[9].textContent = FormatoUtils.formatearNumero(compraProyectada);
-            celdas[9].className = `text-end bg-success-subtle text-success-emphasis fw-bold ${FormatoUtils.obtenerClaseValor(compraProyectada)}`;
         }
     }
 
@@ -541,6 +385,7 @@ class IndiceEditor {
             rubro: IndiceEditor.indiceEditando.rubro,
             categoria: IndiceEditor.indiceEditando.categoria,
             solapa: IndiceEditor.indiceEditando.solapa,
+            temporada: IndiceEditor.indiceEditando.temporada,
             indiceOriginal: IndiceEditor.indiceEditando.indiceActual,
             indiceNuevo: nuevoIndice,
             timestamp: Date.now(),
@@ -550,13 +395,15 @@ class IndiceEditor {
         
         // Buscar si ya existe un cambio para este item
         const indiceExistente = IndiceEditor.historialCambios.findIndex(c => 
-            c.rubro === cambio.rubro && c.categoria === cambio.categoria
+            c.rubro === cambio.rubro && 
+            c.categoria === cambio.categoria && 
+            c.temporada === cambio.temporada
         );
         
         if (indiceExistente >= 0) {
             // Actualizar el cambio existente manteniendo el índice original
             const cambioExistente = IndiceEditor.historialCambios[indiceExistente];
-            cambio.indiceOriginal = cambioExistente.indiceOriginal; // Mantener el original
+            cambio.indiceOriginal = cambioExistente.indiceOriginal;
             IndiceEditor.historialCambios[indiceExistente] = cambio;
         } else {
             // Nuevo cambio
@@ -568,7 +415,9 @@ class IndiceEditor {
             IndiceEditor.historialCambios = IndiceEditor.historialCambios.slice(0, 100);
         }
         
-        StorageUtils.guardar('historial_indices', IndiceEditor.historialCambios, 30 * 24 * 60 * 60 * 1000);
+        if (typeof StorageUtils !== 'undefined') {
+            StorageUtils.guardar('historial_indices', IndiceEditor.historialCambios, 30 * 24 * 60 * 60 * 1000);
+        }
         
         // Marcar como editado en los datos
         const app = window.presupuestoApp;
@@ -592,146 +441,45 @@ class IndiceEditor {
     }
 
     static cargarHistorial() {
-        const historial = StorageUtils.obtener('historial_indices');
-        if (historial && Array.isArray(historial)) {
-            IndiceEditor.historialCambios = historial;
-        }
-    }
-
-    static mostrarHistorialCambios() {
-        const cambios = IndiceEditor.historialCambios.slice(0, 20); // Últimos 20
-        
-        if (cambios.length === 0) {
-            UIUtils.mostrarAlerta('No hay cambios de índices registrados', 'info');
-            return;
-        }
-        
-        const modalHTML = `
-            <div class="modal fade" id="modal-historial-indices" tabindex="-1">
-                <div class="modal-dialog modal-lg">
-                    <div class="modal-content">
-                        <div class="modal-header">
-                            <h5 class="modal-title">
-                                <i class="fas fa-history me-2"></i>
-                                Historial de Cambios de Índices (${cambios.length} cambios)
-                            </h5>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                        </div>
-                        <div class="modal-body">
-                            <div class="table-responsive">
-                                <table class="table table-sm table-striped">
-                                    <thead class="table-dark">
-                                        <tr>
-                                            <th>Fecha</th>
-                                            <th>Rubro</th>
-                                            <th>Categoría</th>
-                                            <th>Índice Original</th>
-                                            <th>Índice Actual</th>
-                                            <th>Cambio</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        ${cambios.map(cambio => {
-                                            const diferencia = cambio.indiceNuevo - cambio.indiceOriginal;
-                                            const claseCambio = diferencia > 0 ? 'text-success' : diferencia < 0 ? 'text-danger' : 'text-muted';
-                                            return `
-                                                <tr>
-                                                    <td>${cambio.fecha}</td>
-                                                    <td><strong>${cambio.rubro}</strong></td>
-                                                    <td>${cambio.categoria}</td>
-                                                    <td>${cambio.indiceOriginal.toFixed(2)}</td>
-                                                    <td>${cambio.indiceNuevo.toFixed(2)}</td>
-                                                    <td class="${claseCambio}">
-                                                        ${diferencia > 0 ? '+' : ''}${diferencia.toFixed(2)}
-                                                    </td>
-                                                </tr>
-                                            `;
-                                        }).join('')}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                        <div class="modal-footer">
-                            <button type="button" class="btn btn-danger" onclick="IndiceEditor.limpiarHistorial()">
-                                <i class="fas fa-trash"></i> Limpiar Historial
-                            </button>
-                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
-        
-        document.body.insertAdjacentHTML('beforeend', modalHTML);
-        const modal = new bootstrap.Modal(document.getElementById('modal-historial-indices'));
-        modal.show();
-        
-        document.getElementById('modal-historial-indices').addEventListener('hidden.bs.modal', function() {
-            this.remove();
-        });
-    }
-
-    static limpiarHistorial() {
-        if (confirm('¿Está seguro que desea limpiar todo el historial de cambios?')) {
-            IndiceEditor.historialCambios = [];
-            StorageUtils.eliminar('historial_indices');
-            UIUtils.mostrarAlerta('Historial limpiado', 'success');
-            
-            // Cerrar modal si está abierto
-            const modal = document.getElementById('modal-historial-indices');
-            if (modal) {
-                bootstrap.Modal.getInstance(modal).hide();
+        if (typeof StorageUtils !== 'undefined') {
+            const historial = StorageUtils.obtener('historial_indices');
+            if (historial && Array.isArray(historial)) {
+                IndiceEditor.historialCambios = historial;
             }
         }
     }
 
-    /**
-     * NUEVO: Función temporal para debug - agregar al final de la clase IndiceEditor
-     */
-    static debugEstructuraTabla(solapa) {
-        const tabla = document.getElementById(`tabla-${solapa}`);
-        const thead = tabla.querySelector('thead tr');
-        const tbody = tabla.querySelector('tbody');
-        const primeraFila = tbody.children[0];
+    // Funciones de diagnóstico simplificadas
+    static diagnosticarTemporadas() {
+        const fechaActual = new Date();
+        const temporada = IndiceEditor.determinarTemporadaActual(fechaActual);
         
-        console.group(`🔍 DEBUG ESTRUCTURA TABLA ${solapa.toUpperCase()}`);
+        const info = {
+            fecha_actual: fechaActual.toLocaleDateString('es-AR'),
+            mes: fechaActual.getMonth() + 1,
+            temporada_detectada: temporada.tipo,
+            temporada_en_curso: temporada.enCurso,
+            descripcion: temporada.descripcion,
+            dias_restantes_verano: temporada.tipo === 'VERANO' ? IndiceEditor.calcularDiasRestantesVerano(fechaActual) : null,
+            dias_restantes_invierno: temporada.tipo === 'INVIERNO' ? IndiceEditor.calcularDiasRestantesInvierno(fechaActual) : null
+        };
         
-        // Mostrar headers
-        console.log('HEADERS:');
-        Array.from(thead.children).forEach((th, i) => {
-            console.log(`${i}: "${th.textContent.trim()}" (clases: ${th.className})`);
-        });
-        
-        // Mostrar primera fila de datos
-        if (primeraFila) {
-            console.log('\nPRIMERA FILA:');
-            Array.from(primeraFila.children).forEach((td, i) => {
-                console.log(`${i}: "${td.textContent.trim()}" (clases: ${td.className})`);
-            });
-        }
-        
+        console.group('🌡️ DIAGNÓSTICO TEMPORADAS');
+        console.table(info);
         console.groupEnd();
+        
+        return info;
     }
 
-    /**
-     * NUEVO: Calcular días totales reales de una temporada
-     */
-    static calcularDiasTotalesTemporada(temporada, ano = null) {
-        if (!ano) ano = new Date().getFullYear();
+    static simularFecha(mes, dia = 15) {
+        const fechaSimulada = new Date(2025, mes - 1, dia);
+        const temporada = IndiceEditor.determinarTemporadaActual(fechaSimulada);
         
-        if (temporada === 'VERANO') {
-            // VERANO: 1 agosto año anterior al 31 enero año actual
-            const inicioVerano = new Date(ano - 1, 7, 1); // 1 agosto año anterior
-            const finVerano = new Date(ano, 0, 31); // 31 enero año actual
-            const diferencia = finVerano - inicioVerano;
-            return Math.ceil(diferencia / (1000 * 60 * 60 * 24)) + 1;
-        } else {
-            // INVIERNO: 1 febrero al 31 julio del mismo año
-            const inicioInvierno = new Date(ano, 1, 1); // 1 febrero
-            const finInvierno = new Date(ano, 6, 31); // 31 julio
-            const diferencia = finInvierno - inicioInvierno;
-            return Math.ceil(diferencia / (1000 * 60 * 60 * 24)) + 1;
-        }
+        console.log(`🎯 SIMULACIÓN FECHA: ${fechaSimulada.toLocaleDateString('es-AR')}`);
+        console.log(`Temporada: ${temporada.tipo} (${temporada.descripcion})`);
+        console.log(`En curso: ${temporada.enCurso}`);
+        
+        return { fecha: fechaSimulada, temporada };
     }
 }
 
@@ -744,16 +492,7 @@ document.addEventListener('DOMContentLoaded', function() {
     window.diagnosticarTemporadas = () => IndiceEditor.diagnosticarTemporadas();
     window.simularFecha = (mes, dia) => IndiceEditor.simularFecha(mes, dia);
     
-    console.log('✅ IndiceEditor CORREGIDO - Cálculo por temporada implementado');
-    console.log('💡 Funciones disponibles:');
-    console.log('  📊 diagnosticarTemporadas() - Ver lógica de temporadas');
-    console.log('  🎯 simularFecha(mes, dia) - Simular fecha específica');
-    console.log('Ejemplos:');
-    console.log('  simularFecha(8, 15) // Agosto (verano)');
-    console.log('  simularFecha(3, 15) // Marzo (invierno)');
+    console.log('✅ IndiceEditor SIMPLIFICADO cargado - Delega a calculadoras específicas');
 });
-
-// Función global para debug de estructura de tabla
-window.debugEstructuraTabla = (solapa) => IndiceEditor.debugEstructuraTabla(solapa);
 
 

@@ -54,14 +54,20 @@ class MainController {
     }
     
     /**
-     * Obtener datos para la solapa de Compra Proyectada Verano
+     * CORREGIDO: Obtener datos para la solapa de Compra Proyectada Verano CON CONTEXTO
      */
     public function obtenerCompraProyectadaVerano() {
         try {
             $datosBase = $this->obtenerDatosValidados();
+            
+            // CORRECCIÓN: Pasar contexto 'verano' al procesador
             $datosProcessados = $this->procesador->procesarDatosCompraVerano($datosBase);
+            
             $columnasVenta = PresupuestoCalculos::obtenerColumnasVentas($datosBase, 'VERANO');
             $etiquetas = PresupuestoCalculos::generarEtiquetasVentaProyectada();
+            
+            // Log de debug
+            error_log("✅ VERANO - Procesados " . count($datosProcessados) . " registros con contexto específico");
             
             $this->jsonResponse([
                 'success' => true,
@@ -69,10 +75,12 @@ class MainController {
                 'data' => $datosProcessados,
                 'columnas_venta' => $columnasVenta,
                 'etiquetas' => $etiquetas,
-                'total_registros' => count($datosProcessados)
+                'total_registros' => count($datosProcessados),
+                'contexto_aplicado' => 'verano'
             ]);
             
         } catch (Exception $e) {
+            error_log("❌ Error en obtenerCompraProyectadaVerano: " . $e->getMessage());
             $this->jsonResponse([
                 'success' => false,
                 'message' => 'Error al procesar compra verano: ' . $e->getMessage(),
@@ -82,14 +90,20 @@ class MainController {
     }
     
     /**
-     * Obtener datos para la solapa de Compra Proyectada Invierno
+     * CORREGIDO: Obtener datos para la solapa de Compra Proyectada Invierno CON CONTEXTO
      */
     public function obtenerCompraProyectadaInvierno() {
         try {
             $datosBase = $this->obtenerDatosValidados();
+            
+            // CORRECCIÓN: Pasar contexto 'invierno' al procesador
             $datosProcessados = $this->procesador->procesarDatosCompraInvierno($datosBase);
+            
             $columnasVenta = PresupuestoCalculos::obtenerColumnasVentas($datosBase, 'INVIERNO');
             $etiquetas = PresupuestoCalculos::generarEtiquetasVentaProyectada();
+            
+            // Log de debug
+            error_log("✅ INVIERNO - Procesados " . count($datosProcessados) . " registros con contexto específico");
             
             $this->jsonResponse([
                 'success' => true,
@@ -97,16 +111,91 @@ class MainController {
                 'data' => $datosProcessados,
                 'columnas_venta' => $columnasVenta,
                 'etiquetas' => $etiquetas,
-                'total_registros' => count($datosProcessados)
+                'total_registros' => count($datosProcessados),
+                'contexto_aplicado' => 'invierno'
             ]);
             
         } catch (Exception $e) {
+            error_log("❌ Error en obtenerCompraProyectadaInvierno: " . $e->getMessage());
             $this->jsonResponse([
                 'success' => false,
                 'message' => 'Error al procesar compra invierno: ' . $e->getMessage(),
                 'data' => []
             ], 500);
         }
+    }
+
+    /**
+     * NUEVO: Método para debug de temporadas desde el backend
+     */
+    public function obtenerInfoTemporadas() {
+        try {
+            $fechaActual = new DateTime();
+            $temporadaActual = PresupuestoCalculos::obtenerTemporadaActual($fechaActual);
+            $diasRestantes = PresupuestoCalculos::calcularDiasRestantesTemporada($fechaActual);
+            $etiquetas = PresupuestoCalculos::generarEtiquetasVentaProyectada($fechaActual);
+            
+            $info = [
+                'fecha_actual' => $fechaActual->format('Y-m-d H:i:s'),
+                'temporada_actual' => $temporadaActual,
+                'dias_restantes' => $diasRestantes,
+                'etiquetas_proyeccion' => $etiquetas,
+                'logica_aplicada' => [
+                    'verano_solapa' => $this->obtenerLogicaAplicada('verano', $temporadaActual),
+                    'invierno_solapa' => $this->obtenerLogicaAplicada('invierno', $temporadaActual)
+                ]
+            ];
+            
+            $this->jsonResponse([
+                'success' => true,
+                'message' => 'Información de temporadas obtenida',
+                'data' => $info
+            ]);
+            
+        } catch (Exception $e) {
+            $this->jsonResponse([
+                'success' => false,
+                'message' => 'Error obteniendo info temporadas: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * NUEVO: Obtener lógica aplicada para una solapa específica
+     */
+    private function obtenerLogicaAplicada($solapa, $temporadaActual) {
+        $logica = [
+            'contexto_solapa' => $solapa,
+            'temporada_transitando' => $temporadaActual['temporada'],
+            'calculo_verano' => '',
+            'calculo_invierno' => ''
+        ];
+        
+        if ($solapa === 'verano') {
+            if ($temporadaActual['temporada'] === 'VERANO') {
+                $logica['calculo_verano'] = 'Proporcional actual + Próximo completo';
+                $logica['calculo_invierno'] = 'Próximo completo';
+            } else if ($temporadaActual['temporada'] === 'INVIERNO') {
+                $logica['calculo_verano'] = 'Próximo completo';
+                $logica['calculo_invierno'] = 'Proporcional actual';
+            } else {
+                $logica['calculo_verano'] = 'Próximo completo';
+                $logica['calculo_invierno'] = 'Próximo completo';
+            }
+        } else if ($solapa === 'invierno') {
+            if ($temporadaActual['temporada'] === 'INVIERNO') {
+                $logica['calculo_verano'] = 'Próximo completo';
+                $logica['calculo_invierno'] = 'Proporcional actual + Próximo completo';
+            } else if ($temporadaActual['temporada'] === 'VERANO') {
+                $logica['calculo_verano'] = 'Proporcional actual';
+                $logica['calculo_invierno'] = 'Próximo completo';
+            } else {
+                $logica['calculo_verano'] = 'Próximo completo';
+                $logica['calculo_invierno'] = 'Próximo completo';
+            }
+        }
+        
+        return $logica;
     }
     
     /**
@@ -165,7 +254,7 @@ class MainController {
     }
     
     /**
-     * Procesar solicitudes GET
+     * ACTUALIZADO: Procesar solicitudes GET con nuevas acciones
      */
     private function procesarGet($accion) {
         switch ($accion) {
@@ -183,19 +272,16 @@ class MainController {
                 $this->obtenerStockProyectado();
                 break;
                 
-            // Compras detalle - NUEVO
+            // NUEVO: Info de temporadas para debug
+            case 'info-temporadas':
+                $this->obtenerInfoTemporadas();
+                break;
+                
+            // Compras detalle
             case 'compras-detalle':
-                $this->delegarCompras($accion);
-                break;
             case 'buscar-compras':
-                $this->delegarCompras($accion);
-                break;
             case 'proveedores':
-                $this->delegarCompras($accion);
-                break;
             case 'rubros-compras':
-                $this->delegarCompras($accion);
-                break;
             case 'resumen-compras':
                 $this->delegarCompras($accion);
                 break;
@@ -232,8 +318,8 @@ class MainController {
                     'message' => 'Acción no válida',
                     'acciones_disponibles' => [
                         'datos-base', 'compra-verano', 'compra-invierno', 
-                        'stock-proyectado', 'compras-detalle', 'buscar', 
-                        'exportar', 'rubros', 'proveedores'
+                        'stock-proyectado', 'info-temporadas', 'compras-detalle', 
+                        'buscar', 'exportar', 'rubros', 'proveedores'
                     ]
                 ], 400);
                 break;

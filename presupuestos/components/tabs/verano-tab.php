@@ -43,6 +43,7 @@
                     <th>Rubro</th>
                     <th>Categoría</th>
                     <th class="text-center bg-info">Stock<br>Proyectado</th>
+                    <th class="text-center bg-secondary text-white">Índice Var.<br>Original</th>
                     <th class="text-center bg-warning">Índice Ver.<br>Variación</th>
                     <th class="text-center header-venta-anterior" id="header-venta-verano-ant">Venta Ver.<br>Anterior</th>
                     <th class="text-center header-venta-proyectada" id="header-venta-verano">Venta Proy.<br>Verano</th>

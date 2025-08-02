@@ -2,16 +2,26 @@
 <!-- Scripts del sistema -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
 
-<!-- Scripts modulares del sistema -->
+<!-- Scripts modulares del sistema - ORDEN CORRECTO -->
 <script src="js/utils.js"></script>
 <script src="js/api-client.js"></script>
 <script src="js/tabla-renderer.js"></script>
 <script src="js/busqueda-manager.js"></script>
+
+<!-- NUEVOS: Calculadoras específicas (CARGAR ANTES del indice-editor) -->
+<script src="js/calculadora-verano.js"></script>
+<script src="js/calculadora-invierno.js"></script>
+
+<!-- Editor de índices (DESPUÉS de las calculadoras) -->
 <script src="js/indice-editor.js"></script>
+
+<!-- Resto de módulos -->
 <script src="js/compras-manager.js"></script>
 <script src="js/totales-compra.js"></script>
 <script src="js/excel-exporter.js"></script>
 <script src="js/ventas-manager.js"></script>
+
+<!-- Script principal (SIEMPRE AL FINAL) -->
 <script src="js/main.js"></script>
 
 <script>

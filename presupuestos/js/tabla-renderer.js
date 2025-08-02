@@ -1,9 +1,9 @@
 
-// TablaRenderer Simplificado - Todo en un archivo
-// Archivo: presupuestos/js/tabla-renderer.js (REEMPLAZAR COMPLETO)
+// TablaRenderer con columna de ÍNDICE ORIGINAL
+// Archivo: presupuestos/js/tabla-renderer.js
 
 // ========================================
-// FUNCIONES BASE (antes TablaRendererBase)
+// FUNCIONES BASE
 // ========================================
 
 const TablaRendererUtils = {
@@ -59,17 +59,15 @@ const TablaRendererUtils = {
     },
 
     buscarVentaHistoricaCorrecta(item, temporada) {
-        const anoActual = new Date().getFullYear() % 100; // 25 para 2025
+        const anoActual = new Date().getFullYear() % 100;
         
         if (temporada === 'VERANO') {
-            // Buscar VTA_VERANO_25 (el último verano completo)
             const columnaVerano = `VTA_VERANO_${anoActual}`;
             if (item[columnaVerano] && !isNaN(item[columnaVerano])) {
                 console.log(`✅ VERANO encontrado: ${columnaVerano} = ${item[columnaVerano]}`);
                 return parseFloat(item[columnaVerano]);
             }
             
-            // Si no encuentra el actual, buscar el anterior
             const anoAnterior = anoActual - 1;
             const columnaVeranoAnterior = `VTA_VERANO_${anoAnterior}`;
             if (item[columnaVeranoAnterior] && !isNaN(item[columnaVeranoAnterior])) {
@@ -78,15 +76,13 @@ const TablaRendererUtils = {
             }
             
         } else if (temporada === 'INVIERNO') {
-            // Buscar VTA_INVIERNO_24 (el último invierno completo)
-            const anoInvierno = anoActual - 1; // 24 para buscar INVIERNO 24
+            const anoInvierno = anoActual - 1;
             const columnaInvierno = `VTA_INVIERNO_${anoInvierno}`;
             if (item[columnaInvierno] && !isNaN(item[columnaInvierno])) {
                 console.log(`✅ INVIERNO encontrado: ${columnaInvierno} = ${item[columnaInvierno]}`);
                 return parseFloat(item[columnaInvierno]);
             }
             
-            // Si no encuentra, buscar el anterior
             const anoInviernoAnterior = anoInvierno - 1;
             const columnaInviernoAnterior = `VTA_INVIERNO_${anoInviernoAnterior}`;
             if (item[columnaInviernoAnterior] && !isNaN(item[columnaInviernoAnterior])) {
@@ -106,8 +102,9 @@ const TablaRendererUtils = {
         const columnasExcluidas = [
             'RUBRO', 'CATEGORIA_PADRE', 'CANT_STOCK', 'CANT_STOCK_GUARDAR',
             'CANT_PEND_OC_VERANO', 'CANT_PEND_OC_INVIERNO', 'CANT_PEND_OC_ATEMPORAL',
-            'INDICE_VARIACION', 'STOCK_COBERTURA', 'VENTA_PROY_VERANO', 
-            'VENTA_PROY_INVIERNO', 'COMPRA_PROYECTADA', 'STOCK_PROYECTADO'
+            'INDICE_VARIACION', 'INDICE_VARIACION_INVIERNO', 'INDICE_ORIGINAL',
+            'STOCK_COBERTURA', 'VENTA_PROY_VERANO', 'VENTA_PROY_INVIERNO', 
+            'COMPRA_PROYECTADA', 'STOCK_PROYECTADO'
         ];
         
         const columnasVenta = [];
@@ -124,6 +121,19 @@ const TablaRendererUtils = {
 
     formatearNombreColumna(columna) {
         return columna.replace('VTA_', '').replace(/_/g, ' ').trim();
+    },
+
+    // NUEVO: Obtener índice original del registro
+    obtenerIndiceOriginal(item) {
+        // Buscar el índice original en diferentes propiedades
+        if (item._indiceOriginal !== undefined) {
+            return parseFloat(item._indiceOriginal);
+        }
+        if (item.INDICE_ORIGINAL !== undefined) {
+            return parseFloat(item.INDICE_ORIGINAL);
+        }
+        // Si no hay índice original guardado, usar el actual como original
+        return parseFloat(item.INDICE_VARIACION || 1.0);
     }
 };
 
@@ -140,7 +150,7 @@ class TablaRenderer {
         const tbody = document.getElementById('tbody-verano');
         
         if (!datos || datos.length === 0) {
-            TablaRendererUtils.mostrarTablaVacia(tbody, 9, 'No hay datos disponibles para la proyección de verano');
+            TablaRendererUtils.mostrarTablaVacia(tbody, 10, 'No hay datos disponibles para la proyección de verano');
             return;
         }
 
@@ -168,7 +178,7 @@ class TablaRenderer {
         const tbody = document.getElementById('tbody-invierno');
         
         if (!datos || datos.length === 0) {
-            TablaRendererUtils.mostrarTablaVacia(tbody, 9, 'No hay datos disponibles para la proyección de invierno');
+            TablaRendererUtils.mostrarTablaVacia(tbody, 10, 'No hay datos disponibles para la proyección de invierno');
             return;
         }
 
@@ -190,7 +200,7 @@ class TablaRenderer {
     }
 
     /**
-     * Renderizar tabla de Stock Proyectado
+     * Renderizar tabla de Stock Proyectado (sin cambios)
      */
     static renderizarTablaStock(datos) {
         const tbody = document.getElementById('tbody-stock');
@@ -247,13 +257,14 @@ class TablaRenderer {
     }
 
     /**
-     * Crear fila completa para compras (verano/invierno) - CON EVENT LISTENERS
+     * CORREGIDO: Crear fila completa para compras con ÍNDICE ORIGINAL
      */
     static crearFilaCompraCompleta(item, index, todosLosDatos, solapa) {
         const tr = document.createElement('tr');
         tr.className = 'fila-datos';
         
         const stockProyectado = FormatoUtils.formatearNumero(item.STOCK_PROYECTADO || 0);
+        const indiceOriginal = TablaRendererUtils.obtenerIndiceOriginal(item);
         const indiceVariacionVerano = parseFloat(item.INDICE_VARIACION || 1.0);
         const indiceVariacionInvierno = parseFloat(item.INDICE_VARIACION_INVIERNO || indiceVariacionVerano);
         const ventaProyVerano = FormatoUtils.formatearNumero(item.VENTA_PROY_VERANO || 0);
@@ -289,11 +300,12 @@ class TablaRenderer {
             IndiceEditor.editarIndice(item.RUBRO, item.CATEGORIA_PADRE, indiceVariacionInvierno, solapa, index, 'invierno');
         });
         
-        // Crear HTML base sin los índices editables
+        // NUEVA ESTRUCTURA: Agregar ÍNDICE ORIGINAL después de STOCK PROYECTADO
         tr.innerHTML = `
             <td class="fw-medium">${item.RUBRO || ''}</td>
             <td>${item.CATEGORIA_PADRE || ''}</td>
-            <td class="text-end">${stockProyectado}</td>
+            <td class="text-end bg-info-subtle">${stockProyectado}</td>
+            <td class="text-center bg-secondary-subtle text-emphasis" title="Índice de variación original (no editable)">${indiceOriginal.toFixed(2)}</td>
             <td class="placeholder-verano"></td>
             <td class="text-end bg-info-subtle" title="Venta histórica verano anterior">${FormatoUtils.formatearNumero(ventaVeranoAnterior)}</td>
             <td class="text-end bg-primary-subtle text-primary-emphasis fw-bold" title="Venta proyectada verano">${ventaProyVerano}</td>
@@ -325,13 +337,13 @@ class TablaRenderer {
             tr.appendChild(td);
         });
         
-        console.log(`✅ Fila creada con event listeners para ${item.RUBRO} - ${item.CATEGORIA_PADRE}`);
+        console.log(`✅ Fila creada con índice original ${indiceOriginal.toFixed(2)} para ${item.RUBRO} - ${item.CATEGORIA_PADRE}`);
         
         return tr;
     }
 
     /**
-     * Crear fila para stock proyectado (SIN ventas proyectadas)
+     * Crear fila para stock proyectado (SIN cambios)
      */
     static crearFilaStock(item, index) {
         const tr = document.createElement('tr');
@@ -469,7 +481,7 @@ class TablaRenderer {
      * Inicialización simplificada
      */
     static init() {
-        console.log('✅ TablaRenderer (simplificado) inicializado correctamente');
+        console.log('✅ TablaRenderer (con índice original) inicializado correctamente');
     }
 
     static diagnosticarTablas() {
@@ -503,5 +515,5 @@ document.addEventListener('DOMContentLoaded', function() {
     window.diagnosticarTablas = () => TablaRenderer.diagnosticarTablas();
     window.limpiarTodasLasTablas = () => TablaRenderer.limpiarTodasLasTablas();
     
-    console.log('✅ TablaRenderer simplificado cargado');
+    console.log('✅ TablaRenderer con índice original cargado');
 });

@@ -8,7 +8,7 @@
 class ProcesadorDatos {
     
     /**
-     * CORREGIDO: Procesar datos para la solapa de compra verano
+     * CORREGIDO: Procesar datos para la solapa de compra verano CON CONTEXTO
      */
     public function procesarDatosCompraVerano($datos) {
         $resultado = [];
@@ -23,26 +23,31 @@ class ProcesadorDatos {
         foreach ($datosUnicos as $index => $registro) {
             try {
                 $stockProyectado = $this->calcularStockProyectadoRegistro($registro);
+                
+                // CORRECCIÓN: Especificar contexto de solapa 'verano'
                 $calculosCompra = PresupuestoCalculos::procesarRegistroCompraProyectada(
                     $registro, 
                     $stockProyectado, 
-                    'VERANO'
+                    'VERANO',
+                    null, // fecha actual
+                    'verano' // CONTEXTO ESPECÍFICO
                 );
                 
                 $registroProcesado = [
                     'RUBRO' => $this->limpiarTexto($registro['RUBRO'] ?? ''),
                     'CATEGORIA_PADRE' => $this->limpiarTexto($registro['CATEGORIA_PADRE'] ?? ''),
                     'STOCK_PROYECTADO' => round($stockProyectado, 2),
-                    'INDICE_VARIACION' => round((float)($registro['INDICE_VARIACION'] ?? 1.0), 2), // 2 decimales
-                    'VENTA_PROY_VERANO' => round($calculosCompra['venta_proy_verano'], 0), // SIN decimales
-                    'VENTA_PROY_INVIERNO' => round($calculosCompra['venta_proy_invierno'], 0), // SIN decimales
-                    'COMPRA_PROYECTADA' => round($calculosCompra['compra_proyectada'], 0) // SIN decimales
+                    'INDICE_VARIACION' => round((float)($registro['INDICE_VARIACION'] ?? 1.0), 2),
+                    'INDICE_VARIACION_INVIERNO' => round((float)($registro['INDICE_VARIACION_INVIERNO'] ?? $registro['INDICE_VARIACION'] ?? 1.0), 2),
+                    'VENTA_PROY_VERANO' => round($calculosCompra['venta_proy_verano'], 0),
+                    'VENTA_PROY_INVIERNO' => round($calculosCompra['venta_proy_invierno'], 0),
+                    'COMPRA_PROYECTADA' => round($calculosCompra['compra_proyectada'], 0)
                 ];
                 
                 // Agregar columnas de ventas históricas de forma controlada
                 $columnasVenta = $this->obtenerColumnasVentasSeguras($registro);
                 foreach ($columnasVenta as $columna) {
-                    $registroProcesado[$columna] = round((float)($registro[$columna] ?? 0), 0); // SIN decimales
+                    $registroProcesado[$columna] = round((float)($registro[$columna] ?? 0), 0);
                 }
                 
                 $resultado[] = $registroProcesado;
@@ -53,11 +58,12 @@ class ProcesadorDatos {
             }
         }
         
+        error_log("✅ VERANO procesado con contexto específico: " . count($resultado) . " registros");
         return $resultado;
     }
     
     /**
-     * CORREGIDO: Procesar datos para la solapa de compra invierno
+     * CORREGIDO: Procesar datos para la solapa de compra invierno CON CONTEXTO
      */
     public function procesarDatosCompraInvierno($datos) {
         $resultado = [];
@@ -72,26 +78,31 @@ class ProcesadorDatos {
         foreach ($datosUnicos as $index => $registro) {
             try {
                 $stockProyectado = $this->calcularStockProyectadoRegistro($registro);
+                
+                // CORRECCIÓN: Especificar contexto de solapa 'invierno'
                 $calculosCompra = PresupuestoCalculos::procesarRegistroCompraProyectada(
                     $registro, 
                     $stockProyectado, 
-                    'INVIERNO'
+                    'INVIERNO',
+                    null, // fecha actual
+                    'invierno' // CONTEXTO ESPECÍFICO
                 );
                 
                 $registroProcesado = [
                     'RUBRO' => $this->limpiarTexto($registro['RUBRO'] ?? ''),
                     'CATEGORIA_PADRE' => $this->limpiarTexto($registro['CATEGORIA_PADRE'] ?? ''),
                     'STOCK_PROYECTADO' => round($stockProyectado, 2),
-                    'INDICE_VARIACION' => round((float)($registro['INDICE_VARIACION'] ?? 1.0), 2), // 2 decimales
-                    'VENTA_PROY_VERANO' => round($calculosCompra['venta_proy_verano'], 0), // SIN decimales
-                    'VENTA_PROY_INVIERNO' => round($calculosCompra['venta_proy_invierno'], 0), // SIN decimales
-                    'COMPRA_PROYECTADA' => round($calculosCompra['compra_proyectada'], 0) // SIN decimales
+                    'INDICE_VARIACION' => round((float)($registro['INDICE_VARIACION'] ?? 1.0), 2),
+                    'INDICE_VARIACION_INVIERNO' => round((float)($registro['INDICE_VARIACION_INVIERNO'] ?? $registro['INDICE_VARIACION'] ?? 1.0), 2),
+                    'VENTA_PROY_VERANO' => round($calculosCompra['venta_proy_verano'], 0),
+                    'VENTA_PROY_INVIERNO' => round($calculosCompra['venta_proy_invierno'], 0),
+                    'COMPRA_PROYECTADA' => round($calculosCompra['compra_proyectada'], 0)
                 ];
                 
                 // Agregar columnas de ventas históricas de forma controlada
                 $columnasVenta = $this->obtenerColumnasVentasSeguras($registro);
                 foreach ($columnasVenta as $columna) {
-                    $registroProcesado[$columna] = round((float)($registro[$columna] ?? 0), 0); // SIN decimales
+                    $registroProcesado[$columna] = round((float)($registro[$columna] ?? 0), 0);
                 }
                 
                 $resultado[] = $registroProcesado;
@@ -102,6 +113,7 @@ class ProcesadorDatos {
             }
         }
         
+        error_log("✅ INVIERNO procesado con contexto específico: " . count($resultado) . " registros");
         return $resultado;
     }
         
@@ -215,40 +227,48 @@ class ProcesadorDatos {
     }
     
     /**
-     * CORREGIDO: Procesar registro individual para compra verano
+     * CORREGIDO: Procesar registro individual para compra verano CON CONTEXTO
      */
     public function procesarRegistroCompraVerano($registro) {
         $stockProyectado = $this->calcularStockProyectadoRegistro($registro);
+        
+        // CORRECCIÓN: Especificar contexto 'verano'
         $calculosCompra = PresupuestoCalculos::procesarRegistroCompraProyectada(
             $registro, 
             $stockProyectado, 
-            'VERANO'
+            'VERANO',
+            null,
+            'verano' // CONTEXTO ESPECÍFICO
         );
         
         return array_merge($registro, [
             'STOCK_PROYECTADO' => round($stockProyectado, 2),
-            'VENTA_PROY_VERANO' => round($calculosCompra['venta_proy_verano'], 0), // SIN decimales
-            'VENTA_PROY_INVIERNO' => round($calculosCompra['venta_proy_invierno'], 0), // SIN decimales
-            'COMPRA_PROYECTADA' => round($calculosCompra['compra_proyectada'], 0) // SIN decimales
+            'VENTA_PROY_VERANO' => round($calculosCompra['venta_proy_verano'], 0),
+            'VENTA_PROY_INVIERNO' => round($calculosCompra['venta_proy_invierno'], 0),
+            'COMPRA_PROYECTADA' => round($calculosCompra['compra_proyectada'], 0)
         ]);
     }
     
     /**
-     * CORREGIDO: Procesar registro individual para compra invierno
+     * CORREGIDO: Procesar registro individual para compra invierno CON CONTEXTO
      */
     public function procesarRegistroCompraInvierno($registro) {
         $stockProyectado = $this->calcularStockProyectadoRegistro($registro);
+        
+        // CORRECCIÓN: Especificar contexto 'invierno'
         $calculosCompra = PresupuestoCalculos::procesarRegistroCompraProyectada(
             $registro, 
             $stockProyectado, 
-            'INVIERNO'
+            'INVIERNO',
+            null,
+            'invierno' // CONTEXTO ESPECÍFICO
         );
         
         return array_merge($registro, [
             'STOCK_PROYECTADO' => round($stockProyectado, 2),
-            'VENTA_PROY_VERANO' => round($calculosCompra['venta_proy_verano'], 0), // SIN decimales
-            'VENTA_PROY_INVIERNO' => round($calculosCompra['venta_proy_invierno'], 0), // SIN decimales
-            'COMPRA_PROYECTADA' => round($calculosCompra['compra_proyectada'], 0) // SIN decimales
+            'VENTA_PROY_VERANO' => round($calculosCompra['venta_proy_verano'], 0),
+            'VENTA_PROY_INVIERNO' => round($calculosCompra['venta_proy_invierno'], 0),
+            'COMPRA_PROYECTADA' => round($calculosCompra['compra_proyectada'], 0)
         ]);
     }
     
