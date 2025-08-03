@@ -268,7 +268,7 @@
     .input-editado {
         background: transparent !important;
         font-weight: bold !important;
-        color: #856404 !important;
+        color: #e33011ff !important;
         text-shadow: 0 1px 1px rgba(255, 255, 255, 0.5);
     }
 
@@ -312,6 +312,42 @@
 
     .indice-editado:hover .btn-restaurar-original {
         opacity: 1;
+    }
+
+    /* Mejora para el botón restaurar */
+    .editable-cell {
+        position: relative !important;
+    }
+
+    .btn-restaurar-original {
+        position: absolute !important;
+        top: 2px !important;
+        right: 2px !important;
+        width: 16px !important;
+        height: 16px !important;
+        border-radius: 50% !important;
+        background: #dc3545 !important;
+        color: white !important;
+        border: none !important;
+        font-size: 10px !important;
+        padding: 0 !important;
+        line-height: 1 !important;
+        cursor: pointer !important;
+        opacity: 0 !important;
+        transition: opacity 0.3s ease !important;
+        z-index: 5 !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+    }
+
+    .indice-editado:hover .btn-restaurar-original {
+        opacity: 1 !important;
+    }
+
+    .btn-restaurar-original:hover {
+        background: #a71e2a !important;
+        transform: scale(1.1) !important;
     }
 
 </style>

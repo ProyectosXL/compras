@@ -488,3 +488,62 @@ code {
 .text-danger {
     color: #dc3545 !important;
 }
+
+/* Mejoras responsive para el modal de ayuda */
+@media (max-width: 991px) {
+    #ayudaRubrosModal .modal-dialog {
+        max-width: 95%;
+        margin: 0.5rem;
+    }
+    
+    #ayudaRubrosModal .modal-body {
+        padding: 0.5rem;
+    }
+    
+    #ayudaRubrosModal .tab-content {
+        max-height: 60vh;
+    }
+}
+
+@media (max-width: 576px) {
+    #ayudaRubrosModal .nav-tabs .nav-link {
+        padding: 0.375rem 0.5rem;
+        font-size: 0.8rem;
+    }
+    
+    #ayudaRubrosModal .card-body {
+        padding: 0.5rem;
+    }
+    
+    #ayudaRubrosModal .accordion-body {
+        padding: 0.75rem;
+    }
+    
+    #ayudaRubrosModal .alert {
+        padding: 0.5rem;
+        margin-bottom: 0.5rem;
+    }
+    
+    #ayudaRubrosModal .tab-content {
+        max-height: 55vh;
+    }
+}
+
+/* Mejorar scroll en contenido de tabs */
+#ayudaRubrosModal .tab-content {
+    scrollbar-width: thin;
+    scrollbar-color: #0d6efd #f8f9fa;
+}
+
+#ayudaRubrosModal .tab-content::-webkit-scrollbar {
+    width: 6px;
+}
+
+#ayudaRubrosModal .tab-content::-webkit-scrollbar-track {
+    background: #f8f9fa;
+}
+
+#ayudaRubrosModal .tab-content::-webkit-scrollbar-thumb {
+    background: #0d6efd;
+    border-radius: 3px;
+}

@@ -1,4 +1,3 @@
-
 // Calculadora específica para COMPRA PROYECTADA VERANO - CORREGIDA
 // Archivo: presupuestos/js/calculadora-verano.js
 
@@ -114,7 +113,29 @@ class CalculadoraVerano {
     }
     
     /**
-     * CORREGIDA: Obtener ventas anteriores de la tabla con nuevo orden de columnas
+     * CORREGIDA: Función auxiliar para parsear números con separador de miles
+     */
+    static parsearNumeroConSeparadorMiles(texto) {
+        if (!texto || typeof texto !== 'string') return 0;
+        
+        // Eliminar espacios y obtener texto limpio
+        const textoLimpio = texto.trim();
+        
+        // Si está vacío o es '-', retornar 0
+        if (!textoLimpio || textoLimpio === '-') return 0;
+        
+        // Eliminar separadores de miles (puntos) y reemplazar coma decimal por punto
+        // Formato esperado: "1.500,50" -> "1500.50" o "1.500" -> "1500"
+        let numeroLimpio = textoLimpio
+            .replace(/\./g, '')  // Eliminar todos los puntos (separadores de miles)
+            .replace(',', '.');  // Reemplazar coma decimal por punto
+        
+        const numero = parseFloat(numeroLimpio);
+        return isNaN(numero) ? 0 : numero;
+    }
+    
+    /**
+     * CORREGIDA: Obtener ventas anteriores de la tabla con parseo correcto de separador de miles
      */
     static obtenerVentasAnterioresDeTabla(indiceEditando) {
         const tbody = document.getElementById(`tbody-${indiceEditando.solapa}`);
@@ -141,11 +162,15 @@ class CalculadoraVerano {
             const celdaInviernoAnterior = fila.children[8]; // "Venta Inv. Anterior"
             
             if (celdaVeranoAnterior) {
-                ventaVeranoAnterior = FormatoUtils.parsearNumero(celdaVeranoAnterior.textContent.trim()) || 0;
+                const textoVerano = celdaVeranoAnterior.textContent.trim();
+                ventaVeranoAnterior = CalculadoraVerano.parsearNumeroConSeparadorMiles(textoVerano);
+                console.log(`🔍 Venta Verano Anterior - Texto: "${textoVerano}" -> Número: ${ventaVeranoAnterior}`);
             }
             
             if (celdaInviernoAnterior) {
-                ventaInviernoAnterior = FormatoUtils.parsearNumero(celdaInviernoAnterior.textContent.trim()) || 0;
+                const textoInvierno = celdaInviernoAnterior.textContent.trim();
+                ventaInviernoAnterior = CalculadoraVerano.parsearNumeroConSeparadorMiles(textoInvierno);
+                console.log(`🔍 Venta Invierno Anterior - Texto: "${textoInvierno}" -> Número: ${ventaInviernoAnterior}`);
             }
         }
         
@@ -299,4 +324,4 @@ window.CalculadoraVerano = CalculadoraVerano;
 // Función de diagnóstico global
 window.diagnosticarVerano = () => CalculadoraVerano.diagnosticar();
 
-console.log('✅ CalculadoraVerano CORREGIDA cargada');
+console.log('✅ CalculadoraVerano CORREGIDA cargada (con parseo separador miles)');
