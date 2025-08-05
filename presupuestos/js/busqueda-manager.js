@@ -45,9 +45,9 @@ class BusquedaManager {
         });
     }
 
-    /**
-     * NUEVA: Búsqueda instantánea usando filtros visuales (no API)
-     */
+    // CORRECCIÓN en presupuestos/js/busqueda-manager.js
+    // Modificar la función busquedaInstantanea:
+
     static busquedaInstantanea(solapa, termino) {
         const terminoLimpio = termino.trim();
         
@@ -55,10 +55,15 @@ class BusquedaManager {
             TablaRenderer.aplicarFiltroVisual(solapa, '');
             BusquedaManager.actualizarContadorBusqueda(solapa, null);
             
-            // AGREGAR ESTAS LÍNEAS - Restaurar totales originales
+            // CORREGIR: Restaurar totales originales Y notificar cambio
             if (['verano', 'invierno'].includes(solapa)) {
                 const datosOriginales = window.presupuestoApp?.datos?.[solapa] || [];
-                TotalesCompra.aplicarFiltros(solapa, datosOriginales);
+                
+                // Notificar cambio a TotalesCompra
+                if (typeof TotalesCompra !== 'undefined') {
+                    console.log(`🔄 Restaurando totales originales para ${solapa}:`, datosOriginales.length, 'registros');
+                    TotalesCompra.aplicarFiltros(solapa, datosOriginales);
+                }
             }
             return;
         }
@@ -68,10 +73,15 @@ class BusquedaManager {
             const coincidencias = TablaRenderer.aplicarFiltroVisual(solapa, terminoLimpio);
             BusquedaManager.actualizarContadorBusqueda(solapa, coincidencias);
             
-            // AGREGAR ESTAS LÍNEAS - Obtener datos filtrados y actualizar totales
+            // CORREGIR: Obtener datos filtrados y actualizar totales
             if (['verano', 'invierno'].includes(solapa)) {
                 const datosFiltrados = BusquedaManager.obtenerDatosFiltrados(solapa, terminoLimpio);
-                TotalesCompra.aplicarFiltros(solapa, datosFiltrados);
+                
+                // Notificar cambio a TotalesCompra
+                if (typeof TotalesCompra !== 'undefined') {
+                    console.log(`🔄 Aplicando filtro instantáneo en ${solapa}:`, datosFiltrados.length, 'registros');
+                    TotalesCompra.aplicarFiltros(solapa, datosFiltrados);
+                }
             }
             
             // Guardar término si es útil

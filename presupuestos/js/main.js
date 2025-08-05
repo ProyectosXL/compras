@@ -385,9 +385,19 @@ class PresupuestoApp {
         // Limpiar búsqueda anterior si es necesaria
         this.limpiarBusquedaSiEsNecesario(solapa);
     }
+    
+    /**
+     * NUEVA: Función para notificar cambios de filtros a TotalesCompra
+     */
+    notificarCambioFiltros(solapa, datosFiltrados) {
+        if (['verano', 'invierno'].includes(solapa) && typeof TotalesCompra !== 'undefined') {
+            console.log(`🔄 Notificando cambio de filtros en ${solapa}:`, datosFiltrados.length, 'registros');
+            TotalesCompra.aplicarFiltros(solapa, datosFiltrados);
+        }
+    }
 
     /**
-     * Buscar datos (MEJORADO)
+     * MODIFICAR: Función de búsqueda para notificar filtros
      */
     async buscarDatos(solapa) {
         const termino = document.getElementById(`search-${solapa}`).value;
@@ -408,6 +418,9 @@ class PresupuestoApp {
                         this.renderizarSolapaSegura(solapa, response.data);
                         UIUtils.actualizarContador(`count-${solapa}`, response.data.length);
                         
+                        // AGREGAR: Notificar cambio de filtros
+                        this.notificarCambioFiltros(solapa, response.data);
+                        
                         // Guardar término de búsqueda
                         this.guardarPreferencia(`busqueda_${solapa}`, termino);
                     }
@@ -422,7 +435,7 @@ class PresupuestoApp {
     }
 
     /**
-     * Resetear búsqueda (MEJORADO)
+     * MODIFICAR: Resetear búsqueda para notificar filtros
      */
     resetearBusqueda(solapa) {
         // Resetear estado de tabla antes de mostrar datos originales
@@ -430,6 +443,9 @@ class PresupuestoApp {
         
         this.renderizarSolapaSegura(solapa, this.datos[solapa]);
         UIUtils.actualizarContador(`count-${solapa}`, this.datos[solapa].length);
+        
+        // AGREGAR: Notificar reseteo de filtros (todos los datos)
+        this.notificarCambioFiltros(solapa, this.datos[solapa]);
         
         // Limpiar preferencia de búsqueda
         this.guardarPreferencia(`busqueda_${solapa}`, '');
@@ -862,6 +878,10 @@ async function filtrarPorRubroPresupuesto(solapa) {
         if (response.success) {
             window.presupuestoApp.renderizarSolapaSegura(solapa, response.data);
             UIUtils.actualizarContador(`count-${solapa}`, response.data.length);
+            
+            // AGREGAR: Notificar cambio de filtros
+            window.presupuestoApp.notificarCambioFiltros(solapa, response.data);
+            
             UIUtils.mostrarAlerta(`Filtrado por rubro: ${rubro}`, 'info', 2000);
         }
     } catch (error) {
@@ -888,6 +908,10 @@ async function filtrarPorCategoriaPresupuesto(solapa) {
         
         window.presupuestoApp.renderizarSolapaSegura(solapa, datosFiltrados);
         UIUtils.actualizarContador(`count-${solapa}`, datosFiltrados.length);
+        
+        // AGREGAR: Notificar cambio de filtros
+        window.presupuestoApp.notificarCambioFiltros(solapa, datosFiltrados);
+        
         UIUtils.mostrarAlerta(`Filtrado por categoría: ${categoria}`, 'info', 2000);
     } catch (error) {
         console.error('Error filtrando por categoría:', error);

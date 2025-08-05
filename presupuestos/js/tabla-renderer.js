@@ -58,40 +58,62 @@ const TablaRendererUtils = {
         tabla.setAttribute('data-limpia', 'true');
     },
 
+    // CORRECCIÓN en presupuestos/js/tabla-renderer.js
+    // Reemplazar la función buscarVentaHistoricaCorrecta en TablaRendererUtils
+
     buscarVentaHistoricaCorrecta(item, temporada) {
-        const anoActual = new Date().getFullYear() % 100;
+        const anoActual = new Date().getFullYear() % 100; // 2025 -> 25
         
         if (temporada === 'VERANO') {
-            const columnaVerano = `VTA_VERANO_${anoActual}`;
-            if (item[columnaVerano] && !isNaN(item[columnaVerano])) {
-                console.log(`✅ VERANO encontrado: ${columnaVerano} = ${item[columnaVerano]}`);
-                return parseFloat(item[columnaVerano]);
-            }
+            // Para verano, buscar el año actual o anterior
+            const posiblesColumnas = [
+                `VTA_VERANO_${anoActual}`,      // VERANO 25
+                `VTA_VERANO_${anoActual - 1}`,  // VERANO 24
+                'VERANO 24-25',
+                'VERANO 23-24'
+            ];
             
-            const anoAnterior = anoActual - 1;
-            const columnaVeranoAnterior = `VTA_VERANO_${anoAnterior}`;
-            if (item[columnaVeranoAnterior] && !isNaN(item[columnaVeranoAnterior])) {
-                console.log(`✅ VERANO anterior encontrado: ${columnaVeranoAnterior} = ${item[columnaVeranoAnterior]}`);
-                return parseFloat(item[columnaVeranoAnterior]);
+            for (const columna of posiblesColumnas) {
+                if (item[columna] && !isNaN(item[columna]) && parseFloat(item[columna]) > 0) {
+                    console.log(`✅ VERANO encontrado: ${columna} = ${item[columna]}`);
+                    return parseFloat(item[columna]);
+                }
             }
             
         } else if (temporada === 'INVIERNO') {
-            const anoInvierno = anoActual - 1;
-            const columnaInvierno = `VTA_INVIERNO_${anoInvierno}`;
-            if (item[columnaInvierno] && !isNaN(item[columnaInvierno])) {
-                console.log(`✅ INVIERNO encontrado: ${columnaInvierno} = ${item[columnaInvierno]}`);
-                return parseFloat(item[columnaInvierno]);
+            // CORRECCIÓN: Para invierno actual (2025), necesitamos:
+            // - INVIERNO 25 (1/2/2025 al 31/7/2025) - TEMPORADA ACTUAL
+            // - Si no existe, usar INVIERNO 24 como fallback
+            
+            const posiblesColumnas = [
+                `VTA_INVIERNO_${anoActual}`,      // INVIERNO 25 ← ESTA ES LA CORRECTA
+                `INVIERNO ${anoActual}`,          // INVIERNO 25 (formato alternativo)
+                `VTA_INVIERNO_${anoActual - 1}`,  // INVIERNO 24 (fallback)
+                `INVIERNO ${anoActual - 1}`,      // INVIERNO 24 (fallback formato alternativo)
+            ];
+            
+            for (const columna of posiblesColumnas) {
+                if (item[columna] && !isNaN(item[columna]) && parseFloat(item[columna]) > 0) {
+                    console.log(`✅ INVIERNO encontrado: ${columna} = ${item[columna]}`);
+                    return parseFloat(item[columna]);
+                }
             }
             
-            const anoInviernoAnterior = anoInvierno - 1;
-            const columnaInviernoAnterior = `VTA_INVIERNO_${anoInviernoAnterior}`;
-            if (item[columnaInviernoAnterior] && !isNaN(item[columnaInviernoAnterior])) {
-                console.log(`✅ INVIERNO anterior encontrado: ${columnaInviernoAnterior} = ${item[columnaInviernoAnterior]}`);
-                return parseFloat(item[columnaInviernoAnterior]);
-            }
+            // DEBUG: Mostrar todas las columnas disponibles si no encuentra
+            const columnasInvierno = Object.keys(item).filter(key => 
+                key.toLowerCase().includes('invierno')
+            );
+            console.warn(`❌ No se encontró venta INVIERNO. Columnas disponibles:`, columnasInvierno);
         }
         
-        console.warn(`❌ No se encontró venta ${temporada} anterior`);
+        console.warn(`❌ No se encontró venta ${temporada} anterior para item:`, {
+            rubro: item.RUBRO,
+            categoria: item.CATEGORIA_PADRE,
+            columnas_disponibles: Object.keys(item).filter(key => 
+                key.toLowerCase().includes(temporada.toLowerCase())
+            )
+        });
+        
         return 0;
     },
 
