@@ -275,27 +275,33 @@ class PresupuestoApp {
             }
 
             console.log('Cargando datos de stock...');
-            try {
-                const stock = await APIClient.obtenerStockProyectado();
-                if (stock.success) {
-                    this.datos.stock = stock.data;
-                    this.renderizarSolapaSegura('stock', stock.data);
-                    this.cargarFiltrosPresupuesto('stock', stock.data);
-                    UIUtils.actualizarContador('count-stock', stock.data.length);
-                    console.log('✓ Datos de stock cargados');
-                } else {
-                    throw new Error(stock.message);
+        try {
+            const stock = await APIClient.obtenerStockProyectado();
+            if (stock.success) {
+                this.datos.stock = stock.data;
+                this.renderizarSolapaSegura('stock', stock.data);
+                this.cargarFiltrosPresupuesto('stock', stock.data);
+                UIUtils.actualizarContador('count-stock', stock.data.length);
+                
+                // AGREGAR ESTA LÍNEA - Actualizar totales de stock
+                if (typeof TotalesStock !== 'undefined') {
+                    TotalesStock.actualizarDatos(stock.data);
                 }
-            } catch (error) {
-                console.error('Error cargando stock:', error);
-                throw new Error('Error en stock proyectado: ' + error.message);
+                
+                console.log('✓ Datos de stock cargados');
+            } else {
+                throw new Error(stock.message);
             }
-
         } catch (error) {
-            console.error('Error cargando solapas:', error);
-            throw error;
+            console.error('Error cargando stock:', error);
+            throw new Error('Error en stock proyectado: ' + error.message);
         }
+
+    } catch (error) {
+        console.error('Error cargando solapas:', error);
+        throw error;
     }
+}
 
     /**
      * NUEVO: Renderizar solapa de forma segura evitando duplicados
@@ -358,19 +364,24 @@ class PresupuestoApp {
                     break;
                     
                 case 'stock':
-                    response = await APIClient.obtenerStockProyectado();
-                    if (response.success) {
-                        this.datos.stock = response.data;
-                        this.renderizarSolapaSegura('stock', response.data);
-                        UIUtils.actualizarContador('count-stock', response.data.length);
+                response = await APIClient.obtenerStockProyectado();
+                if (response.success) {
+                    this.datos.stock = response.data;
+                    this.renderizarSolapaSegura('stock', response.data);
+                    UIUtils.actualizarContador('count-stock', response.data.length);
+                    
+                    // AGREGAR - Actualizar totales de stock
+                    if (typeof TotalesStock !== 'undefined') {
+                        TotalesStock.actualizarDatos(response.data);
                     }
-                    break;
-            }
-            
-        } catch (error) {
-            console.error(`Error en lazy loading de ${solapa}:`, error);
+                }
+                break;
         }
+        
+    } catch (error) {
+        console.error(`Error en lazy loading de ${solapa}:`, error);
     }
+}
 
     /**
      * Manejar cambio de tab
@@ -387,12 +398,18 @@ class PresupuestoApp {
     }
     
     /**
-     * NUEVA: Función para notificar cambios de filtros a TotalesCompra
+     * MODIFICAR: notificarCambioFiltros para incluir stock
      */
     notificarCambioFiltros(solapa, datosFiltrados) {
         if (['verano', 'invierno'].includes(solapa) && typeof TotalesCompra !== 'undefined') {
             console.log(`🔄 Notificando cambio de filtros en ${solapa}:`, datosFiltrados.length, 'registros');
             TotalesCompra.aplicarFiltros(solapa, datosFiltrados);
+        }
+        
+        // AGREGAR ESTA SECCIÓN - Para stock proyectado
+        if (solapa === 'stock' && typeof TotalesStock !== 'undefined') {
+            console.log(`🔄 Notificando cambio de filtros en stock:`, datosFiltrados.length, 'registros');
+            TotalesStock.aplicarFiltros(datosFiltrados);
         }
     }
 
@@ -879,7 +896,7 @@ async function filtrarPorRubroPresupuesto(solapa) {
             window.presupuestoApp.renderizarSolapaSegura(solapa, response.data);
             UIUtils.actualizarContador(`count-${solapa}`, response.data.length);
             
-            // AGREGAR: Notificar cambio de filtros
+            // MODIFICAR: Notificar cambio de filtros (incluye stock ahora)
             window.presupuestoApp.notificarCambioFiltros(solapa, response.data);
             
             UIUtils.mostrarAlerta(`Filtrado por rubro: ${rubro}`, 'info', 2000);
@@ -909,7 +926,7 @@ async function filtrarPorCategoriaPresupuesto(solapa) {
         window.presupuestoApp.renderizarSolapaSegura(solapa, datosFiltrados);
         UIUtils.actualizarContador(`count-${solapa}`, datosFiltrados.length);
         
-        // AGREGAR: Notificar cambio de filtros
+        // MODIFICAR: Notificar cambio de filtros (incluye stock ahora)
         window.presupuestoApp.notificarCambioFiltros(solapa, datosFiltrados);
         
         UIUtils.mostrarAlerta(`Filtrado por categoría: ${categoria}`, 'info', 2000);

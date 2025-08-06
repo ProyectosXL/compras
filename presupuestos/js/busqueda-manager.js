@@ -55,36 +55,44 @@ class BusquedaManager {
             TablaRenderer.aplicarFiltroVisual(solapa, '');
             BusquedaManager.actualizarContadorBusqueda(solapa, null);
             
-            // CORREGIR: Restaurar totales originales Y notificar cambio
+            // Restaurar totales originales
             if (['verano', 'invierno'].includes(solapa)) {
                 const datosOriginales = window.presupuestoApp?.datos?.[solapa] || [];
-                
-                // Notificar cambio a TotalesCompra
                 if (typeof TotalesCompra !== 'undefined') {
-                    console.log(`🔄 Restaurando totales originales para ${solapa}:`, datosOriginales.length, 'registros');
                     TotalesCompra.aplicarFiltros(solapa, datosOriginales);
+                }
+            }
+            
+            // AGREGAR - Para stock proyectado
+            if (solapa === 'stock') {
+                const datosOriginales = window.presupuestoApp?.datos?.stock || [];
+                if (typeof TotalesStock !== 'undefined') {
+                    TotalesStock.aplicarFiltros(datosOriginales);
                 }
             }
             return;
         }
 
         if (terminoLimpio.length >= 2) {
-            // Usar filtro visual para búsqueda instantánea
             const coincidencias = TablaRenderer.aplicarFiltroVisual(solapa, terminoLimpio);
             BusquedaManager.actualizarContadorBusqueda(solapa, coincidencias);
             
-            // CORREGIR: Obtener datos filtrados y actualizar totales
+            // Actualizar totales con datos filtrados
             if (['verano', 'invierno'].includes(solapa)) {
                 const datosFiltrados = BusquedaManager.obtenerDatosFiltrados(solapa, terminoLimpio);
-                
-                // Notificar cambio a TotalesCompra
                 if (typeof TotalesCompra !== 'undefined') {
-                    console.log(`🔄 Aplicando filtro instantáneo en ${solapa}:`, datosFiltrados.length, 'registros');
                     TotalesCompra.aplicarFiltros(solapa, datosFiltrados);
                 }
             }
             
-            // Guardar término si es útil
+            // AGREGAR - Para stock proyectado
+            if (solapa === 'stock') {
+                const datosFiltrados = BusquedaManager.obtenerDatosFiltrados(solapa, terminoLimpio);
+                if (typeof TotalesStock !== 'undefined') {
+                    TotalesStock.aplicarFiltros(datosFiltrados);
+                }
+            }
+            
             if (coincidencias > 0) {
                 BusquedaManager.agregarAlHistorial(terminoLimpio, solapa, coincidencias, true);
             }
