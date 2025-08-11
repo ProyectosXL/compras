@@ -15,6 +15,7 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <link href="css/obtener-presupuesto.css" rel="stylesheet">
     <link href="css/tabla-optimizada.css" rel="stylesheet">
+    <link href="css/filtros-persistentes.css" rel="stylesheet">
     
     <!-- Estilos específicos -->
     <?php include 'components/styles.php'; ?>

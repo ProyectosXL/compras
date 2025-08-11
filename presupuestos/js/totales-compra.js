@@ -42,7 +42,7 @@ class TotalesCompra {
     }
 
     /**
-     * Calcular totales de compra proyectada (solo valores negativos) - MEJORADA
+     * Calcular totales de compra proyectada (MODIFICADA)
      */
     static calcularTotales(solapa) {
         try {
@@ -51,34 +51,58 @@ class TotalesCompra {
             console.log(`📊 Calculando totales para ${solapa}:`, datos.length, 'registros');
             
             if (datos.length === 0) {
-                TotalesCompra.mostrarTotal(solapa, 0, 0);
+                TotalesCompra.ocultarTotales(solapa);
                 return;
             }
 
-            let totalNegativo = 0;
-            let cantidadItems = 0;
-
-            datos.forEach((item, index) => {
-                // Buscar la columna de compra proyectada
+            const totales = datos.reduce((acc, item) => {
                 const compraProyectada = TotalesCompra.obtenerCompraProyectada(item);
-                
-                console.log(`Item ${index}: ${item.RUBRO} - ${item.CATEGORIA_PADRE} = ${compraProyectada}`);
-                
-                // Solo sumar si es negativo (necesita reposición)
+                const stockProyectado = parseFloat(item.STOCK_PROYECTADO || 0);
+                const ventaVeranoAnt = TotalesCompra.obtenerVentaAnterior(item, 'VERANO');
+                const ventaInviernoAnt = TotalesCompra.obtenerVentaAnterior(item, 'INVIERNO');
+                const ventaVeranoProy = parseFloat(item.VENTA_PROY_VERANO || 0);
+                const ventaInviernoProy = parseFloat(item.VENTA_PROY_INVIERNO || 0);
+
+                acc.totalRegistros++;
+                acc.totalStockProyectado += stockProyectado;
+                acc.totalVentaVeranoAnt += ventaVeranoAnt;
+                acc.totalVentaInviernoAnt += ventaInviernoAnt;
+                acc.totalVentaVeranoProy += ventaVeranoProy;
+                acc.totalVentaInviernoProy += ventaInviernoProy;
+                acc.totalCompraProyectada += compraProyectada;
+
                 if (compraProyectada < 0) {
-                    totalNegativo += Math.abs(compraProyectada); // Convertir a positivo para suma
-                    cantidadItems++;
-                    console.log(`✓ Agregado al total: ${Math.abs(compraProyectada)}`);
+                    acc.totalNegativo += Math.abs(compraProyectada);
+                    acc.itemsNegativos++;
+                } else if (compraProyectada > 0) {
+                    acc.itemsPositivos++;
                 }
+
+                return acc;
+            }, {
+                totalRegistros: 0,
+                totalStockProyectado: 0,
+                totalVentaVeranoAnt: 0,
+                totalVentaInviernoAnt: 0,
+                totalVentaVeranoProy: 0,
+                totalVentaInviernoProy: 0,
+                totalCompraProyectada: 0,
+                totalNegativo: 0,
+                itemsNegativos: 0,
+                itemsPositivos: 0
             });
 
-            console.log(`🎯 ${solapa} - Total negativo: ${totalNegativo}, Items: ${cantidadItems}`);
+            console.log(`🎯 ${solapa} - Totales calculados:`, totales);
             
-            TotalesCompra.mostrarTotal(solapa, totalNegativo, cantidadItems);
+            // Mostrar resumen superior
+            TotalesCompra.mostrarResumenSuperior(solapa, totales);
+            
+            // Agregar fila de totales
+            TotalesCompra.agregarFilaTotales(solapa, totales);
             
         } catch (error) {
             console.error('Error calculando totales:', error);
-            TotalesCompra.mostrarTotal(solapa, 0, 0);
+            TotalesCompra.ocultarTotales(solapa);
         }
     }
 
@@ -303,16 +327,30 @@ class TotalesCompra {
     }
 
     /**
-     * Limpiar totales
+     * Limpiar totales (MODIFICADA)
      */
     static limpiarTotales(solapa = null) {
         const solapas = solapa ? [solapa] : ['verano', 'invierno'];
         
         solapas.forEach(s => {
+            // Limpiar contenedor antiguo
             const container = document.getElementById(`total-compra-${s}`);
             if (container) {
                 container.classList.add('d-none');
                 container.innerHTML = '';
+            }
+            
+            // Limpiar nuevo contenedor superior
+            const containerSuperior = document.getElementById(`total-compra-${s}-superior`);
+            if (containerSuperior) {
+                containerSuperior.classList.add('d-none');
+                containerSuperior.innerHTML = '';
+            }
+            
+            // Limpiar fila de totales
+            const filaTotal = document.querySelector(`#tbody-${s} .fila-totales-compra`);
+            if (filaTotal) {
+                filaTotal.remove();
             }
             
             TotalesCompra.datos[s] = [];
@@ -423,6 +461,192 @@ class TotalesCompra {
         
         console.groupEnd();
     }
+
+    /**
+     * Mostrar resumen en la parte superior (NUEVA FUNCIÓN)
+     */
+    static mostrarResumenSuperior(solapa, totales) {
+        const containerId = `total-compra-${solapa}-superior`;
+        let container = document.getElementById(containerId);
+
+        // Crear el contenedor si no existe
+        if (!container) {
+            TotalesCompra.crearContainerResumenSuperior(solapa);
+            container = document.getElementById(containerId);
+        }
+
+        if (!container) {
+            console.warn('No se pudo crear el contenedor de resumen superior para:', solapa);
+            return;
+        }
+
+        const icono = solapa === 'verano' ? 'fa-sun' : 'fa-snowflake';
+        const colorPrimario = solapa === 'verano' ? 'warning' : 'info';
+
+        // Actualizar contenido
+        container.innerHTML = `
+            <div class="row text-center">
+                <div class="col-4">
+                    <small class="text-muted d-block">
+                        <i class="fas ${icono} me-1"></i>
+                        Total Registros
+                    </small>
+                    <span class="badge bg-${colorPrimario} fs-6">${totales.totalRegistros}</span>
+                </div>
+                <div class="col-4">
+                    <small class="text-muted d-block">Items Necesita Compra</small>
+                    <span class="badge bg-danger fs-6">${totales.itemsNegativos}</span>
+                </div>
+                <div class="col-4">
+                    <small class="text-muted d-block">Total Necesita Compra</small>
+                    <span class="badge bg-danger fs-5">${TotalesCompra.formatearNumero(totales.totalNegativo)}</span>
+                </div>
+            </div>
+        `;
+
+        // Mostrar el contenedor
+        container.classList.remove('d-none');
+        
+        // Animación de actualización
+        container.classList.add('actualizado');
+        setTimeout(() => container.classList.remove('actualizado'), 500);
+    }
+
+    /**
+     * Crear contenedor de resumen superior (NUEVA FUNCIÓN)
+     */
+    static crearContainerResumenSuperior(solapa) {
+        const tabPane = document.getElementById(solapa);
+        if (!tabPane) {
+            console.error('No se encontró la solapa:', solapa);
+            return;
+        }
+
+        // Buscar el search-container para insertar después
+        const searchContainer = tabPane.querySelector('.search-container');
+        if (!searchContainer) {
+            console.error('No se encontró search-container en:', solapa);
+            return;
+        }
+
+        // Crear el contenedor de resumen
+        const resumenContainer = document.createElement('div');
+        resumenContainer.id = `total-compra-${solapa}-superior`;
+        resumenContainer.className = 'bg-light p-2 border-bottom d-none total-compra-container';
+        resumenContainer.style.borderLeft = solapa === 'verano' ? '4px solid #ffc107' : '4px solid #0dcaf0';
+
+        // Insertar después del search-container
+        searchContainer.parentNode.insertBefore(resumenContainer, searchContainer.nextSibling);
+        
+        console.log('Contenedor de resumen superior creado para:', solapa);
+    }
+
+    /**
+     * Agregar fila de totales al final de la tabla (NUEVA FUNCIÓN)
+     */
+    static agregarFilaTotales(solapa, totales) {
+        const tbody = document.getElementById(`tbody-${solapa}`);
+        if (!tbody) return;
+
+        // Remover fila de totales anterior si existe
+        const filaAnterior = tbody.querySelector('.fila-totales-compra');
+        if (filaAnterior) {
+            filaAnterior.remove();
+        }
+
+        // Crear nueva fila de totales
+        const filaTotales = document.createElement('tr');
+        filaTotales.className = 'fila-totales-compra table-warning fw-bold';
+        filaTotales.style.borderTop = '3px solid #ffc107';
+        
+        const colorBadge = solapa === 'verano' ? 'warning' : 'info';
+        
+        filaTotales.innerHTML = `
+            <td class="fw-bold text-uppercase">
+                <i class="fas ${solapa === 'verano' ? 'fa-sun' : 'fa-snowflake'} me-2"></i>
+                TOTALES
+            </td>
+            <td class="text-center">
+                <span class="badge bg-${colorBadge}">${totales.totalRegistros} items</span>
+            </td>
+            <td class="text-end bg-info-subtle fw-bold" title="Total stock proyectado">
+                ${TotalesCompra.formatearNumero(totales.totalStockProyectado)}
+            </td>
+            <td class="text-center">-</td>
+            <td class="text-center">-</td>
+            <td class="text-end bg-info-subtle fw-bold" title="Total ventas anteriores verano">
+                ${TotalesCompra.formatearNumero(totales.totalVentaVeranoAnt)}
+            </td>
+            <td class="text-end bg-primary-subtle fw-bold" title="Total ventas proyectadas verano">
+                ${TotalesCompra.formatearNumero(totales.totalVentaVeranoProy)}
+            </td>
+            <td class="text-center">-</td>
+            <td class="text-end bg-info-subtle fw-bold" title="Total ventas anteriores invierno">
+                ${TotalesCompra.formatearNumero(totales.totalVentaInviernoAnt)}
+            </td>
+            <td class="text-end bg-primary-subtle fw-bold" title="Total ventas proyectadas invierno">
+                ${TotalesCompra.formatearNumero(totales.totalVentaInviernoProy)}
+            </td>
+            <td class="text-end ${totales.totalCompraProyectada < 0 ? 'bg-danger-subtle text-danger-emphasis' : 'bg-success-subtle text-success-emphasis'} fw-bold" title="Total compra proyectada">
+                ${TotalesCompra.formatearNumero(totales.totalCompraProyectada)}
+            </td>
+        `;
+
+        tbody.appendChild(filaTotales);
+    }
+
+    /**
+     * Obtener venta anterior por temporada (NUEVA FUNCIÓN)
+     */
+    static obtenerVentaAnterior(item, temporada) {
+        const anoActual = new Date().getFullYear() % 100;
+        
+        if (temporada === 'VERANO') {
+            const posiblesColumnas = [
+                `VTA_VERANO_${anoActual}`,
+                `VTA_VERANO_${anoActual - 1}`,
+                'VERANO 24-25',
+                'VERANO 23-24'
+            ];
+            
+            for (const columna of posiblesColumnas) {
+                if (item[columna] && !isNaN(item[columna]) && parseFloat(item[columna]) > 0) {
+                    return parseFloat(item[columna]);
+                }
+            }
+        } else if (temporada === 'INVIERNO') {
+            const posiblesColumnas = [
+                `VTA_INVIERNO_${anoActual}`,
+                `INVIERNO ${anoActual}`,
+                `VTA_INVIERNO_${anoActual - 1}`,
+                `INVIERNO ${anoActual - 1}`
+            ];
+            
+            for (const columna of posiblesColumnas) {
+                if (item[columna] && !isNaN(item[columna]) && parseFloat(item[columna]) > 0) {
+                    return parseFloat(item[columna]);
+                }
+            }
+        }
+        
+        return 0;
+    }
+
+    /**
+     * Ocultar totales (NUEVA FUNCIÓN)
+     */
+    static ocultarTotales(solapa) {
+        const containerSuperior = document.getElementById(`total-compra-${solapa}-superior`);
+        if (containerSuperior) {
+            containerSuperior.classList.add('d-none');
+        }
+        
+        const filaTotal = document.querySelector(`#tbody-${solapa} .fila-totales-compra`);
+        if (filaTotal) {
+            filaTotal.remove();
+        }
+    }
+
 }
 
 // Hacer disponible globalmente
@@ -440,3 +664,4 @@ window.aplicarFiltrosTotales = function(solapa, datosFiltrados) {
 window.onIndiceActualizado = function(solapa, rubro, categoria, nuevoIndice) {
     TotalesCompra.onIndiceActualizado(solapa, rubro, categoria, nuevoIndice);
 };
+

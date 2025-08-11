@@ -170,17 +170,23 @@ class UIUtils {
     }
 
     /**
-     * Mostrar información de temporada
+     * Mostrar información de temporada - MODIFICADA
      */
     static mostrarInfoTemporada(info) {
         if (info && info.temporada_actual) {
             const container = document.getElementById('info-temporada-container');
             const temporadaElement = document.getElementById('temporada-actual');
+            const diasTotalesElement = document.getElementById('dias-totales'); // NUEVO
             const diasElement = document.getElementById('dias-restantes');
             const fechaElement = document.getElementById('fecha-actual');
             
             if (temporadaElement) {
                 temporadaElement.textContent = `${info.temporada_actual.temporada} ${info.temporada_actual.ano}`;
+            }
+            
+            // NUEVO: Mostrar días totales
+            if (diasTotalesElement && info.dias_totales) {
+                diasTotalesElement.textContent = info.dias_totales;
             }
             
             if (diasElement) {

@@ -421,45 +421,53 @@ class PresupuestoCalculos {
     }
 
     /**
-     * NUEVO: Calcular días totales de una temporada
+     * CORREGIDA: Función para calcular días totales de verano
      */
-    private static function calcularDiasTotalesVerano() {
-        // Verano: 1 agosto año anterior al 31 enero año actual
-        $anoActual = date('Y');
-        $inicioVerano = new DateTime(($anoActual - 1) . '-08-01');
-        $finVerano = new DateTime($anoActual . '-01-31');
+    private static function calcularDiasTotalesVerano($ano = null) {
+        if (!$ano) {
+            $ano = (int)date('Y');
+        }
+        
+        // Verano: del 1 de agosto del año anterior al 31 de enero del año actual
+        $inicioVerano = new DateTime(($ano - 1) . '-08-01');
+        $finVerano = new DateTime($ano . '-01-31');
         $diferencia = $finVerano->diff($inicioVerano);
         return $diferencia->days + 1;
     }
 
     /**
-     * NUEVO: Calcular días totales de invierno
+     * CORREGIDA: Función para calcular días totales de invierno
      */
-    private static function calcularDiasTotalesInvierno() {
-        // Invierno: 1 febrero al 31 julio del mismo año
-        $anoActual = date('Y');
-        $inicioInvierno = new DateTime($anoActual . '-02-01');
-        $finInvierno = new DateTime($anoActual . '-07-31');
+    private static function calcularDiasTotalesInvierno($ano = null) {
+        if (!$ano) {
+            $ano = (int)date('Y');
+        }
+        
+        // Invierno: del 1 de febrero al 31 de julio del mismo año
+        $inicioInvierno = new DateTime($ano . '-02-01');
+        $finInvierno = new DateTime($ano . '-07-31');
         $diferencia = $finInvierno->diff($inicioInvierno);
         return $diferencia->days + 1;
     }
     
     /**
-     * Obtiene información completa de la temporada actual para debugging
+     * Obtiene información completa de la temporada actual para debugging - MODIFICADA
      */
     public static function obtenerInfoTemporada($fecha = null) {
         $temporada = self::obtenerTemporadaActual($fecha);
         $diasRestantes = self::calcularDiasRestantesTemporada($fecha);
+        $diasTotales = self::calcularDiasTotalesTemporadaActual($fecha); // NUEVO
         $etiquetas = self::generarEtiquetasVentaProyectada($fecha);
         
         return [
             'temporada_actual' => $temporada,
+            'dias_totales' => $diasTotales, // NUEVO
             'dias_restantes' => $diasRestantes,
             'etiquetas_proyeccion' => $etiquetas,
             'fecha_calculo' => $fecha ? $fecha->format('Y-m-d') : date('Y-m-d')
         ];
     }
-    
+
     /**
      * NUEVO: Función de diagnóstico para debug
      */
@@ -479,6 +487,19 @@ class PresupuestoCalculos {
         }
         
         return $info;
+    }
+
+    /**
+     * Calcular días totales de la temporada actual
+     */
+    public static function calcularDiasTotalesTemporadaActual($fecha = null) {
+        $temporadaActual = self::obtenerTemporadaActual($fecha);
+        
+        if ($temporadaActual['temporada'] === 'VERANO') {
+            return self::calcularDiasTotalesVerano($temporadaActual['ano']);
+        } else {
+            return self::calcularDiasTotalesInvierno($temporadaActual['ano']);
+        }
     }
 }
 ?>

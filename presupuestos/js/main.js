@@ -393,8 +393,15 @@ class PresupuestoApp {
         // Actualizar preferencias
         this.guardarPreferencia('ultima_solapa', solapa);
         
-        // Limpiar búsqueda anterior si es necesaria
-        this.limpiarBusquedaSiEsNecesario(solapa);
+        // Si es una solapa de presupuesto y hay filtros persistentes, aplicarlos
+        if (['verano', 'invierno', 'stock'].includes(solapa) && typeof FiltrosManager !== 'undefined') {
+            setTimeout(() => {
+                FiltrosManager.aplicarFiltrosASolapa(solapa);
+            }, 200);
+        } else {
+            // Limpiar búsqueda anterior si es necesaria (sistema anterior)
+            this.limpiarBusquedaSiEsNecesario(solapa);
+        }
     }
     
     /**
@@ -419,6 +426,13 @@ class PresupuestoApp {
     async buscarDatos(solapa) {
         const termino = document.getElementById(`search-${solapa}`).value;
         
+        // Si tenemos FiltrosManager, usarlo para solapas de presupuesto
+        if (typeof FiltrosManager !== 'undefined' && ['verano', 'invierno', 'stock'].includes(solapa)) {
+            FiltrosManager.actualizarFiltro('termino', termino);
+            return;
+        }
+        
+        // Fallback al sistema anterior para otras solapas
         if (BusquedaManager.timeoutBusqueda) {
             clearTimeout(BusquedaManager.timeoutBusqueda);
         }
@@ -429,16 +443,10 @@ class PresupuestoApp {
                     const response = await APIClient.buscarDatos(termino, solapa);
                     
                     if (response.success) {
-                        // Resetear estado antes de renderizar resultados de búsqueda
                         TablaRenderer.resetearEstadoTabla(solapa);
-                        
                         this.renderizarSolapaSegura(solapa, response.data);
                         UIUtils.actualizarContador(`count-${solapa}`, response.data.length);
-                        
-                        // AGREGAR: Notificar cambio de filtros
                         this.notificarCambioFiltros(solapa, response.data);
-                        
-                        // Guardar término de búsqueda
                         this.guardarPreferencia(`busqueda_${solapa}`, termino);
                     }
                 } catch (error) {
@@ -825,7 +833,23 @@ function cargarDatos() {
 }
 
 function buscarDatos(solapa) {
-    window.presupuestoApp.buscarDatos(solapa);
+    // Usar FiltrosManager para solapas de presupuesto si está disponible
+    if (typeof FiltrosManager !== 'undefined' && ['verano', 'invierno', 'stock'].includes(solapa)) {
+        const input = document.getElementById(`search-${solapa}`);
+        if (input) {
+            FiltrosManager.actualizarFiltro('termino', input.value);
+        }
+    } else {
+        // Fallback para otras solapas
+        if (BusquedaManager && BusquedaManager.busquedaInstantanea) {
+            const input = document.getElementById(`search-${solapa}`);
+            if (input) {
+                BusquedaManager.busquedaInstantanea(solapa, input.value);
+            }
+        } else {
+            window.presupuestoApp.buscarDatos(solapa);
+        }
+    }
 }
 
 function exportarExcel(solapa) {
@@ -879,70 +903,92 @@ function actualizarHora() {
     UIUtils.mostrarAlerta('Hora actualizada', 'info', 1000);
 }
 
-// Funciones de filtros para presupuesto
+/**
+ * Filtrar por rubro usando el nuevo sistema persistente
+ */
 async function filtrarPorRubroPresupuesto(solapa) {
     const select = document.getElementById(`filtro-rubro-${solapa}`);
     if (!select) return;
     
     const rubro = select.value;
-    if (!rubro) {
-        window.presupuestoApp.resetearBusqueda(solapa);
-        return;
-    }
     
-    try {
-        const response = await APIClient.filtrarPorRubro(rubro, solapa);
-        if (response.success) {
-            window.presupuestoApp.renderizarSolapaSegura(solapa, response.data);
-            UIUtils.actualizarContador(`count-${solapa}`, response.data.length);
-            
-            // MODIFICAR: Notificar cambio de filtros (incluye stock ahora)
-            window.presupuestoApp.notificarCambioFiltros(solapa, response.data);
-            
-            UIUtils.mostrarAlerta(`Filtrado por rubro: ${rubro}`, 'info', 2000);
+    // Usar el nuevo sistema de filtros persistentes
+    if (typeof FiltrosManager !== 'undefined') {
+        await FiltrosManager.aplicarFiltroRubro(rubro, solapa);
+    } else {
+        // Fallback al sistema anterior
+        if (!rubro) {
+            window.presupuestoApp.resetearBusqueda(solapa);
+            return;
         }
-    } catch (error) {
-        console.error('Error filtrando por rubro:', error);
-        UIUtils.mostrarAlerta('Error al filtrar por rubro', 'error');
+        
+        try {
+            const response = await APIClient.filtrarPorRubro(rubro, solapa);
+            if (response.success) {
+                window.presupuestoApp.renderizarSolapaSegura(solapa, response.data);
+                UIUtils.actualizarContador(`count-${solapa}`, response.data.length);
+                window.presupuestoApp.notificarCambioFiltros(solapa, response.data);
+                UIUtils.mostrarAlerta(`Filtrado por rubro: ${rubro}`, 'info', 2000);
+            }
+        } catch (error) {
+            console.error('Error filtrando por rubro:', error);
+            UIUtils.mostrarAlerta('Error al filtrar por rubro', 'error');
+        }
     }
 }
 
+/**
+ * Filtrar por categoría usando el nuevo sistema persistente
+ */
 async function filtrarPorCategoriaPresupuesto(solapa) {
     const select = document.getElementById(`filtro-categoria-${solapa}`);
     if (!select) return;
     
     const categoria = select.value;
-    if (!categoria) {
-        window.presupuestoApp.resetearBusqueda(solapa);
-        return;
-    }
     
-    try {
-        const datos = window.presupuestoApp.getDatos(solapa);
-        const datosFiltrados = datos.filter(item => 
-            item.CATEGORIA_PADRE === categoria || item.CATEGORIA === categoria
-        );
+    // Usar el nuevo sistema de filtros persistentes
+    if (typeof FiltrosManager !== 'undefined') {
+        await FiltrosManager.aplicarFiltroCategoria(categoria, solapa);
+    } else {
+        // Fallback al sistema anterior
+        if (!categoria) {
+            window.presupuestoApp.resetearBusqueda(solapa);
+            return;
+        }
         
-        window.presupuestoApp.renderizarSolapaSegura(solapa, datosFiltrados);
-        UIUtils.actualizarContador(`count-${solapa}`, datosFiltrados.length);
-        
-        // MODIFICAR: Notificar cambio de filtros (incluye stock ahora)
-        window.presupuestoApp.notificarCambioFiltros(solapa, datosFiltrados);
-        
-        UIUtils.mostrarAlerta(`Filtrado por categoría: ${categoria}`, 'info', 2000);
-    } catch (error) {
-        console.error('Error filtrando por categoría:', error);
-        UIUtils.mostrarAlerta('Error al filtrar por categoría', 'error');
+        try {
+            const datos = window.presupuestoApp.getDatos(solapa);
+            const datosFiltrados = datos.filter(item => 
+                item.CATEGORIA_PADRE === categoria || item.CATEGORIA === categoria
+            );
+            
+            window.presupuestoApp.renderizarSolapaSegura(solapa, datosFiltrados);
+            UIUtils.actualizarContador(`count-${solapa}`, datosFiltrados.length);
+            window.presupuestoApp.notificarCambioFiltros(solapa, datosFiltrados);
+            UIUtils.mostrarAlerta(`Filtrado por categoría: ${categoria}`, 'info', 2000);
+        } catch (error) {
+            console.error('Error filtrando por categoría:', error);
+            UIUtils.mostrarAlerta('Error al filtrar por categoría', 'error');
+        }
     }
 }
 
+/**
+ * Limpiar filtros usando el nuevo sistema persistente
+ */
 function limpiarFiltrosPresupuesto(solapa) {
-    document.getElementById(`search-${solapa}`).value = '';
-    document.getElementById(`filtro-rubro-${solapa}`).value = '';
-    document.getElementById(`filtro-categoria-${solapa}`).value = '';
-    
-    window.presupuestoApp.resetearBusqueda(solapa);
-    UIUtils.mostrarAlerta('Filtros limpiados', 'info', 2000);
+    // Usar el nuevo sistema de filtros persistentes
+    if (typeof FiltrosManager !== 'undefined') {
+        FiltrosManager.limpiarFiltros();
+    } else {
+        // Fallback al sistema anterior
+        document.getElementById(`search-${solapa}`).value = '';
+        document.getElementById(`filtro-rubro-${solapa}`).value = '';
+        document.getElementById(`filtro-categoria-${solapa}`).value = '';
+        
+        window.presupuestoApp.resetearBusqueda(solapa);
+        UIUtils.mostrarAlerta('Filtros limpiados', 'info', 2000);
+    }
 }
 
 // Inicializar cuando el DOM esté listo
@@ -1104,10 +1150,59 @@ function fixCompletoScrollVentas() {
     }, 200);
 }
 
+function mostrarEstadoFiltros() {
+    if (typeof FiltrosManager !== 'undefined') {
+        const estado = FiltrosManager.obtenerEstadoFiltros();
+        console.log('📊 Estado de filtros persistentes:');
+        console.table(estado);
+        
+        if (estado.activos) {
+            UIUtils.mostrarAlerta(
+                `Filtros activos: ${estado.cantidad} filtro(s) aplicado(s)`,
+                'info',
+                3000
+            );
+        } else {
+            UIUtils.mostrarAlerta('No hay filtros activos', 'info', 2000);
+        }
+        
+        return estado;
+    } else {
+        console.warn('FiltrosManager no está disponible');
+        return null;
+    }
+}
+
+function agregarBotonLimpiarFiltrosPersistentes() {
+    const exportButtons = document.querySelector('.export-buttons');
+    if (exportButtons && !document.getElementById('btn-limpiar-filtros-persistentes')) {
+        const btnLimpiar = document.createElement('button');
+        btnLimpiar.id = 'btn-limpiar-filtros-persistentes';
+        btnLimpiar.className = 'btn btn-outline-warning btn-sm';
+        btnLimpiar.innerHTML = '<i class="fas fa-filter me-1"></i> Limpiar Filtros';
+        btnLimpiar.onclick = () => {
+            if (typeof FiltrosManager !== 'undefined') {
+                FiltrosManager.limpiarFiltros();
+            }
+        };
+        btnLimpiar.title = 'Limpiar todos los filtros persistentes';
+        
+        exportButtons.insertBefore(btnLimpiar, exportButtons.lastElementChild);
+        console.log('✅ Botón de limpiar filtros persistentes agregado');
+    }
+}
+
+// Hacer funciones disponibles globalmente
+window.mostrarEstadoFiltros = mostrarEstadoFiltros;
+window.agregarBotonLimpiarFiltrosPersistentes = agregarBotonLimpiarFiltrosPersistentes;
+
 // Configurar cuando se carga la página
 document.addEventListener('DOMContentLoaded', function() {
     configurarFixAgresivo();
-    
+    setTimeout(() => {
+    agregarBotonLimpiarFiltrosPersistentes();
+    }, 2000);
+        
     // Aplicar fix cuando se active la solapa
     const ventasTab = document.getElementById('ventas-6-meses-tab');
     if (ventasTab) {

@@ -8,7 +8,10 @@
 <script src="js/tabla-renderer.js"></script>
 <script src="js/busqueda-manager.js"></script>
 
-<!-- NUEVOS: Calculadoras específicas (CARGAR ANTES del indice-editor) -->
+<!-- Gestor de filtros persistentes -->
+<script src="js/filtros-manager.js"></script>
+
+<!-- Calculadoras específicas (CARGAR ANTES del indice-editor) -->
 <script src="js/calculadora-verano.js"></script>
 <script src="js/calculadora-invierno.js"></script>
 

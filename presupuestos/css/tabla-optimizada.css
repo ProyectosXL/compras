@@ -379,7 +379,7 @@ html, body {
 /* Para las otras solapas también */
 #verano .table-responsive,
 #invierno .table-responsive {
-    max-height: calc(100vh - 340px) !important;
+    max-height: calc(100vh - 360px) !important;
 }
 
 #stock .table-responsive {
