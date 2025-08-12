@@ -166,7 +166,7 @@ const TablaRendererUtils = {
 class TablaRenderer {
     
     /**
-     * Renderizar tabla de Compra Proyectada Verano
+     * Renderizar tabla de Compra Proyectada Verano (MODIFICADO)
      */
     static renderizarTablaVerano(datos, etiquetas = null) {
         const tbody = document.getElementById('tbody-verano');
@@ -190,11 +190,16 @@ class TablaRenderer {
             TablaRenderer.actualizarHeadersEtiquetas('verano', etiquetas);
         }
         
+        // NUEVO: Restaurar marcas de índices editados
+        setTimeout(() => {
+            TablaRenderer.restaurarMarcasIndicesEditados('verano', datos);
+        }, 100);
+        
         console.log(`✅ Tabla verano renderizada: ${datos.length} registros`);
     }
 
     /**
-     * Renderizar tabla de Compra Proyectada Invierno
+     * Renderizar tabla de Compra Proyectada Invierno (MODIFICADO)
      */
     static renderizarTablaInvierno(datos, etiquetas = null) {
         const tbody = document.getElementById('tbody-invierno');
@@ -217,6 +222,11 @@ class TablaRenderer {
         if (etiquetas) {
             TablaRenderer.actualizarHeadersEtiquetas('invierno', etiquetas);
         }
+        
+        // NUEVO: Restaurar marcas de índices editados
+        setTimeout(() => {
+            TablaRenderer.restaurarMarcasIndicesEditados('invierno', datos);
+        }, 100);
         
         console.log(`✅ Tabla invierno renderizada: ${datos.length} registros`);
     }
@@ -526,6 +536,41 @@ class TablaRenderer {
             TablaRenderer.limpiarTabla(solapa);
         });
         console.log('✅ Todas las tablas limpiadas');
+    }
+
+    /**
+     * NUEVO: Restaurar marcas de índices editados al renderizar
+     */
+    static restaurarMarcasIndicesEditados(solapa, datos) {
+        if (!datos || datos.length === 0) return;
+        
+        const tbody = document.getElementById(`tbody-${solapa}`);
+        if (!tbody) return;
+        
+        const filas = tbody.querySelectorAll('tr.fila-datos');
+        
+        filas.forEach((fila, indiceVisual) => {
+            const rubro = fila.children[0]?.textContent?.trim();
+            const categoria = fila.children[1]?.textContent?.trim();
+            
+            if (!rubro || !categoria) return;
+            
+            // Buscar el registro correspondiente
+            const registro = datos.find(item => 
+                item.RUBRO === rubro && 
+                (item.CATEGORIA_PADRE === categoria || item.CATEGORIA === categoria)
+            );
+            
+            if (registro && registro._indicesEditados) {
+                // Restaurar marcas para cada temporada editada
+                Object.entries(registro._indicesEditados).forEach(([temporada, info]) => {
+                    IndiceEditor.aplicarMarcasVisualesEnFila(fila, temporada, info.valorActual);
+                    console.log(`🎨 Marca de edición restaurada: ${rubro} - ${categoria} (${temporada})`);
+                });
+            }
+        });
+        
+        console.log(`✅ Marcas de índices editados restauradas en solapa ${solapa}`);
     }
 }
 
