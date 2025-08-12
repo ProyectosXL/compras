@@ -4,7 +4,55 @@
 class CalculadoraVerano {
     
     /**
-     * CORREGIDO: Calcular ventas proyectadas específicas para la solapa de Compra Proyectada Verano
+ * CORREGIDO: Calcular días totales de verano ACTUAL
+ */
+static calcularDiasTotalesVerano(ano = null) {
+    if (!ano) ano = new Date().getFullYear();
+    
+    // CORRECCIÓN: Verano ACTUAL va del 1 de agosto 2025 al 31 de enero 2026
+    const inicioVerano = new Date(ano, 7, 1); // 1 de agosto del año actual
+    const finVerano = new Date(ano + 1, 0, 31, 23, 59, 59); // 31 de enero del año siguiente
+    
+    const diferenciaMilisegundos = finVerano.getTime() - inicioVerano.getTime();
+    const diasTotales = Math.round(diferenciaMilisegundos / (1000 * 60 * 60 * 24)) + 1;
+    
+    console.log(`📅 VERANO TOTAL - Inicio: ${inicioVerano.toLocaleDateString()}, Fin: ${finVerano.toLocaleDateString()}, Días: ${diasTotales}`);
+    
+    return diasTotales;
+}
+
+    /**
+     * CORREGIDO: Calcular días restantes sin doble conteo
+     */
+    static calcularDiasRestantesVerano(fecha) {
+        const mes = fecha.getMonth() + 1;
+        const ano = fecha.getFullYear();
+        
+        let finVerano;
+        if (mes >= 8) {
+            // Fin del verano actual: 1 febrero 2026 (exclusivo)
+            finVerano = new Date(ano + 1, 1, 1);
+        } else if (mes === 1) {
+            // Fin del verano actual: 1 febrero 2025 (exclusivo)
+            finVerano = new Date(ano, 1, 1);
+        } else {
+            return 0;
+        }
+        
+        if (fecha >= finVerano) return 0;
+        
+        const diferenciaMilisegundos = finVerano.getTime() - fecha.getTime();
+        const diasRestantes = Math.round(diferenciaMilisegundos / (1000 * 60 * 60 * 24));
+        
+        console.log(`📅 VERANO - Fecha actual: ${fecha.toLocaleDateString()}`);
+        console.log(`📅 VERANO - Fin temporada: ${new Date(finVerano.getTime() - 24*60*60*1000).toLocaleDateString()}`);
+        console.log(`📅 VERANO - Días restantes: ${diasRestantes}`);
+        
+        return Math.max(0, diasRestantes);
+    }
+
+    /**
+     * CORREGIDO: Calcular ventas proyectadas usando tu fórmula exacta
      */
     static calcularVentasProyectadas(ventaVeranoAnterior, ventaInviernoAnterior, indiceVerano, indiceInvierno, temporadaActual) {
         console.log('🔥 CALCULADORA VERANO - Iniciando cálculo');
@@ -14,37 +62,41 @@ class CalculadoraVerano {
         
         if (temporadaActual.tipo === 'VERANO' && temporadaActual.enCurso) {
             // Contexto: Transitando verano
-            // • Venta Proy. Verano: Proporcional Verano Actual + Próximo Verano Completo
+            // • Venta Proy. Verano: FÓRMULA CORREGIDA
             // • Venta Proy. Invierno: Próximo Invierno Completo
             
             const diasRestantesVerano = CalculadoraVerano.calcularDiasRestantesVerano(new Date());
             const diasTotalesVerano = CalculadoraVerano.calcularDiasTotalesVerano();
-            const proporcionVeranoActual = diasRestantesVerano / diasTotalesVerano;
             
-            const veranoActualProporcional = Math.round(ventaVeranoAnterior * indiceVerano * proporcionVeranoActual);
+            // TU FÓRMULA: VENTA_ANTERIOR / DIAS_TOTAL * DIAS_FALTANTES * INDICE
+            const veranoActualProporcional = Math.round(
+                (ventaVeranoAnterior / diasTotalesVerano) * diasRestantesVerano * indiceVerano
+            );
             const proximoVeranoCompleto = Math.round(ventaVeranoAnterior * indiceVerano);
             
             ventaProyVerano = veranoActualProporcional + proximoVeranoCompleto;
             ventaProyInvierno = Math.round(ventaInviernoAnterior * indiceInvierno); // Próximo invierno completo
             
-            console.log(`VERANO (Transitando): Proporcional actual (${veranoActualProporcional}) + Próximo completo (${proximoVeranoCompleto}) = ${ventaProyVerano}`);
+            console.log(`VERANO (Transitando): Proporcional (${ventaVeranoAnterior}/${diasTotalesVerano}*${diasRestantesVerano}*${indiceVerano} = ${veranoActualProporcional}) + Próximo completo (${proximoVeranoCompleto}) = ${ventaProyVerano}`);
             console.log(`INVIERNO (Transitando): Próximo completo = ${ventaProyInvierno}`);
             
         } else if (temporadaActual.tipo === 'INVIERNO' && temporadaActual.enCurso) {
             // Contexto: Transitando invierno
             // • Venta Proy. Verano: Próximo Verano Completo
-            // • Venta Proy. Invierno: Proporcional Invierno Actual
+            // • Venta Proy. Invierno: FÓRMULA CORREGIDA
             
             ventaProyVerano = Math.round(ventaVeranoAnterior * indiceVerano); // Próximo verano completo
             
             const diasRestantesInvierno = CalculadoraVerano.calcularDiasRestantesInvierno(new Date());
             const diasTotalesInvierno = CalculadoraVerano.calcularDiasTotalesInvierno();
-            const proporcionInviernoActual = diasRestantesInvierno / diasTotalesInvierno;
             
-            ventaProyInvierno = Math.round(ventaInviernoAnterior * indiceInvierno * proporcionInviernoActual);
+            // TU FÓRMULA: VENTA_ANTERIOR / DIAS_TOTAL * DIAS_FALTANTES * INDICE
+            ventaProyInvierno = Math.round(
+                (ventaInviernoAnterior / diasTotalesInvierno) * diasRestantesInvierno * indiceInvierno
+            );
             
             console.log(`VERANO (No transitando): Próximo completo = ${ventaProyVerano}`);
-            console.log(`INVIERNO (Transitando): Proporcional actual (${proporcionInviernoActual.toFixed(3)}) = ${ventaProyInvierno}`);
+            console.log(`INVIERNO (Transitando): Proporcional (${ventaInviernoAnterior}/${diasTotalesInvierno}*${diasRestantesInvierno}*${indiceInvierno} = ${ventaProyInvierno})`);
             
         } else {
             // Fuera de temporadas activas, usar completo para ambas
@@ -59,32 +111,28 @@ class CalculadoraVerano {
             ventaProyInvierno
         };
     }
-    
+        
     /**
-     * Actualizar datos cuando se edita un índice en la solapa de verano
+     * CORREGIDO: Actualizar datos leyendo ventas desde los datos originales, no de la tabla
      */
     static actualizarDatosSolapa(nuevoIndice, indiceEditando, registro) {
         console.log('🔥 VERANO - Actualizando datos con nuevo índice:', nuevoIndice);
+        console.log('🔥 VERANO - Temporada editada:', indiceEditando.temporada);
         
-        const temporada = indiceEditando.temporada || 'verano';
+        // CORRECCIÓN: NO leer de la tabla, usar los datos originales directamente
+        console.log(`🔥 VERANO - Índices recibidos: V=${registro.INDICE_VARIACION}, I=${registro.INDICE_VARIACION_INVIERNO || registro.INDICE_VARIACION}`);
         
-        // Actualizar el índice correspondiente
-        if (temporada === 'verano') {
-            registro.INDICE_VARIACION = parseFloat(nuevoIndice.toFixed(2));
-        } else {
-            // Asegurar que existe el índice de invierno
-            if (!registro.INDICE_VARIACION_INVIERNO) {
-                registro.INDICE_VARIACION_INVIERNO = registro.INDICE_VARIACION || 1.0;
-            }
-            registro.INDICE_VARIACION_INVIERNO = parseFloat(nuevoIndice.toFixed(2));
-        }
+        // OBTENER VENTAS ANTERIORES DIRECTAMENTE DE LOS DATOS ORIGINALES
+        const ventaVeranoAnterior = CalculadoraVerano.extraerVentaAnteriorDeRegistro(registro, 'VERANO');
+        const ventaInviernoAnterior = CalculadoraVerano.extraerVentaAnteriorDeRegistro(registro, 'INVIERNO');
         
-        // Obtener ventas anteriores de la tabla
-        const { ventaVeranoAnterior, ventaInviernoAnterior } = CalculadoraVerano.obtenerVentasAnterioresDeTabla(indiceEditando);
+        console.log(`🔥 VERANO - Ventas desde datos originales: V=${ventaVeranoAnterior}, I=${ventaInviernoAnterior}`);
         
-        // Obtener índices actualizados
+        // USAR LOS ÍNDICES QUE VIENEN EN EL REGISTRO (ya están correctamente actualizados)
         const indiceVerano = parseFloat(registro.INDICE_VARIACION || 1.0);
         const indiceInvierno = parseFloat(registro.INDICE_VARIACION_INVIERNO || indiceVerano);
+        
+        console.log(`🔥 VERANO - Índices a usar para cálculo: V=${indiceVerano}, I=${indiceInvierno}`);
         
         // Determinar temporada actual
         const temporadaActual = CalculadoraVerano.determinarTemporadaActual();
@@ -102,16 +150,99 @@ class CalculadoraVerano {
         const stockProyectado = parseFloat(registro.STOCK_PROYECTADO || 0);
         const compraProyectada = Math.round(stockProyectado - ventaProyVerano - ventaProyInvierno);
         
-        // Actualizar registro
-        registro.VENTA_PROY_VERANO = ventaProyVerano;
-        registro.VENTA_PROY_INVIERNO = ventaProyInvierno;
-        registro.COMPRA_PROYECTADA = compraProyectada;
+        // Crear registro actualizado conservando TODOS los índices originales
+        const registroActualizado = {
+            ...registro,
+            VENTA_PROY_VERANO: ventaProyVerano,
+            VENTA_PROY_INVIERNO: ventaProyInvierno,
+            COMPRA_PROYECTADA: compraProyectada
+        };
         
-        console.log(`🔥 VERANO - Stock: ${stockProyectado}, Venta V: ${ventaProyVerano}, Venta I: ${ventaProyInvierno}, Compra: ${compraProyectada}`);
+        console.log(`🔥 VERANO - RESULTADO: Stock: ${stockProyectado}, Venta V: ${ventaProyVerano}, Venta I: ${ventaProyInvierno}, Compra: ${compraProyectada}`);
         
-        return registro;
+        return registroActualizado;
     }
-    
+
+    /**
+     * NUEVO: Extraer venta anterior directamente del registro de datos (DINÁMICO)
+     */
+    static extraerVentaAnteriorDeRegistro(registro, temporada) {
+        if (temporada === 'VERANO') {
+            // Buscar columnas de VERANO y ordenar por año (más reciente primero)
+            const columnasVerano = [];
+            for (const [columna, valor] of Object.entries(registro)) {
+                if ((columna.includes('VERANO') || columna.includes('VTA_VERANO')) && 
+                    !columna.includes('PROY') && 
+                    valor && !isNaN(valor) && parseFloat(valor) > 0) {
+                    
+                    // Extraer año de la columna
+                    const matchAno = columna.match(/\d{2}/);
+                    const ano = matchAno ? parseInt(matchAno[0]) : 0;
+                    
+                    columnasVerano.push({
+                        columna: columna,
+                        valor: parseFloat(valor),
+                        ano: ano
+                    });
+                }
+            }
+            
+            // Ordenar por año descendente (más reciente primero)
+            columnasVerano.sort((a, b) => b.ano - a.ano);
+            
+            // Tomar la primera (más reciente)
+            if (columnasVerano.length > 0) {
+                console.log(`✅ VERANO encontrado en datos: ${columnasVerano[0].columna} = ${columnasVerano[0].valor}`);
+                return columnasVerano[0].valor;
+            }
+            
+        } else if (temporada === 'INVIERNO') {
+            // Buscar columnas de INVIERNO y ordenar por año (más reciente primero)
+            const columnasInvierno = [];
+            for (const [columna, valor] of Object.entries(registro)) {
+                if ((columna.includes('INVIERNO') || columna.includes('VTA_INVIERNO')) && 
+                    !columna.includes('PROY') && 
+                    valor && !isNaN(valor) && parseFloat(valor) > 0) {
+                    
+                    // Extraer año de la columna
+                    const matchAno = columna.match(/\d{2}/);
+                    const ano = matchAno ? parseInt(matchAno[0]) : 0;
+                    
+                    columnasInvierno.push({
+                        columna: columna,
+                        valor: parseFloat(valor),
+                        ano: ano
+                    });
+                }
+            }
+            
+            // Ordenar por año descendente (más reciente primero)
+            columnasInvierno.sort((a, b) => b.ano - a.ano);
+            
+            // Tomar la primera (más reciente)
+            if (columnasInvierno.length > 0) {
+                console.log(`✅ INVIERNO encontrado en datos: ${columnasInvierno[0].columna} = ${columnasInvierno[0].valor}`);
+                return columnasInvierno[0].valor;
+            }
+            
+            // DEBUG: Mostrar todas las columnas disponibles si no encuentra
+            const columnasInviernoDisponibles = Object.keys(registro).filter(key => 
+                key.toLowerCase().includes('invierno')
+            );
+            console.warn(`❌ No se encontró venta INVIERNO en datos. Columnas disponibles:`, columnasInviernoDisponibles);
+        }
+        
+        console.warn(`❌ No se encontró venta ${temporada} en datos para:`, {
+            rubro: registro.RUBRO,
+            categoria: registro.CATEGORIA_PADRE,
+            columnas_disponibles: Object.keys(registro).filter(key => 
+                key.toLowerCase().includes(temporada.toLowerCase())
+            )
+        });
+        
+        return 0;
+    }
+
     /**
      * CORREGIDA: Función auxiliar para parsear números con separador de miles
      */
@@ -124,18 +255,73 @@ class CalculadoraVerano {
         // Si está vacío o es '-', retornar 0
         if (!textoLimpio || textoLimpio === '-') return 0;
         
-        // Eliminar separadores de miles (puntos) y reemplazar coma decimal por punto
-        // Formato esperado: "1.500,50" -> "1500.50" o "1.500" -> "1500"
-        let numeroLimpio = textoLimpio
-            .replace(/\./g, '')  // Eliminar todos los puntos (separadores de miles)
-            .replace(',', '.');  // Reemplazar coma decimal por punto
+        // CORRECCIÓN: Detectar el formato del número
+        // Formato argentino: "1.500,50" (punto = miles, coma = decimal)
+        // Formato internacional: "1,500.50" (coma = miles, punto = decimal)
+        
+        let numeroLimpio;
+        
+        // Si tiene punto seguido de exactamente 3 dígitos y luego coma, es formato argentino
+        if (/\d{1,3}(\.\d{3})*,\d{1,2}$/.test(textoLimpio)) {
+            // Formato argentino: "1.500,50"
+            numeroLimpio = textoLimpio
+                .replace(/\./g, '')  // Eliminar puntos (separadores de miles)
+                .replace(',', '.');  // Reemplazar coma decimal por punto
+            console.log(`🔍 Formato argentino detectado: "${textoLimpio}" → "${numeroLimpio}"`);
+        } 
+        // Si tiene coma seguida de exactamente 3 dígitos y luego punto, es formato internacional
+        else if (/\d{1,3}(,\d{3})*\.\d{1,2}$/.test(textoLimpio)) {
+            // Formato internacional: "1,500.50"
+            numeroLimpio = textoLimpio.replace(/,/g, ''); // Eliminar comas (separadores de miles)
+            console.log(`🔍 Formato internacional detectado: "${textoLimpio}" → "${numeroLimpio}"`);
+        }
+        // Si solo tiene puntos sin comas (ej: "1.500")
+        else if (/^\d{1,3}(\.\d{3})+$/.test(textoLimpio)) {
+            // Formato argentino sin decimales: "1.500"
+            numeroLimpio = textoLimpio.replace(/\./g, '');
+            console.log(`🔍 Formato argentino sin decimales: "${textoLimpio}" → "${numeroLimpio}"`);
+        }
+        // Si solo tiene comas sin puntos (ej: "1,500")
+        else if (/^\d{1,3}(,\d{3})+$/.test(textoLimpio)) {
+            // Formato internacional sin decimales: "1,500"
+            numeroLimpio = textoLimpio.replace(/,/g, '');
+            console.log(`🔍 Formato internacional sin decimales: "${textoLimpio}" → "${numeroLimpio}"`);
+        }
+        // Si tiene solo un punto y menos de 4 dígitos después, es decimal
+        else if (/^\d+\.\d{1,2}$/.test(textoLimpio)) {
+            // Número decimal simple: "0.95"
+            numeroLimpio = textoLimpio;
+            console.log(`🔍 Número decimal simple: "${textoLimpio}" → "${numeroLimpio}"`);
+        }
+        // Si tiene solo una coma y menos de 4 dígitos después, es decimal argentino
+        else if (/^\d+,\d{1,2}$/.test(textoLimpio)) {
+            // Número decimal argentino: "0,95"
+            numeroLimpio = textoLimpio.replace(',', '.');
+            console.log(`🔍 Número decimal argentino: "${textoLimpio}" → "${numeroLimpio}"`);
+        }
+        // Si es un número entero simple
+        else if (/^\d+$/.test(textoLimpio)) {
+            numeroLimpio = textoLimpio;
+            console.log(`🔍 Número entero simple: "${textoLimpio}" → "${numeroLimpio}"`);
+        }
+        // Fallback: intentar limpiar de forma genérica
+        else {
+            // Última opción: asumir formato argentino
+            numeroLimpio = textoLimpio
+                .replace(/\./g, '')
+                .replace(',', '.');
+            console.log(`🔍 Fallback formato argentino: "${textoLimpio}" → "${numeroLimpio}"`);
+        }
         
         const numero = parseFloat(numeroLimpio);
-        return isNaN(numero) ? 0 : numero;
+        const resultado = isNaN(numero) ? 0 : numero;
+        
+        console.log(`🔍 PARSEO FINAL: "${texto}" → ${resultado}`);
+        return resultado;
     }
     
     /**
-     * CORREGIDA: Obtener ventas anteriores de la tabla con parseo correcto de separador de miles
+     * CORREGIDA: Obtener ventas anteriores de la tabla con parseo correcto y debugging
      */
     static obtenerVentasAnterioresDeTabla(indiceEditando) {
         const tbody = document.getElementById(`tbody-${indiceEditando.solapa}`);
@@ -161,20 +347,35 @@ class CalculadoraVerano {
             const celdaVeranoAnterior = fila.children[5];   // "Venta Ver. Anterior"
             const celdaInviernoAnterior = fila.children[8]; // "Venta Inv. Anterior"
             
+            console.log(`🔍 DEBUG TABLA - Fila ${indiceEditando.index}:`);
+            console.log(`  Total columnas: ${fila.children.length}`);
+            
             if (celdaVeranoAnterior) {
                 const textoVerano = celdaVeranoAnterior.textContent.trim();
+                console.log(`🔍 Celda Verano [5]: "${textoVerano}"`);
                 ventaVeranoAnterior = CalculadoraVerano.parsearNumeroConSeparadorMiles(textoVerano);
-                console.log(`🔍 Venta Verano Anterior - Texto: "${textoVerano}" -> Número: ${ventaVeranoAnterior}`);
+            } else {
+                console.error(`❌ Celda Verano Anterior [5] no encontrada`);
             }
             
             if (celdaInviernoAnterior) {
                 const textoInvierno = celdaInviernoAnterior.textContent.trim();
+                console.log(`🔍 Celda Invierno [8]: "${textoInvierno}"`);
                 ventaInviernoAnterior = CalculadoraVerano.parsearNumeroConSeparadorMiles(textoInvierno);
-                console.log(`🔍 Venta Invierno Anterior - Texto: "${textoInvierno}" -> Número: ${ventaInviernoAnterior}`);
+            } else {
+                console.error(`❌ Celda Invierno Anterior [8] no encontrada`);
             }
+            
+            // DEBUG: Mostrar contenido de todas las celdas
+            console.log(`🔍 Contenido de todas las celdas:`);
+            for (let i = 0; i < Math.min(fila.children.length, 11); i++) {
+                console.log(`  [${i}]: "${fila.children[i].textContent.trim()}"`);
+            }
+        } else {
+            console.error(`❌ Fila no encontrada o insuficientes columnas. Fila: ${!!fila}, Columnas: ${fila?.children?.length || 0}`);
         }
         
-        console.log(`📊 ${indiceEditando.solapa.toUpperCase()} - Ventas obtenidas: V=${ventaVeranoAnterior}, I=${ventaInviernoAnterior}`);
+        console.log(`📊 ${indiceEditando.solapa.toUpperCase()} - Ventas parseadas: V=${ventaVeranoAnterior}, I=${ventaInviernoAnterior}`);
         return { ventaVeranoAnterior, ventaInviernoAnterior };
     }
     
@@ -228,48 +429,92 @@ class CalculadoraVerano {
         console.log(`✅ ${indiceEditando.solapa.toUpperCase()} - Fila actualizada correctamente`);
     }
     
-    // Funciones auxiliares de cálculo de días
+    /**
+     * CORREGIDO: Calcular días restantes con -1 para ajustar
+     */
     static calcularDiasRestantesVerano(fecha) {
         const mes = fecha.getMonth() + 1;
         const ano = fecha.getFullYear();
         
         let finVerano;
         if (mes >= 8) {
-            finVerano = new Date(ano + 1, 0, 31, 23, 59, 59);
+            finVerano = new Date(ano + 1, 0, 31, 23, 59, 59); // 31 de enero del año siguiente
         } else if (mes === 1) {
-            finVerano = new Date(ano, 0, 31, 23, 59, 59);
+            finVerano = new Date(ano, 0, 31, 23, 59, 59); // 31 de enero del año actual
         } else {
             return 0;
         }
         
         if (fecha > finVerano) return 0;
-        return Math.ceil((finVerano - fecha) / (1000 * 60 * 60 * 24));
+        
+        // CORRECCIÓN: Usar diferencia en días SIN el +1 que estaba causando el error
+        const diferenciaMilisegundos = finVerano.getTime() - fecha.getTime();
+        const diasRestantes = Math.round(diferenciaMilisegundos / (1000 * 60 * 60 * 24));
+        
+        console.log(`📅 VERANO - Fecha actual: ${fecha.toLocaleDateString()}`);
+        console.log(`📅 VERANO - Fin temporada: ${finVerano.toLocaleDateString()}`);
+        console.log(`📅 VERANO - Días restantes: ${diasRestantes}`);
+        
+        return Math.max(0, diasRestantes);
     }
-    
+        
+    /**
+     * CORREGIDO: Calcular días restantes invierno sin doble conteo
+     */
     static calcularDiasRestantesInvierno(fecha) {
         const mes = fecha.getMonth() + 1;
         const ano = fecha.getFullYear();
         
+        // Invierno va del 1 de febrero al 31 de julio
         if (mes < 2 || mes > 7) return 0;
         
-        const finInvierno = new Date(ano, 6, 31, 23, 59, 59);
-        if (fecha > finInvierno) return 0;
+        const finInvierno = new Date(ano, 7, 1); // 1 de agosto (exclusivo)
+        if (fecha >= finInvierno) return 0;
         
-        return Math.ceil((finInvierno - fecha) / (1000 * 60 * 60 * 24));
-    }
+        const diferenciaMilisegundos = finInvierno.getTime() - fecha.getTime();
+        const diasRestantes = Math.round(diferenciaMilisegundos / (1000 * 60 * 60 * 24));
+        
+        console.log(`📅 INVIERNO - Fecha actual: ${fecha.toLocaleDateString()}`);
+        console.log(`📅 INVIERNO - Fin temporada: ${new Date(finInvierno.getTime() - 24*60*60*1000).toLocaleDateString()}`);
+        console.log(`📅 INVIERNO - Días restantes: ${diasRestantes}`);
+        
+        return Math.max(0, diasRestantes);
+}
     
+    /**
+     * CORREGIDO: Calcular días totales de verano ACTUAL (sin doble conteo)
+     */
     static calcularDiasTotalesVerano(ano = null) {
         if (!ano) ano = new Date().getFullYear();
-        const inicioVerano = new Date(ano - 1, 7, 1);
-        const finVerano = new Date(ano, 0, 31);
-        return Math.ceil((finVerano - inicioVerano) / (1000 * 60 * 60 * 24)) + 1;
+        
+        // Verano ACTUAL: 1 agosto 2025 → 31 enero 2026
+        const inicioVerano = new Date(ano, 7, 1); // 1 de agosto del año actual
+        const finVerano = new Date(ano + 1, 1, 1); // 1 de febrero del año siguiente (exclusivo)
+        
+        const diferenciaMilisegundos = finVerano.getTime() - inicioVerano.getTime();
+        const diasTotales = Math.round(diferenciaMilisegundos / (1000 * 60 * 60 * 24));
+        
+        console.log(`📅 VERANO TOTAL - Inicio: ${inicioVerano.toLocaleDateString()}, Fin: ${new Date(ano + 1, 0, 31).toLocaleDateString()}, Días: ${diasTotales}`);
+        
+        return diasTotales;
     }
     
+    /**
+     * CORREGIDO: Calcular días totales de invierno ACTUAL (sin doble conteo)
+     */
     static calcularDiasTotalesInvierno(ano = null) {
         if (!ano) ano = new Date().getFullYear();
-        const inicioInvierno = new Date(ano, 1, 1);
-        const finInvierno = new Date(ano, 6, 31);
-        return Math.ceil((finInvierno - inicioInvierno) / (1000 * 60 * 60 * 24)) + 1;
+        
+        // Invierno ACTUAL: 1 febrero 2025 → 31 julio 2025
+        const inicioInvierno = new Date(ano, 1, 1); // 1 de febrero
+        const finInvierno = new Date(ano, 7, 1); // 1 de agosto (exclusivo)
+        
+        const diferenciaMilisegundos = finInvierno.getTime() - inicioInvierno.getTime();
+        const diasTotales = Math.round(diferenciaMilisegundos / (1000 * 60 * 60 * 24));
+        
+        console.log(`📅 INVIERNO TOTAL - Inicio: ${inicioInvierno.toLocaleDateString()}, Fin: ${new Date(ano, 6, 31).toLocaleDateString()}, Días: ${diasTotales}`);
+        
+        return diasTotales;
     }
     
     static determinarTemporadaActual(fecha = null) {
@@ -316,6 +561,49 @@ class CalculadoraVerano {
         
         return { temporada, diasVerano, diasInvierno };
     }
+
+    /**
+ * NUEVO: Función de debugging para verificar cálculos de días
+ */
+static debugDiasTemporada(fecha = null) {
+    if (!fecha) fecha = new Date();
+    
+    const temporada = CalculadoraVerano.determinarTemporadaActual(fecha);
+    const diasRestantesVerano = CalculadoraVerano.calcularDiasRestantesVerano(fecha);
+    const diasRestantesInvierno = CalculadoraVerano.calcularDiasRestantesInvierno(fecha);
+    const diasTotalesVerano = CalculadoraVerano.calcularDiasTotalesVerano();
+    const diasTotalesInvierno = CalculadoraVerano.calcularDiasTotalesInvierno();
+    
+    console.group('📅 DEBUG DÍAS TEMPORADA - VERANO');
+    console.log('Fecha actual:', fecha.toLocaleDateString());
+    console.log('Temporada detectada:', temporada);
+    console.log('Días restantes verano:', diasRestantesVerano);
+    console.log('Días restantes invierno:', diasRestantesInvierno);
+    console.log('Días totales verano:', diasTotalesVerano);
+    console.log('Días totales invierno:', diasTotalesInvierno);
+    
+    if (diasRestantesVerano > 0) {
+        const proporcionVerano = diasRestantesVerano / diasTotalesVerano;
+        console.log('Proporción verano:', proporcionVerano.toFixed(4), `(${(proporcionVerano * 100).toFixed(2)}%)`);
+    }
+    
+    if (diasRestantesInvierno > 0) {
+        const proporcionInvierno = diasRestantesInvierno / diasTotalesInvierno;
+        console.log('Proporción invierno:', proporcionInvierno.toFixed(4), `(${(proporcionInvierno * 100).toFixed(2)}%)`);
+    }
+    
+    console.groupEnd();
+    
+    return {
+        fecha: fecha.toLocaleDateString(),
+        temporada,
+        diasRestantesVerano,
+        diasRestantesInvierno,
+        diasTotalesVerano,
+        diasTotalesInvierno
+    };
+}
+
 }
 
 // Hacer disponible globalmente
@@ -323,5 +611,8 @@ window.CalculadoraVerano = CalculadoraVerano;
 
 // Función de diagnóstico global
 window.diagnosticarVerano = () => CalculadoraVerano.diagnosticar();
+
+// Función global para debugging
+window.debugDiasVerano = (fecha) => CalculadoraVerano.debugDiasTemporada(fecha);
 
 console.log('✅ CalculadoraVerano CORREGIDA cargada (con parseo separador miles)');

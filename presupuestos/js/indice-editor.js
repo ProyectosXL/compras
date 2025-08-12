@@ -8,54 +8,167 @@ class IndiceEditor {
     static modalInstancia = null;
 
     /**
-     * CORREGIDO: Actualizar datos en memoria delegando a calculadoras específicas
+     * CORREGIDO: Actualizar datos en memoria usando el índice real de los datos originales
      */
     static actualizarDatosMemoriaFrontendCorregido(nuevoIndice) {
         const app = window.presupuestoApp;
         const datos = app.getDatos(IndiceEditor.indiceEditando.solapa);
         
-        if (datos[IndiceEditor.indiceEditando.index]) {
-            const registro = datos[IndiceEditor.indiceEditando.index];
-            const solapa = IndiceEditor.indiceEditando.solapa;
-            
-            console.log(`🔄 Delegando cálculo a calculadora específica de ${solapa.toUpperCase()}`);
-            
-            // Delegar a la calculadora específica según la solapa
-            let registroActualizado;
-            
-            if (solapa === 'verano') {
-                // Usar calculadora de verano
-                registroActualizado = CalculadoraVerano.actualizarDatosSolapa(nuevoIndice, IndiceEditor.indiceEditando, registro);
-            } else if (solapa === 'invierno') {
-                // Usar calculadora de invierno
-                registroActualizado = CalculadoraInvierno.actualizarDatosSolapa(nuevoIndice, IndiceEditor.indiceEditando, registro);
-            } else {
-                console.error('Solapa no reconocida:', solapa);
-                return;
-            }
-            
-            // Actualizar los datos en memoria
-            datos[IndiceEditor.indiceEditando.index] = registroActualizado;
-            
-            console.log(`✅ Datos actualizados en memoria para ${registro.RUBRO} - ${registro.CATEGORIA_PADRE}`);
+        // CORRECCIÓN: Encontrar el índice real en los datos originales
+        const indiceReal = IndiceEditor.encontrarIndiceRealEnDatos(
+            IndiceEditor.indiceEditando.rubro,
+            IndiceEditor.indiceEditando.categoria,
+            IndiceEditor.indiceEditando.solapa
+        );
+        
+        if (indiceReal === null) {
+            console.error('❌ No se pudo encontrar el registro en los datos originales');
+            return;
         }
+        
+        const registro = datos[indiceReal];
+        if (!registro) {
+            console.error('❌ Registro no encontrado en índice real:', indiceReal);
+            return;
+        }
+        
+        const solapa = IndiceEditor.indiceEditando.solapa;
+        const temporada = IndiceEditor.indiceEditando.temporada;
+        
+        console.log(`🔄 Actualizando SOLO índice ${temporada} con valor ${nuevoIndice} en solapa ${solapa}`);
+        console.log(`🔍 ANTES - Índices: V=${registro.INDICE_VARIACION}, I=${registro.INDICE_VARIACION_INVIERNO || 'undefined'}`);
+        console.log(`🎯 Usando índice real ${indiceReal} para ${registro.RUBRO} - ${registro.CATEGORIA_PADRE}`);
+        
+        // CREAR UNA COPIA DEL REGISTRO PARA NO MODIFICAR EL ORIGINAL HASTA EL FINAL
+        const registroTemporal = { ...registro };
+        
+        // CORRECCIÓN: Solo actualizar el índice específico que se está editando
+        if (temporada === 'verano') {
+            registroTemporal.INDICE_VARIACION = parseFloat(nuevoIndice.toFixed(2));
+            console.log(`✅ Actualizando solo INDICE_VARIACION a ${registroTemporal.INDICE_VARIACION}`);
+        } else if (temporada === 'invierno') {
+            // Mantener el índice de verano existente
+            registroTemporal.INDICE_VARIACION = parseFloat(registro.INDICE_VARIACION || 1.0);
+            
+            // Actualizar solo el índice de invierno
+            registroTemporal.INDICE_VARIACION_INVIERNO = parseFloat(nuevoIndice.toFixed(2));
+            console.log(`✅ Manteniendo INDICE_VARIACION en ${registroTemporal.INDICE_VARIACION}`);
+            console.log(`✅ Actualizando solo INDICE_VARIACION_INVIERNO a ${registroTemporal.INDICE_VARIACION_INVIERNO}`);
+        }
+        
+        console.log(`🔍 DESPUÉS - Índices: V=${registroTemporal.INDICE_VARIACION}, I=${registroTemporal.INDICE_VARIACION_INVIERNO || 'undefined'}`);
+        
+        // Actualizar indiceEditando con el índice real para las calculadoras
+        const indiceEditandoConIndiceReal = {
+            ...IndiceEditor.indiceEditando,
+            index: indiceReal  // USAR EL ÍNDICE REAL
+        };
+        
+        // Delegar a la calculadora específica según la solapa
+        let registroActualizado;
+        
+        if (solapa === 'verano') {
+            // Usar calculadora de verano con el índice real
+            registroActualizado = CalculadoraVerano.actualizarDatosSolapa(nuevoIndice, indiceEditandoConIndiceReal, registroTemporal);
+        } else if (solapa === 'invierno') {
+            // Usar calculadora de invierno con el índice real
+            registroActualizado = CalculadoraInvierno.actualizarDatosSolapa(nuevoIndice, indiceEditandoConIndiceReal, registroTemporal);
+        } else {
+            console.error('Solapa no reconocida:', solapa);
+            return;
+        }
+        
+        // Actualizar los datos en memoria usando el índice real
+        datos[indiceReal] = registroActualizado;
+        
+        console.log(`✅ Datos actualizados en memoria para ${registro.RUBRO} - ${registro.CATEGORIA_PADRE}`);
+        console.log(`  Índice verano final: ${registroActualizado.INDICE_VARIACION}`);
+        console.log(`  Índice invierno final: ${registroActualizado.INDICE_VARIACION_INVIERNO || 'no definido'}`);
     }
 
     /**
-     * SIMPLIFICADO: Actualizar fila usando calculadoras específicas
+     * NUEVO: Encontrar el índice real en los datos originales cuando hay filtros aplicados
+     */
+    static encontrarIndiceRealEnDatos(rubro, categoria, solapa) {
+        const app = window.presupuestoApp;
+        const datosOriginales = app.getDatos(solapa);
+        
+        // Buscar el registro exacto en los datos originales
+        const indiceReal = datosOriginales.findIndex(item => 
+            item.RUBRO === rubro && 
+            (item.CATEGORIA_PADRE === categoria || item.CATEGORIA === categoria)
+        );
+        
+        if (indiceReal === -1) {
+            console.error(`❌ No se encontró el registro en datos originales: ${rubro} - ${categoria}`);
+            return null;
+        }
+        
+        console.log(`🎯 Índice visual: ${IndiceEditor.indiceEditando.index} → Índice real: ${indiceReal}`);
+        return indiceReal;
+    }
+
+    /**
+     * CORREGIDO: Actualizar fila usando índice real y luego buscar en tabla visual
      */
     static actualizarFilaTablaSoloFrontendCorregido() {
         const solapa = IndiceEditor.indiceEditando.solapa;
         
         console.log(`🔄 Actualizando fila en tabla ${solapa}`);
         
-        // Delegar a la calculadora específica para actualizar la fila
+        // Encontrar el índice real primero
+        const indiceReal = IndiceEditor.encontrarIndiceRealEnDatos(
+            IndiceEditor.indiceEditando.rubro,
+            IndiceEditor.indiceEditando.categoria,
+            solapa
+        );
+        
+        if (indiceReal === null) {
+            console.error('❌ No se pudo encontrar el registro para actualizar la fila');
+            return;
+        }
+        
+        // Obtener el registro actualizado
+        const registroActualizado = window.presupuestoApp.getDatos(solapa)[indiceReal];
+        
+        // BUSCAR LA FILA VISUAL en la tabla por rubro y categoría (no por índice)
+        const tbody = document.getElementById(`tbody-${solapa}`);
+        const filas = tbody.querySelectorAll('tr.fila-datos');
+        
+        let filaEncontrada = null;
+        let indiceVisual = -1;
+        
+        for (let i = 0; i < filas.length; i++) {
+            const fila = filas[i];
+            const rubroCell = fila.children[0]?.textContent?.trim();
+            const categoriaCell = fila.children[1]?.textContent?.trim();
+            
+            if (rubroCell === IndiceEditor.indiceEditando.rubro && 
+                categoriaCell === IndiceEditor.indiceEditando.categoria) {
+                filaEncontrada = fila;
+                indiceVisual = i;
+                break;
+            }
+        }
+        
+        if (!filaEncontrada) {
+            console.error('❌ No se encontró la fila visual en la tabla');
+            return;
+        }
+        
+        console.log(`🎯 Fila encontrada en posición visual: ${indiceVisual}`);
+        
+        // Crear objeto temporal para las calculadoras con el índice visual correcto
+        const indiceEditandoParaTabla = {
+            ...IndiceEditor.indiceEditando,
+            index: indiceVisual  // USAR EL ÍNDICE VISUAL PARA ACTUALIZAR LA TABLA
+        };
+        
+        // Delegar a la calculadora específica para actualizar la fila visual
         if (solapa === 'verano') {
-            CalculadoraVerano.actualizarFilaTabla(IndiceEditor.indiceEditando, 
-                window.presupuestoApp.getDatos(solapa)[IndiceEditor.indiceEditando.index]);
+            CalculadoraVerano.actualizarFilaTabla(indiceEditandoParaTabla, registroActualizado);
         } else if (solapa === 'invierno') {
-            CalculadoraInvierno.actualizarFilaTabla(IndiceEditor.indiceEditando, 
-                window.presupuestoApp.getDatos(solapa)[IndiceEditor.indiceEditando.index]);
+            CalculadoraInvierno.actualizarFilaTabla(indiceEditandoParaTabla, registroActualizado);
         } else {
             console.error('Solapa no reconocida para actualización de fila:', solapa);
         }
