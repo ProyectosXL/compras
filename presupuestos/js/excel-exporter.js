@@ -164,9 +164,6 @@ class ExcelExporter {
         });
     }
 
-    /**
-     * Preparar datos de presupuesto para Excel - CORREGIDO
-     */
     static prepararDatosPresupuesto(datos, solapa) {
         if (!datos || datos.length === 0) return [];
 
@@ -187,12 +184,14 @@ class ExcelExporter {
                 resultado['Compras Atemporal'] = item.COMPRAS_ATEMPORAL || item.CANT_PEND_OC_ATEMPORAL || 0;
                 resultado['Stock Cobertura'] = item.STOCK_COBERTURA || 0;
             } else {
-                // Para verano e invierno - buscar ventas históricas
+                // Para verano e invierno - CORREGIDO: Orden correcto de columnas
                 const ventaVeranoAnterior = ExcelExporter.buscarVentaHistorica(item, 'VERANO');
                 const ventaInviernoAnterior = ExcelExporter.buscarVentaHistorica(item, 'INVIERNO');
                 
                 resultado['Venta Anterior Verano'] = ventaVeranoAnterior;
                 resultado['Venta Proyectada Verano'] = item.VENTA_PROY_VERANO || 0;
+                // CORRECCIÓN: Agregar índice invierno DESPUÉS de venta proyectada verano
+                resultado['Índice Variación Invierno'] = item.INDICE_VARIACION_INVIERNO || item.INDICE_VARIACION || 1;
                 resultado['Venta Anterior Invierno'] = ventaInviernoAnterior;
                 resultado['Venta Proyectada Invierno'] = item.VENTA_PROY_INVIERNO || 0;
                 resultado['Compra Proyectada'] = item.COMPRA_PROYECTADA || 0;
@@ -211,11 +210,9 @@ class ExcelExporter {
         });
     }
 
-    /**
-     * Buscar venta histórica para Excel - CORREGIDO CON FORMATO DINÁMICO
-     */
     static buscarVentaHistorica(item, temporada) {
         const anoActual = new Date().getFullYear() % 100; // 25 para 2025
+        const mesActual = new Date().getMonth() + 1; // 1-12
         
         if (temporada === 'VERANO') {
             // Buscar VTA_VERANO_25 (el último verano completo)
@@ -232,8 +229,18 @@ class ExcelExporter {
             }
             
         } else if (temporada === 'INVIERNO') {
-            // Buscar VTA_INVIERNO_24 (el último invierno completo)
-            const anoInvierno = anoActual - 1; // 24
+            // CORRECCIÓN: Determinar el último invierno según el mes actual
+            let anoInvierno;
+            
+            if (mesActual >= 8 || mesActual === 1) {
+                // Estamos en verano (Ago-Ene), el último invierno fue este año
+                anoInvierno = anoActual;
+            } else {
+                // Estamos en invierno (Feb-Jul), el último invierno completo fue el año pasado
+                anoInvierno = anoActual - 1;
+            }
+            
+            // Buscar VTA_INVIERNO del último invierno
             const columnaInvierno = `VTA_INVIERNO_${anoInvierno}`;
             if (item.hasOwnProperty(columnaInvierno) && !isNaN(item[columnaInvierno])) {
                 return parseFloat(item[columnaInvierno]);

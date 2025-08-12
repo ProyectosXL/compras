@@ -58,11 +58,10 @@ const TablaRendererUtils = {
         tabla.setAttribute('data-limpia', 'true');
     },
 
-    // CORRECCIÓN en presupuestos/js/tabla-renderer.js
-    // Reemplazar la función buscarVentaHistoricaCorrecta en TablaRendererUtils
 
     buscarVentaHistoricaCorrecta(item, temporada) {
         const anoActual = new Date().getFullYear() % 100; // 2025 -> 25
+        const mesActual = new Date().getMonth() + 1; // 1-12
         
         if (temporada === 'VERANO') {
             // Para verano, buscar el año actual o anterior
@@ -81,15 +80,22 @@ const TablaRendererUtils = {
             }
             
         } else if (temporada === 'INVIERNO') {
-            // CORRECCIÓN: Para invierno actual (2025), necesitamos:
-            // - INVIERNO 25 (1/2/2025 al 31/7/2025) - TEMPORADA ACTUAL
-            // - Si no existe, usar INVIERNO 24 como fallback
+            // CORRECCIÓN: Determinar el último invierno según el mes actual
+            let anoInvierno;
+            
+            if (mesActual >= 8 || mesActual === 1) {
+                // Estamos en verano (Ago-Ene), el último invierno fue este año
+                anoInvierno = anoActual;
+            } else {
+                // Estamos en invierno (Feb-Jul), el último invierno completo fue el año pasado
+                anoInvierno = anoActual - 1;
+            }
             
             const posiblesColumnas = [
-                `VTA_INVIERNO_${anoActual}`,      // INVIERNO 25 ← ESTA ES LA CORRECTA
-                `INVIERNO ${anoActual}`,          // INVIERNO 25 (formato alternativo)
-                `VTA_INVIERNO_${anoActual - 1}`,  // INVIERNO 24 (fallback)
-                `INVIERNO ${anoActual - 1}`,      // INVIERNO 24 (fallback formato alternativo)
+                `VTA_INVIERNO_${anoInvierno}`,      // INVIERNO del último período
+                `INVIERNO ${anoInvierno}`,          // Formato alternativo
+                `VTA_INVIERNO_${anoInvierno - 1}`,  // Fallback año anterior
+                `INVIERNO ${anoInvierno - 1}`,      // Fallback formato alternativo
             ];
             
             for (const columna of posiblesColumnas) {
