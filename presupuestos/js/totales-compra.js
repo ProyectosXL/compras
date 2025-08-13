@@ -240,7 +240,7 @@ class TotalesCompra {
     }
 
     /**
-     * Manejar cambios de índice (cuando se edita un índice) - MEJORADA
+     * Manejar cambios de índice (cuando se edita un índice) - CORREGIDA PARA FILTROS
      */
     static onIndiceActualizado(solapa, rubro, categoria, nuevoIndice) {
         try {
@@ -254,30 +254,67 @@ class TotalesCompra {
                 return;
             }
             
-            // Actualizar datos filtrados con los nuevos valores
-            TotalesCompra.datosFiltrados[solapa] = [...datosActualizados];
+            // CORRECCIÓN: Verificar si hay filtros activos antes de aplicar
+            let datosFiltrados = [...datosActualizados];
             
-            // Aplicar filtros actuales si existen
-            const inputBusqueda = document.getElementById(`search-${solapa}`);
-            if (inputBusqueda && inputBusqueda.value.trim().length > 0) {
-                const termino = inputBusqueda.value.trim().toLowerCase();
-                TotalesCompra.datosFiltrados[solapa] = datosActualizados.filter(item => {
-                    return TotalesCompra.cumpleFiltro(item, termino);
-                });
+            // Verificar filtros persistentes primero
+            if (typeof FiltrosManager !== 'undefined') {
+                const estadoFiltros = FiltrosManager.obtenerEstadoFiltros();
+                if (estadoFiltros.activos) {
+                    // Aplicar filtros persistentes
+                    datosFiltrados = FiltrosManager.filtrarDatos(datosActualizados);
+                    console.log(`📊 Filtros persistentes aplicados: ${datosActualizados.length} -> ${datosFiltrados.length} registros`);
+                }
+            } else {
+                // Fallback: verificar filtros individuales en los selectores
+                const selectRubro = document.getElementById(`filtro-rubro-${solapa}`);
+                const selectCategoria = document.getElementById(`filtro-categoria-${solapa}`);
+                const inputBusqueda = document.getElementById(`search-${solapa}`);
+                
+                // Aplicar filtro de rubro
+                if (selectRubro && selectRubro.value.trim().length > 0) {
+                    const rubroFiltro = selectRubro.value.trim();
+                    datosFiltrados = datosFiltrados.filter(item => item.RUBRO === rubroFiltro);
+                    console.log(`📊 Filtro rubro aplicado (${rubroFiltro}): ${datosFiltrados.length} registros`);
+                }
+                
+                // Aplicar filtro de categoría
+                if (selectCategoria && selectCategoria.value.trim().length > 0) {
+                    const categoriaFiltro = selectCategoria.value.trim();
+                    datosFiltrados = datosFiltrados.filter(item => 
+                        item.CATEGORIA_PADRE === categoriaFiltro || item.CATEGORIA === categoriaFiltro
+                    );
+                    console.log(`📊 Filtro categoría aplicado (${categoriaFiltro}): ${datosFiltrados.length} registros`);
+                }
+                
+                // Aplicar filtro de búsqueda
+                if (inputBusqueda && inputBusqueda.value.trim().length > 0) {
+                    const termino = inputBusqueda.value.trim().toLowerCase();
+                    datosFiltrados = datosFiltrados.filter(item => {
+                        return TotalesCompra.cumpleFiltro(item, termino);
+                    });
+                    console.log(`📊 Filtro búsqueda aplicado (${termino}): ${datosFiltrados.length} registros`);
+                }
             }
             
-            // Recalcular totales
+            // Actualizar datos filtrados con los valores aplicando los filtros actuales
+            TotalesCompra.datosFiltrados[solapa] = datosFiltrados;
+            
+            // Recalcular totales solo con los datos filtrados
             TotalesCompra.calcularTotales(solapa);
             
             // Mostrar notificación
             if (typeof UIUtils !== 'undefined') {
-                UIUtils.mostrarAlerta('Total actualizado por cambio de índice', 'info', 2000);
+                const mensaje = datosFiltrados.length < datosActualizados.length 
+                    ? `Total actualizado (${datosFiltrados.length} registros filtrados)`
+                    : 'Total actualizado por cambio de índice';
+                UIUtils.mostrarAlerta(mensaje, 'info', 2000);
             }
             
         } catch (error) {
             console.error('Error manejando actualización de índice:', error);
         }
-    }
+}
 
     /**
      * Obtener el valor original de compra (antes del índice)
