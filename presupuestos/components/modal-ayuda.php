@@ -38,6 +38,11 @@
                                 <i class="fas fa-chart-line me-1 d-none d-sm-inline"></i> Ejemplos
                             </button>
                         </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="historial-ayuda-tab" data-bs-toggle="tab" data-bs-target="#historial-ayuda" type="button" role="tab">
+                                <i class="fas fa-history me-1 d-none d-sm-inline"></i> Guardar/Historial
+                            </button>
+                        </li>
                     </ul>
                     
                     <!-- Contenido de las tabs con altura controlada -->
@@ -53,6 +58,9 @@
                         
                         <!-- Tab 4: Ejemplos -->
                         <?php include 'modal-ayuda/tab-ejemplos.php'; ?>
+
+                        <!-- Tab 5: Historial -->
+                        <?php include 'modal-ayuda/tab-historial.php'; ?>
                     </div>
                 </div>
             </div>
