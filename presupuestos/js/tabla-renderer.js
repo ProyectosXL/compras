@@ -464,6 +464,7 @@ class TablaRenderer {
                 fila.style.boxShadow = '';
             }
         }
+    }
 
     /**
      * Renderiza la tabla de historial de compras proyectadas.
