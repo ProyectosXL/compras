@@ -336,6 +336,11 @@ class PresupuestoApp {
      * Cargar datos de solapa específica (lazy loading) - MEJORADO
      */
     async cargarDatosSolapa(solapa) {
+        // La solapa de historial se carga bajo demanda, no aquí.
+        if (solapa === 'historial') {
+            return;
+        }
+
         // Si ya están cargados, no recargar
         if (this.datos[solapa].length > 0) {
             return;

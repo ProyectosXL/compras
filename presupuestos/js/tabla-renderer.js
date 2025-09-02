@@ -499,10 +499,10 @@ class TablaRenderer {
                     <td>${item.rubro || ''}</td>
                     <td>${item.categoria_padre || ''}</td>
                     <td class="text-end">${FormatoUtils.formatearNumero(item.stock_proyectado)}</td>
-                    <td class="text-center bg-warning-subtle">${(item.indice_verano_variacion || 0).toFixed(2)}</td>
+                    <td class="text-center bg-warning-subtle">${parseFloat(item.indice_verano_variacion || 0).toFixed(2)}</td>
                     <td class="text-end">${FormatoUtils.formatearNumero(item.venta_verano_anterior)}</td>
                     <td class="text-center bg-primary-subtle">${FormatoUtils.formatearNumero(item.venta_proyectada_verano)}</td>
-                    <td class="text-center bg-warning-subtle">${(item.indice_invierno_variacion || 0).toFixed(2)}</td>
+                    <td class="text-center bg-warning-subtle">${parseFloat(item.indice_invierno_variacion || 0).toFixed(2)}</td>
                     <td class="text-end">${FormatoUtils.formatearNumero(item.venta_invierno_anterior)}</td>
                     <td class="text-center bg-primary-subtle">${FormatoUtils.formatearNumero(item.venta_proyectada_invierno)}</td>
                     <td class="text-center bg-success-subtle"><strong>${FormatoUtils.formatearNumero(item.compra_proyectada)}</strong></td>
