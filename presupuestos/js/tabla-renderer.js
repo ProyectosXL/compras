@@ -478,16 +478,13 @@ class TablaRenderer {
         }
 
         if (!datos || datos.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="9" class="text-center text-muted py-4">No se encontraron resultados para los filtros aplicados.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="13" class="text-center text-muted py-4">No se encontraron resultados para los filtros aplicados.</td></tr>`;
             return;
         }
 
         const html = datos.map(item => {
-            // Formatear la fecha para que sea legible
             let fechaFormateada = 'Fecha inválida';
             if (item.fecha_guardado && item.fecha_guardado.date) {
-                // Formato de fecha de SQL Server: YYYY-MM-DD HH:MM:SS.micros
-                // Cortamos los microsegundos y reemplazamos el espacio
                 const [fecha, hora] = item.fecha_guardado.date.substring(0, 19).split(' ');
                 const [Y, M, D] = fecha.split('-');
                 const [h, m] = hora.split(':');
@@ -502,9 +499,13 @@ class TablaRenderer {
                     <td>${item.rubro || ''}</td>
                     <td>${item.categoria_padre || ''}</td>
                     <td class="text-end">${FormatoUtils.formatearNumero(item.stock_proyectado)}</td>
-                    <td class="text-end"><strong>${FormatoUtils.formatearNumero(item.compra_proyectada)}</strong></td>
-                    <td class="text-end">${FormatoUtils.formatearNumero(item.venta_proyectada_verano)}</td>
-                    <td class="text-end">${FormatoUtils.formatearNumero(item.venta_proyectada_invierno)}</td>
+                    <td class="text-center bg-warning-subtle">${(item.indice_verano_variacion || 0).toFixed(2)}</td>
+                    <td class="text-end">${FormatoUtils.formatearNumero(item.venta_verano_anterior)}</td>
+                    <td class="text-center bg-primary-subtle">${FormatoUtils.formatearNumero(item.venta_proyectada_verano)}</td>
+                    <td class="text-center bg-warning-subtle">${(item.indice_invierno_variacion || 0).toFixed(2)}</td>
+                    <td class="text-end">${FormatoUtils.formatearNumero(item.venta_invierno_anterior)}</td>
+                    <td class="text-center bg-primary-subtle">${FormatoUtils.formatearNumero(item.venta_proyectada_invierno)}</td>
+                    <td class="text-center bg-success-subtle"><strong>${FormatoUtils.formatearNumero(item.compra_proyectada)}</strong></td>
                 </tr>
             `;
         }).join('');
