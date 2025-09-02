@@ -336,6 +336,9 @@ class MainController {
             case 'resetear-indices':
                 $this->delegarIndices($accion);
                 break;
+            case 'guardar-presupuesto':
+                $this->delegarHistorial($accion);
+                break;
             default:
                 $this->jsonResponse([
                     'success' => false,
@@ -472,6 +475,20 @@ class MainController {
                 break;
             case 'resumen-ventas':
                 $ventasController->obtenerResumenVentas();
+                break;
+        }
+    }
+
+    /**
+     * Delegar funcionalidades de historial - NUEVO
+     */
+    private function delegarHistorial($accion) {
+        require_once __DIR__ . '/HistorialController.php';
+        $historialController = new HistorialController();
+
+        switch ($accion) {
+            case 'guardar-presupuesto':
+                $historialController->guardarPresupuesto();
                 break;
         }
     }
