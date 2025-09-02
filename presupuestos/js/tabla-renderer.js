@@ -511,7 +511,6 @@ class TablaRenderer {
 
         tbody.innerHTML = html;
     }
-    }
 
     static actualizarHeadersEtiquetas(solapa, etiquetas) {
         if (!etiquetas) return;
