@@ -7,7 +7,6 @@ class HistorialManager {
      * Inicializa el gestor, añadiendo event listeners delegados.
      */
     static init() {
-        // Usar un listener en un contenedor padre que siempre exista
         document.body.addEventListener('click', (event) => {
             const target = event.target.closest('button');
             if (!target) return;
@@ -23,25 +22,6 @@ class HistorialManager {
                 HistorialManager.buscarHistorial();
             }
         });
-    }
-
-    /**
-     * Transforma las claves de un objeto a minúsculas.
-     * @param {object} obj El objeto a transformar.
-     * @returns {object} Un nuevo objeto con las claves en minúsculas.
-     */
-    static transformarKeysAMinusculas(obj) {
-        if (obj === null || typeof obj !== 'object') {
-            return obj;
-        }
-        if (Array.isArray(obj)) {
-            return obj.map(item => HistorialManager.transformarKeysAMinusculas(item));
-        }
-        return Object.keys(obj).reduce((acc, key) => {
-            const lowerCaseKey = key.toLowerCase();
-            acc[lowerCaseKey] = HistorialManager.transformarKeysAMinusculas(obj[key]);
-            return acc;
-        }, {});
     }
 
     /**
@@ -75,12 +55,31 @@ class HistorialManager {
             const nombrePresupuesto = `Presupuesto_${timestamp}_${temporada}`;
             const fechaParaGuardar = `${fecha} ${pad(ahora.getHours())}:${pad(ahora.getMinutes())}`;
 
-            const filasParaGuardar = HistorialManager.transformarKeysAMinusculas(datosFiltrados);
+            // FIX: Construir explícitamente el objeto a guardar para asegurar todos los campos.
+            const filasParaGuardar = datosFiltrados.map(item => {
+                // Re-calculamos o extraemos los valores tal como se muestran en la tabla.
+                const ventaVeranoAnterior = TablaRendererUtils.buscarVentaHistoricaCorrecta(item, 'VERANO');
+                const ventaInviernoAnterior = TablaRendererUtils.buscarVentaHistoricaCorrecta(item, 'INVIERNO');
+
+                return {
+                    rubro: item.RUBRO,
+                    categoria_padre: item.CATEGORIA_PADRE,
+                    stock_proyectado: item.STOCK_PROYECTADO || 0,
+                    indice_variacion_original: TablaRendererUtils.obtenerIndiceOriginal(item),
+                    indice_verano_variacion: parseFloat(item.INDICE_VARIACION || 1.0),
+                    venta_verano_anterior: ventaVeranoAnterior,
+                    venta_proyectada_verano: item.VENTA_PROY_VERANO || 0,
+                    indice_invierno_variacion: parseFloat(item.INDICE_VARIACION_INVIERNO || item.INDICE_VARIACION || 1.0),
+                    venta_invierno_anterior: ventaInviernoAnterior,
+                    venta_proyectada_invierno: item.VENTA_PROY_INVIERNO || 0,
+                    compra_proyectada: item.COMPRA_PROYECTADA || 0
+                };
+            });
 
             const payload = {
                 nombre_presupuesto: nombrePresupuesto,
                 temporada: temporada,
-                filas: filasParaGuardar,
+                filas: filasParaGuardar, // Ya tiene las keys en minúscula y todos los datos.
                 fecha_guardado: fechaParaGuardar
             };
 
