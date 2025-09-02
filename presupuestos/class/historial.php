@@ -19,7 +19,8 @@ class Historial {
         if (isset($_SESSION['pais_seleccionado'])) {
             $pais = strtolower($_SESSION['pais_seleccionado']);
         }
-        return $pais === 'uruguay' ? 'uy' : 'central';
+        // FIX: Connect to the application's database ('apps' or 'apps_uy'), not the source ERP database.
+        return $pais === 'uruguay' ? 'apps_uy' : 'apps';
     }
 
     /**
@@ -42,7 +43,7 @@ class Historial {
                  throw new Exception("No se pudo iniciar la transacción: " . print_r(sqlsrv_errors(), true));
             }
 
-            $sql = "INSERT INTO RO.RO_T_HISTORIAL_COMPRAS_PROYECTADAS_PRESUPUESTO (
+            $sql = "INSERT INTO RO_T_HISTORIAL_COMPRAS_PROYECTADAS_PRESUPUESTO (
                         nombre_presupuesto, fecha_guardado, temporada, pais, rubro,
                         categoria_padre, stock_proyectado, indice_variacion_original,
                         indice_verano_variacion, venta_verano_anterior, venta_proyectada_verano,
