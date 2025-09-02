@@ -337,6 +337,7 @@ class MainController {
                 $this->delegarIndices($accion);
                 break;
             case 'guardar-presupuesto':
+            case 'buscar-historial':
                 $this->delegarHistorial($accion);
                 break;
             default:
@@ -489,6 +490,9 @@ class MainController {
         switch ($accion) {
             case 'guardar-presupuesto':
                 $historialController->guardarPresupuesto();
+                break;
+            case 'buscar-historial':
+                $historialController->buscarHistorial();
                 break;
         }
     }

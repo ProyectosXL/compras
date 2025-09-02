@@ -36,6 +36,12 @@
                         <i class="fas fa-chart-line me-2"></i>Venta Sucursales (Últ. 6 Meses)
                     </button>
                 </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="historial-tab" data-bs-toggle="tab"
+                            data-bs-target="#historial" type="button" role="tab">
+                        <i class="fas fa-history me-2"></i>Historial Compras Proyectadas
+                    </button>
+                </li>
             </ul>
 
             <!-- Tab Content -->
@@ -54,6 +60,9 @@
 
                 <!-- Ventas 6 Meses -->
                 <?php include 'components/tabs/ventas-6-meses-tab.php'; ?>
+
+                <!-- Historial Compras Proyectadas -->
+                <?php include 'components/tabs/historial-tab.php'; ?>
             </div>
         </div>
     </div>

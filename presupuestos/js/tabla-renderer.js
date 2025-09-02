@@ -466,6 +466,53 @@ class TablaRenderer {
         }
     }
 
+    /**
+     * Renderiza la tabla de historial de compras proyectadas.
+     * @param {Array} datos Los datos del historial a renderizar.
+     */
+    static renderizarTablaHistorial(datos) {
+        const tbody = document.getElementById('tbody-historial');
+        if (!tbody) {
+            console.error('No se encontró el cuerpo de la tabla de historial (tbody-historial).');
+            return;
+        }
+
+        if (!datos || datos.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="13" class="text-center text-muted py-4">No se encontraron resultados para los filtros aplicados.</td></tr>`;
+            return;
+        }
+
+        const html = datos.map(item => {
+            let fechaFormateada = 'Fecha inválida';
+            if (item.fecha_guardado && item.fecha_guardado.date) {
+                const [fecha, hora] = item.fecha_guardado.date.substring(0, 19).split(' ');
+                const [Y, M, D] = fecha.split('-');
+                const [h, m] = hora.split(':');
+                fechaFormateada = `${D}/${M}/${Y} ${h}:${m}`;
+            }
+
+            return `
+                <tr>
+                    <td>${fechaFormateada}</td>
+                    <td>${item.nombre_presupuesto || ''}</td>
+                    <td><span class="badge bg-info text-dark">${item.temporada || ''}</span></td>
+                    <td>${item.rubro || ''}</td>
+                    <td>${item.categoria_padre || ''}</td>
+                    <td class="text-end">${FormatoUtils.formatearNumero(item.stock_proyectado)}</td>
+                    <td class="text-center bg-warning-subtle">${parseFloat(item.indice_verano_variacion || 0).toFixed(2)}</td>
+                    <td class="text-end">${FormatoUtils.formatearNumero(item.venta_verano_anterior)}</td>
+                    <td class="text-center bg-primary-subtle">${FormatoUtils.formatearNumero(item.venta_proyectada_verano)}</td>
+                    <td class="text-center bg-warning-subtle">${parseFloat(item.indice_invierno_variacion || 0).toFixed(2)}</td>
+                    <td class="text-end">${FormatoUtils.formatearNumero(item.venta_invierno_anterior)}</td>
+                    <td class="text-center bg-primary-subtle">${FormatoUtils.formatearNumero(item.venta_proyectada_invierno)}</td>
+                    <td class="text-center bg-success-subtle"><strong>${FormatoUtils.formatearNumero(item.compra_proyectada)}</strong></td>
+                </tr>
+            `;
+        }).join('');
+
+        tbody.innerHTML = html;
+    }
+
     static actualizarHeadersEtiquetas(solapa, etiquetas) {
         if (!etiquetas) return;
         

@@ -92,6 +92,7 @@ ENV=PROD
 * ✅ Exportación CSV
 * ✅ Visualización de temporadas
 * ✅ Interfaz responsiva y adaptada a móviles
+* ✅ **Guardado de Presupuestos**: Permite guardar un histórico de los presupuestos proyectados.
 
 ## 💻 API Endpoints
 
@@ -103,6 +104,7 @@ ENV=PROD
 | `api.php?accion=estadisticas`       | GET    | Obtener estadísticas resumidas          |
 | `api.php?accion=rubros`             | GET    | Obtener lista de rubros                 |
 | `api.php?accion=rubro&rubro=NOMBRE` | GET    | Filtrar por rubro                       |
+| `api.php?accion=guardar-presupuesto` | POST  | Guarda el presupuesto proyectado visible en la BD. |
 
 ## 💻 Uso del Sistema
 
