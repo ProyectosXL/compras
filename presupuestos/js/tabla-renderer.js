@@ -464,6 +464,52 @@ class TablaRenderer {
                 fila.style.boxShadow = '';
             }
         }
+
+    /**
+     * Renderiza la tabla de historial de compras proyectadas.
+     * @param {Array} datos Los datos del historial a renderizar.
+     */
+    static renderizarTablaHistorial(datos) {
+        const tbody = document.getElementById('tbody-historial');
+        if (!tbody) {
+            console.error('No se encontró el cuerpo de la tabla de historial (tbody-historial).');
+            return;
+        }
+
+        if (!datos || datos.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="9" class="text-center text-muted py-4">No se encontraron resultados para los filtros aplicados.</td></tr>`;
+            return;
+        }
+
+        const html = datos.map(item => {
+            // Formatear la fecha para que sea legible
+            let fechaFormateada = 'Fecha inválida';
+            if (item.fecha_guardado && item.fecha_guardado.date) {
+                // Formato de fecha de SQL Server: YYYY-MM-DD HH:MM:SS.micros
+                // Cortamos los microsegundos y reemplazamos el espacio
+                const [fecha, hora] = item.fecha_guardado.date.substring(0, 19).split(' ');
+                const [Y, M, D] = fecha.split('-');
+                const [h, m] = hora.split(':');
+                fechaFormateada = `${D}/${M}/${Y} ${h}:${m}`;
+            }
+
+            return `
+                <tr>
+                    <td>${fechaFormateada}</td>
+                    <td>${item.nombre_presupuesto || ''}</td>
+                    <td><span class="badge bg-info text-dark">${item.temporada || ''}</span></td>
+                    <td>${item.rubro || ''}</td>
+                    <td>${item.categoria_padre || ''}</td>
+                    <td class="text-end">${FormatoUtils.formatearNumero(item.stock_proyectado)}</td>
+                    <td class="text-end"><strong>${FormatoUtils.formatearNumero(item.compra_proyectada)}</strong></td>
+                    <td class="text-end">${FormatoUtils.formatearNumero(item.venta_proyectada_verano)}</td>
+                    <td class="text-end">${FormatoUtils.formatearNumero(item.venta_proyectada_invierno)}</td>
+                </tr>
+            `;
+        }).join('');
+
+        tbody.innerHTML = html;
+    }
     }
 
     static actualizarHeadersEtiquetas(solapa, etiquetas) {

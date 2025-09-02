@@ -32,7 +32,7 @@ class Historial {
      * @param array $filas Los datos de las filas a guardar.
      * @return array Resultado de la operación.
      */
-    public function guardarPresupuesto($nombrePresupuesto, $temporada, $pais, $filas) {
+    public function guardarPresupuesto($nombrePresupuesto, $temporada, $pais, $filas, $fechaGuardado) {
         if (!$this->cid) {
             return ['success' => false, 'message' => 'Error de conexión a la base de datos.'];
         }
@@ -49,25 +49,31 @@ class Historial {
                         indice_verano_variacion, venta_verano_anterior, venta_proyectada_verano,
                         indice_invierno_variacion, venta_invierno_anterior, venta_proyectada_invierno,
                         compra_proyectada
-                    ) VALUES (?, GETDATE(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
             $registrosGuardados = 0;
             foreach ($filas as $fila) {
                 $params = [
                     $nombrePresupuesto,
+                    $fechaGuardado,
                     $temporada,
                     $pais,
                     $fila['rubro'] ?? null,
                     $fila['categoria_padre'] ?? null,
-                    $fila['stock_proyectado'] ?? 0,
-                    $fila['indice_variacion_original'] ?? 0,
-                    $fila['indice_verano_variacion'] ?? 0,
-                    $fila['venta_verano_anterior'] ?? 0,
-                    $fila['venta_proyectada_verano'] ?? 0,
-                    $fila['indice_invierno_variacion'] ?? 0,
-                    $fila['venta_invierno_anterior'] ?? 0,
-                    $fila['venta_proyectada_invierno'] ?? 0,
-                    $fila['compra_proyectada'] ?? 0
+                    // Cast quantity columns to int
+                    (int)($fila['stock_proyectado'] ?? 0),
+                    // Decimal columns
+                    (float)($fila['indice_variacion_original'] ?? 0),
+                    (float)($fila['indice_verano_variacion'] ?? 0),
+                    // Cast quantity columns to int
+                    (int)($fila['venta_verano_anterior'] ?? 0),
+                    (int)($fila['venta_proyectada_verano'] ?? 0),
+                    // Decimal column
+                    (float)($fila['indice_invierno_variacion'] ?? 0),
+                    // Cast quantity columns to int
+                    (int)($fila['venta_invierno_anterior'] ?? 0),
+                    (int)($fila['venta_proyectada_invierno'] ?? 0),
+                    (int)($fila['compra_proyectada'] ?? 0)
                 ];
 
                 $stmt = sqlsrv_query($this->cid, $sql, $params);
@@ -94,6 +100,79 @@ class Historial {
             }
             error_log("Error en guardarPresupuesto: " . $e->getMessage());
             return ['success' => false, 'message' => 'Error al guardar el presupuesto: ' . $e->getMessage()];
+        }
+    }
+
+    /**
+     * Busca en el historial de presupuestos guardados.
+     *
+     * @param array $filtros Los filtros a aplicar en la búsqueda.
+     * @return array Resultado de la búsqueda.
+     */
+    public function buscarHistorial($filtros) {
+        if (!$this->cid) {
+            return ['success' => false, 'message' => 'Error de conexión a la base de datos.'];
+        }
+
+        try {
+            $sql = "SELECT * FROM RO_T_HISTORIAL_COMPRAS_PROYECTADAS_PRESUPUESTO";
+            $where = [];
+            $params = [];
+
+            // Filtro por término de búsqueda (en rubro y categoría)
+            if (!empty($filtros['termino'])) {
+                $where[] = "(rubro LIKE ? OR categoria_padre LIKE ?)";
+                $params[] = '%' . $filtros['termino'] . '%';
+                $params[] = '%' . $filtros['termino'] . '%';
+            }
+
+            // Filtro por rubro específico
+            if (!empty($filtros['rubro'])) {
+                $where[] = "rubro = ?";
+                $params[] = $filtros['rubro'];
+            }
+
+            // Filtro por categoría específica
+            if (!empty($filtros['categoria'])) {
+                $where[] = "categoria_padre = ?";
+                $params[] = $filtros['categoria'];
+            }
+
+            // Filtro por rango de fechas
+            if (!empty($filtros['fecha_desde'])) {
+                $where[] = "fecha_guardado >= ?";
+                $params[] = $filtros['fecha_desde'];
+            }
+            if (!empty($filtros['fecha_hasta'])) {
+                // Agregamos un día para incluir todo el día de la fecha hasta
+                $fechaHasta = new DateTime($filtros['fecha_hasta']);
+                $fechaHasta->modify('+1 day');
+                $where[] = "fecha_guardado < ?";
+                $params[] = $fechaHasta->format('Y-m-d');
+            }
+
+            if (!empty($where)) {
+                $sql .= " WHERE " . implode(" AND ", $where);
+            }
+
+            $sql .= " ORDER BY fecha_guardado DESC";
+
+            $stmt = sqlsrv_query($this->cid, $sql, $params);
+            if ($stmt === false) {
+                throw new Exception("Error al buscar en el historial: " . print_r(sqlsrv_errors(), true));
+            }
+
+            $resultados = [];
+            while ($row = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC)) {
+                $resultados[] = $row;
+            }
+            sqlsrv_free_stmt($stmt);
+
+            return ['success' => true, 'data' => $resultados];
+
+        } catch (Exception $e) {
+            error_log("Error en buscarHistorial: " . $e->getMessage());
+            return ['success' => false, 'message' => 'Error al buscar en el historial: ' . $e->getMessage()];
         }
     }
 

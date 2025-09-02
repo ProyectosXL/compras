@@ -26,7 +26,7 @@
                 </select>
             </div>
             <div class="col-md-2 text-end export-buttons">
-                <button class="btn btn-primary btn-sm" onclick="HistorialManager.guardarPresupuesto('verano')">
+                <button class="btn btn-primary btn-sm" id="btn-guardar-verano" data-temporada="verano">
                     <i class="fas fa-save me-1"></i> Guardar
                 </button>
                 <button class="btn btn-success btn-sm" onclick="exportarExcel('verano')">
