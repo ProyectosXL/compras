@@ -9,8 +9,9 @@ class APIClient {
      * Realizar llamada genérica a la API
      */
     static async llamarAPI(accion, parametros = {}, metodo = 'GET', body = null) {
+        let url;
         try {
-            const url = new URL(APIClient.baseUrl, window.location.origin + window.location.pathname.replace('index.php', ''));
+            url = new URL(APIClient.baseUrl, window.location.origin + window.location.pathname.replace('index.php', ''));
             url.searchParams.append('accion', accion);
             
             Object.keys(parametros).forEach(key => {
