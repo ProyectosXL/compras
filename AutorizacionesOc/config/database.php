@@ -19,7 +19,7 @@ try {
 }
 
 // 3. Obtener las variables de entorno
-$serverName = $_ENV['HOST_PRUEBA'] ?? '';
+$serverName = $_ENV['HOST_CENTRAL'] ?? '';
 $database   = $_ENV['DATABASE_CENTRAL'] ?? '';
 $uid        = $_ENV['USER'] ?? '';
 $pwd        = $_ENV['PASS'] ?? '';
