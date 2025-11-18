@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Programador de Tareas - App Autorizaciones</title>
+    <style>
+        body { font-family: monospace; background-color: #1e1e1e; color: #d4d4d4; padding: 20px; }
+        h1 { color: #569cd6; }
+        #status-log { border: 1px solid #333; padding: 15px; height: 400px; overflow-y: scroll; background-color: #252526; }
+        .log-entry { margin-bottom: 5px; }
+        .log-time { color: #6a9955; }
+        .log-info { color: #9cdcfe; }
+        .log-success { color: #4ec9b0; font-weight: bold; }
+        .log-error { color: #f44747; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <h1><span id="clock">--:--:--</span> | Panel de Control del Programador</h1>
+    <p>Esta pestaña debe permanecer abierta para ejecutar tareas automáticas. No la cierres.</p>
+    <div id="status-log">
+        <div class="log-entry">
+            <span class="log-time">[Inicio]</span>
+            <span class="log-info">Inicializando el programador...</span>
+        </div>
+    </div>
+
+<script>
+    // --- CONFIGURACIÓN ---
+    // Esta debe ser LA MISMA clave secreta que definiste en tu archivo PHP.
+    const SECRET_KEY = 'MiClaveSuperSeguraParaElCron12345XYZ';
+    const API_URL = 'api/enviar_resumen_semanal_externo.php';
+
+    // Día de la semana para ejecutar (0=Domingo, 1=Lunes, 2=Martes...)
+    const TARGET_DAY = 1; // Lunes
+
+    // Hora del día para ejecutar (formato 24h)
+    const TARGET_HOUR = 8; // 08:00 AM
+
+    // --- LÓGICA DEL PROGRAMADOR ---
+    const logContainer = document.getElementById('status-log');
+    const clockElement = document.getElementById('clock');
+    
+    // Bandera para asegurar que solo se ejecute una vez por semana
+    let lastRunDay = null;
+
+    function logStatus(message, type = 'info') {
+        const time = new Date().toLocaleTimeString();
+        const entry = document.createElement('div');
+        entry.className = `log-entry log-${type}`;
+        entry.innerHTML = `<span class="log-time">[${time}]</span> <span class="log-message">${message}</span>`;
+        logContainer.appendChild(entry);
+        // Auto-scroll hacia abajo
+        logContainer.scrollTop = logContainer.scrollHeight;
+    }
+    
+    function updateClock() {
+        clockElement.textContent = new Date().toLocaleTimeString();
+    }
+
+    async function checkAndRunTask() {
+        const now = new Date();
+        const currentDay = now.getDay();
+        const currentHour = now.getHours();
+
+        logStatus(`Verificando... (Día: ${currentDay}, Hora: ${currentHour})`);
+
+        // Reseteamos la bandera al iniciar una nueva semana (ej. cuando sea domingo)
+        if (currentDay !== TARGET_DAY) {
+            lastRunDay = null; 
+        }
+
+        // ¿Es el día y la hora correctos Y no se ha ejecutado ya en este ciclo?
+        if (currentDay === TARGET_DAY && currentHour === TARGET_HOUR && currentDay !== lastRunDay) {
+            logStatus('¡Disparador activado! Ejecutando tarea de envío de resumen semanal...', 'success');
+            
+            try {
+                // Hacemos la llamada a nuestro script PHP seguro
+                const response = await fetch(`${API_URL}?secret=${SECRET_KEY}`);
+                
+                if (!response.ok) {
+                    throw new Error(`Error en el servidor: ${response.status} ${response.statusText}`);
+                }
+
+                const resultText = await response.text();
+                logStatus(`Tarea completada. Respuesta del servidor: ${resultText}`, 'success');
+                
+                // Marcamos que la tarea ya se corrió para este día para no repetirla
+                lastRunDay = currentDay; 
+
+            } catch (error) {
+                logStatus(`ERROR al ejecutar la tarea: ${error.message}`, 'error');
+            }
+        }
+    }
+
+    // --- INICIO DEL PROGRAMA ---
+    logStatus('Programador iniciado. Verificando cada hora.');
+    setInterval(updateClock, 1000); // Actualiza el reloj cada segundo
+
+    // Ejecuta la verificación una vez al inicio
+    checkAndRunTask(); 
+    
+    // Y luego, establece el intervalo para que se verifique cada hora.
+    // 3600000 milisegundos = 1 hora
+    setInterval(checkAndRunTask, 3600000);
+
+</script>
+</body>
+</html>

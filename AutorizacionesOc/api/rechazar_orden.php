@@ -1,66 +1,72 @@
 <?php
-// --- api/rechazar_orden.php ---
-ini_set('display_errors', 1);
-error_reporting(E_ALL);
+// --- api/rechazar_orden.php (VERSIÓN FINAL USANDO destinatarios.php) ---
+ini_set('display_errors', 1); error_reporting(E_ALL);
 
 header('Content-Type: application/json; charset=utf-8');
 require_once '../config/database.php';
+require_once '../config/mailer.php';
 
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    http_response_code(405);
-    echo json_encode(['status' => 'error', 'message' => 'Método no permitido.'], JSON_UNESCAPED_UNICODE);
-    exit();
-}
+// Incluimos nuestro archivo "agenda" de destinatarios
+$destinatarios_config = require_once '../config/destinatarios.php';
 
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') { http_response_code(405); exit('...'); }
 $n_orden_co = isset($_POST['n_orden_co']) ? $_POST['n_orden_co'] : null;
 $usuario_rechaza = isset($_POST['usuario_rechaza']) ? $_POST['usuario_rechaza'] : null;
 $motivo = isset($_POST['motivo']) ? trim($_POST['motivo']) : '';
+if (empty($n_orden_co) || empty($usuario_rechaza) || empty($motivo)) { http_response_code(400); exit('...'); }
 
-if (empty($n_orden_co) || empty($usuario_rechaza) || empty($motivo)) {
-    http_response_code(400);
-    echo json_encode(['status' => 'error', 'message' => 'Parámetros requeridos: n_orden_co, usuario_rechaza y motivo.'], JSON_UNESCAPED_UNICODE);
-    exit();
-}
+// Obtenemos el nombre del proveedor Y el usuario que ingresó la OC
+$sql_check = "SELECT A.USUARIO_INGRESO AS usuario_creador, B.NOM_PROVEE AS proveedor_nombre FROM CPA35 AS A INNER JOIN CPA01 AS B ON A.COD_PROVEE = B.COD_PROVEE WHERE A.N_ORDEN_CO = ? AND A.ESTADO = 1";
+$params_check = [$n_orden_co];
+$stmt_check = sqlsrv_query($conn, $sql_check, $params_check);
 
-$estado_rechazado = 4; // 4 = Desautorizada
+if ($stmt_check && sqlsrv_has_rows($stmt_check)) {
+    $oc_data = sqlsrv_fetch_array($stmt_check, SQLSRV_FETCH_ASSOC);
+    $proveedor_oc = $oc_data['proveedor_nombre'];
+    $usuario_creador = $oc_data['usuario_creador'];
+    sqlsrv_free_stmt($stmt_check);
+} else { echo json_encode(['status' => 'info', 'message' => 'OC no encontrada o ya procesada.']); if ($stmt_check) sqlsrv_free_stmt($stmt_check); sqlsrv_close($conn); exit(); }
+
+$estado_rechazado = 4;
 $motivo_completo = "RECHAZADO APP: " . $motivo;
+$sql_update = "UPDATE CPA35 SET ESTADO = ?, ID_ESTADO_ORDEN_COMPRA = ?, OBSERVACIONES = ?, FECHA_DESAUTORIZACION = GETDATE(), USUARIO_DESAUTORIZACION = ?, TERMINAL_DESAUTORIZACION = 'APP_MOVIL', USUA_ULTIMA_MODIFICACION = ?, HORA_ULTIMA_MODIFICACION = FORMAT(GETDATE(), 'HHmmss'), TERM_ULTIMA_MODIFICACION = 'APP_MOVIL' WHERE N_ORDEN_CO = ? AND ESTADO = 1";
+$params_update = [$estado_rechazado, $estado_rechazado, $motivo_completo, $usuario_rechaza, $usuario_rechaza, $n_orden_co];
+$stmt_update = sqlsrv_query($conn, $sql_update, $params_update);
 
-$sql = "UPDATE CPA35
-    SET
-        ESTADO = ?,
-        ID_ESTADO_ORDEN_COMPRA = ?,
-        OBSERVACIONES = ?,
-        FECHA_DESAUTORIZACION = GETDATE(),
-        USUARIO_DESAUTORIZACION = ?,
-        TERMINAL_DESAUTORIZACION = 'APP_MOVIL',
-        USUA_ULTIMA_MODIFICACION = ?,
-        HORA_ULTIMA_MODIFICACION = FORMAT(GETDATE(), 'HHmmss'),
-        TERM_ULTIMA_MODIFICACION = 'APP_MOVIL'
-    WHERE
-        N_ORDEN_CO = ? AND ESTADO = 1";
+if ($stmt_update === false) { http_response_code(500); echo json_encode(['status' => 'error', 'message' => 'Error al ejecutar el UPDATE de rechazo.', 'details' => sqlsrv_errors()]); exit(); }
 
-$params = [
-    $estado_rechazado,
-    $estado_rechazado,
-    $motivo_completo,
-    $usuario_rechaza,
-    $usuario_rechaza,
-    $n_orden_co
-];
-$stmt = sqlsrv_query($conn, $sql, $params);
+if (sqlsrv_rows_affected($stmt_update) > 0) {
+    
+    // ---- INICIO DE LA NUEVA LÓGICA DE BÚSQUEDA DE DESTINATARIO ----
+    
+    // Verificamos si el usuario creador existe en nuestro archivo de configuración.
+    if (isset($destinatarios_config['por_usuario'][$usuario_creador])) {
+        
+        $destinatario = $destinatarios_config['por_usuario'][$usuario_creador];
 
-if ($stmt === false) {
-    http_response_code(500);
-    echo json_encode(['status' => 'error', 'message' => 'Falló el UPDATE para rechazar la OC.', 'details' => sqlsrv_errors()], JSON_UNESCAPED_UNICODE);
-    exit();
-}
+        $asunto = "OC Rechazada: Nro. {$n_orden_co}";
+        $cuerpo = "<html><body><h2>Notificación de Orden de Compra Rechazada</h2><p>Hola <strong>{$usuario_creador}</strong>,</p><p>La OC <strong>Nro. {$n_orden_co}</strong> que ingresaste para el proveedor <strong>" . htmlspecialchars($proveedor_oc, ENT_QUOTES, 'UTF-8') . "</strong> ha sido rechazada.</p><p><strong>Rechazado por:</strong> {$usuario_rechaza}</p><p><strong>Motivo:</strong></p><blockquote style='border-left: 4px solid #dc3545; padding-left: 15px;'>".htmlspecialchars($motivo, ENT_QUOTES, 'UTF-8')."</blockquote><p>Por favor, revisa la orden.</p><hr><p><small>Este es un correo automático.</small></p></body></html>";
 
-if (sqlsrv_rows_affected($stmt) > 0) {
-    echo json_encode(['status' => 'success', 'message' => '¡OC ' . $n_orden_co . ' rechazada correctamente!'], JSON_UNESCAPED_UNICODE);
+        $mailer = configurarMailer();
+        if ($mailer) {
+            try {
+                $mailer->addAddress($destinatario);
+                $mailer->isHTML(true);
+                $mailer->Subject = $asunto;
+                $mailer->Body    = $cuerpo;
+                $mailer->send();
+            } catch (Exception $e) {
+                error_log("Error de PHPMailer al rechazar: {$mailer->ErrorInfo}");
+            }
+        }
+    }
+    // Si no está, no se hace nada.
+
+    echo json_encode(['status' => 'success', 'message' => '¡OC rechazada con éxito!']);
+
 } else {
-    echo json_encode(['status' => 'info', 'message' => 'La OC no pudo ser rechazada (posiblemente ya fue procesada).'], JSON_UNESCAPED_UNICODE);
+    echo json_encode(['status' => 'info', 'message' => 'La OC no pudo ser rechazada.']);
 }
-
-sqlsrv_free_stmt($stmt);
+sqlsrv_free_stmt($stmt_update);
 sqlsrv_close($conn);
 ?>

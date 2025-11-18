@@ -30,23 +30,22 @@
             <div id="ordenes-container"></div>
         </div>
 
-<!-- Pestaña 3: CONSULTA (Monitor) - VERSIÓN CORREGIDA -->
-<div id="tab-consulta" class="tab-content">
-    <div class="header">
-        <h1>Monitor de Órdenes</h1>
-        <p id="consulta-subtitulo">Busca en el historial global de OCs.</p>
-    </div>
-    <div class="filter-card">
-        <div class="filtros">
-            <!-- YA NO HAY SELECT DE USUARIO AQUÍ -->
-            <div class="form-group"><label for="filtro-estado">Estado</label><select id="filtro-estado"><option value="">Todos</option></select></div>
-            <div class="form-group"><label for="filtro-fecha-desde">Desde</label><input type="date" id="filtro-fecha-desde"></div>
-            <div class="form-group"><label for="filtro-fecha-hasta">Hasta</label><input type="date" id="filtro-fecha-hasta"></div>
+        <!-- Pestaña 3: CONSULTA (Monitor) -->
+        <div id="tab-consulta" class="tab-content">
+            <div class="header">
+                <h1>Monitor de Órdenes</h1>
+                <p id="consulta-subtitulo">Busca en el historial global de OCs.</p>
+            </div>
+            <div class="filter-card">
+                <div class="filtros">
+                    <div class="form-group"><label for="filtro-estado">Estado</label><select id="filtro-estado"><option value="">Todos</option></select></div>
+                    <div class="form-group"><label for="filtro-fecha-desde">Desde</label><input type="date" id="filtro-fecha-desde"></div>
+                    <div class="form-group"><label for="filtro-fecha-hasta">Hasta</label><input type="date" id="filtro-fecha-hasta"></div>
+                </div>
+                <button id="btn-buscar-monitor" class="btn btn-primary">Buscar</button>
+            </div>
+            <table class="resultados-tabla" id="consulta-tabla"><tbody id="tabla-resultados-body"></tbody></table>
         </div>
-        <button id="btn-buscar-monitor" class="btn btn-primary">Buscar</button>
-    </div>
-    <table class="resultados-tabla" id="consulta-tabla"><tbody id="tabla-resultados-body"></tbody></table>
-</div>
     </main>
 
     <!-- Barra de Navegación Inferior -->
@@ -141,36 +140,23 @@ document.addEventListener('DOMContentLoaded', () => {
         if (usuarioActivo) { url += `?usuario=${encodeURIComponent(usuarioActivo)}`; }
         fetch(url).then(res => res.json()).then(stats => {
             kpiLoader.style.display = 'none'; kpiContainer.style.display = 'grid';
-kpiContainer.innerHTML = `
-    <div class="kpi-card pending">
-        <div class="kpi-card-info">
-            <div class="value">${stats.pendientes_count || 0}</div>
-            <div class="label">${stats.pendientes_count === 1 ? 'Pendiente' : 'Pendientes'}</div>
-        </div>
-        <div class="icon"><i class="bi bi-hourglass-split"></i></div>
-    </div>
-    <div class="kpi-card amount">
-        <div class="kpi-card-info">
-            <div class="value">${formatCurrency(stats.pendientes_monto || 0)}</div>
-            <div class="label">Monto Pendiente</div>
-        </div>
-        <div class="icon"><i class="bi bi-cash-coin"></i></div>
-    </div>
-    <div class="kpi-card authorized">
-        <div class="kpi-card-info">
-            <div class="value">${stats.autorizadas_hoy || 0}</div>
-            <div class="label">Autorizadas Hoy</div>
-        </div>
-        <div class="icon"><i class="bi bi-check-circle-fill"></i></div>
-    </div>
-    <div class="kpi-card rejected">
-        <div class="kpi-card-info">
-            <div class="value">${stats.rechazadas_hoy || 0}</div>
-            <div class="label">Rechazadas Hoy</div>
-        </div>
-        <div class="icon"><i class="bi bi-x-circle-fill"></i></div>
-    </div>`;
-
+            kpiContainer.innerHTML = `
+                <div class="kpi-card pending">
+                    <div class="kpi-card-info"><div class="value">${stats.pendientes_count || 0}</div><div class="label">${stats.pendientes_count === 1 ? 'Pendiente' : 'Pendientes'}</div></div>
+                    <div class="icon"><i class="bi bi-hourglass-split"></i></div>
+                </div>
+                <div class="kpi-card amount">
+                    <div class="kpi-card-info"><div class="value">${formatCurrency(stats.pendientes_monto || 0)}</div><div class="label">Monto Pendiente</div></div>
+                    <div class="icon"><i class="bi bi-cash-coin"></i></div>
+                </div>
+                <div class="kpi-card authorized">
+                    <div class="kpi-card-info"><div class="value">${stats.autorizadas_hoy || 0}</div><div class="label">Autorizadas Hoy</div></div>
+                    <div class="icon"><i class="bi bi-check-circle-fill"></i></div>
+                </div>
+                <div class="kpi-card rejected">
+                    <div class="kpi-card-info"><div class="value">${stats.rechazadas_hoy || 0}</div><div class="label">Rechazadas Hoy</div></div>
+                    <div class="icon"><i class="bi bi-x-circle-fill"></i></div>
+                </div>`;
             if (usuarioActivo) kpiContainer.querySelector('.kpi-card.pending .label').textContent = 'Mis Pendientes';
             else kpiContainer.querySelector('.kpi-card.pending .label').textContent = 'Pendientes (Global)';
         }).catch(err => { kpiLoader.textContent = 'Error al cargar indicadores.'; console.error(err); });
@@ -215,21 +201,94 @@ kpiContainer.innerHTML = `
         usuarioActivo = gestionSelect.value;
         if(usuarioActivo) {
             buscarPendientesParaUsuario(usuarioActivo);
-            document.getElementById('tab-resumen').dataset.loaded = 'false'; // Forza recarga del resumen
-            document.getElementById('tab-consulta').dataset.loaded = 'false'; // Forza recarga de consulta
+            document.getElementById('tab-resumen').dataset.loaded = 'false';
+            document.getElementById('tab-consulta').dataset.loaded = 'false';
         } else {
             alert('Por favor, selecciona un usuario.');
         }
     });
+
     gestionContainer.addEventListener('click', e => {
-        const isAutorizar = e.target.classList.contains('autorizar'); const isRechazar = e.target.classList.contains('rechazar');
+        const isAutorizar = e.target.classList.contains('autorizar');
+        const isRechazar = e.target.classList.contains('rechazar');
         if (!isAutorizar && !isRechazar) return;
-        const boton = e.target; const numeroOC = boton.dataset.oc; const autorizadorSeleccionado = usuarioActivo || gestionSelect.value;
+
+        const boton = e.target;
+        const numeroOC = boton.dataset.oc;
+        const autorizadorSeleccionado = usuarioActivo || gestionSelect.value;
+
         if (!autorizadorSeleccionado) {
             showModal('Error', 'No se ha identificado un usuario para esta acción. Por favor, selecciona uno.', [{ text: 'Entendido', class: 'btn-primary' }]);
             return;
         }
-        const ejecutarAccion = (motivo = '') => { /* ... (esta función ya estaba bien) */ };
+
+        // ================================================================
+        // INICIO DE LA SECCIÓN CORREGIDA Y COMPLETADA
+        // ================================================================
+        const ejecutarAccion = (motivo = '') => {
+            const esRechazo = motivo !== '';
+            const url = esRechazo ? 'api/rechazar_orden.php' : 'api/autorizar_orden.php';
+            
+            const formData = new FormData();
+            formData.append('n_orden_co', numeroOC);
+
+            if (esRechazo) {
+                formData.append('usuario_rechaza', autorizadorSeleccionado);
+                formData.append('motivo', motivo);
+            } else {
+                formData.append('usuario_autoriza', autorizadorSeleccionado);
+            }
+
+            // Muestra un estado de "procesando" en el botón para feedback visual
+            boton.textContent = 'Procesando...';
+            boton.disabled = true;
+
+            fetch(url, {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(result => {
+                if (result.status === 'success') {
+                    showModal('Éxito', result.message, [{ text: 'Aceptar', class: 'btn-success' }]);
+                    
+                    // Eliminar la tarjeta de la OC de la vista
+                    const cardToRemove = document.getElementById(`oc-${numeroOC}`);
+                    if (cardToRemove) {
+                        cardToRemove.style.transition = 'opacity 0.5s, transform 0.5s';
+                        cardToRemove.style.opacity = '0';
+                        cardToRemove.style.transform = 'scale(0.9)';
+                        setTimeout(() => {
+                           cardToRemove.remove();
+                           // Si ya no quedan tarjetas, mostrar el mensaje de "felicidades"
+                           if (gestionContainer.children.length === 0) {
+                                gestionContainer.innerHTML = '<div class="info-card">¡Felicidades! No tienes órdenes pendientes de autorizar.</div>';
+                           }
+                        }, 500);
+                    }
+                    
+                    // Forzar recarga de los KPIs del Resumen la próxima vez que se visite la pestaña
+                    document.getElementById('tab-resumen').dataset.loaded = 'false';
+
+                } else {
+                    // Si falla, mostrar el error y restaurar el botón
+                    showModal('Error', result.message || 'Ocurrió un error inesperado.', [{ text: 'Cerrar', class: 'btn-primary' }]);
+                    boton.textContent = esRechazo ? 'Rechazar' : 'Autorizar';
+                    boton.disabled = false;
+                }
+            })
+            .catch(error => {
+                console.error('Error en la llamada fetch:', error);
+                showModal('Error de Conexión', 'No se pudo comunicar con el servidor. Por favor, revisa tu conexión a internet.', [{ text: 'Cerrar', class: 'btn-primary' }]);
+                // Restaurar el botón en caso de error de red
+                boton.textContent = esRechazo ? 'Rechazar' : 'Autorizar';
+                boton.disabled = false;
+            });
+        };
+        // ================================================================
+        // FIN DE LA SECCIÓN CORREGIDA Y COMPLETADA
+        // ================================================================
+
         if (isAutorizar) {
             showConfirmationModal(`Confirmar Autorización`, `¿Estás seguro de que deseas AUTORIZAR la OC Nro. ${numeroOC}?`, () => ejecutarAccion());
         } else if (isRechazar) {
@@ -239,82 +298,63 @@ kpiContainer.innerHTML = `
         }
     });
 
-// --- PESTAÑA 3: CONSULTA (CÓDIGO JAVASCRIPT COMPLETO Y CORREGIDO) ---
-const consultaSubtitulo = document.getElementById('consulta-subtitulo');
-const consultaEstadoSelect = document.getElementById('filtro-estado');
-const consultaBuscarBtn = document.getElementById('btn-buscar-monitor');
-const consultaTbody = document.getElementById('tabla-resultados-body');
-
-const loadConsultaData = () => {
-    // Si hay un usuario activo, personalizamos el subtítulo
-    if (usuarioActivo) {
-        consultaSubtitulo.textContent = `Busca en las OCs donde ${usuarioActivo} estuvo involucrado.`;
-    } else {
-        consultaSubtitulo.textContent = 'Busca en el historial global de OCs.';
-    }
-
-    // Llenamos el dropdown de estados
-    const estados = { 1: 'Ingresada', 2: 'Autorizada', 4: 'Desautorizada', 10: 'Cumplida', 11: 'Cerrada' };
-    consultaEstadoSelect.innerHTML = '<option value="">Todos</option>';
-    for (const id in estados) {
-        consultaEstadoSelect.innerHTML += `<option value="${id}">${estados[id]}</option>`;
-    }
-    consultaTbody.innerHTML = '<tr><td colspan="6" data-label="Info" style="text-align:center;">Usa los filtros para buscar.</td></tr>';
-};
-
-consultaBuscarBtn.addEventListener('click', () => {
-    consultaTbody.innerHTML = '<tr><td colspan="6" data-label="Info" style="text-align:center;">Buscando...</td></tr>';
-    
-    const params = new URLSearchParams();
-    
-    // USAMOS EL USUARIO ACTIVO AUTOMÁTICAMENTE
-    if (usuarioActivo) {
-        params.append('usuario_involucrado', usuarioActivo);
-    }
-    
-    // El resto de los filtros funcionan igual
-    if (document.getElementById('filtro-estado').value) {
-        params.append('estado', document.getElementById('filtro-estado').value);
-    }
-    if (document.getElementById('filtro-fecha-desde').value) {
-        params.append('fecha_desde', document.getElementById('filtro-fecha-desde').value);
-    }
-    if (document.getElementById('filtro-fecha-hasta').value) {
-        params.append('fecha_hasta', document.getElementById('filtro-fecha-hasta').value);
-    }
-    
-    fetch(`api/buscar_ordenes.php?${params.toString()}`)
-        .then(r => r.json())
-        .then(data => {
-            consultaTbody.innerHTML = '';
-            if (!data || data.length === 0) {
-                consultaTbody.innerHTML = '<tr><td colspan="6" data-label="Info" style="text-align:center;">No se encontraron resultados.</td></tr>';
-                return;
-            }
-            data.forEach(oc => {
-                const statusClass = `status-${(oc.estado_desc || '').split(' ')[0].toLowerCase().replace('y', '')}`;
-                let observacionHtml = '';
-                if (oc.observacion && oc.observacion.trim() !== '') {
-                    observacionHtml = `<td data-label="Observación">${oc.observacion}</td>`;
+    // --- PESTAÑA 3: CONSULTA ---
+    const consultaSubtitulo = document.getElementById('consulta-subtitulo');
+    const consultaEstadoSelect = document.getElementById('filtro-estado');
+    const consultaBuscarBtn = document.getElementById('btn-buscar-monitor');
+    const consultaTbody = document.getElementById('tabla-resultados-body');
+    const loadConsultaData = () => {
+        if (usuarioActivo) {
+            consultaSubtitulo.textContent = `Busca en las OCs donde ${usuarioActivo} estuvo involucrado.`;
+        } else {
+            consultaSubtitulo.textContent = 'Busca en el historial global de OCs.';
+        }
+        const estados = { 1: 'Ingresada', 2: 'Autorizada', 4: 'Desautorizada', 10: 'Cumplida', 11: 'Cerrada' };
+        consultaEstadoSelect.innerHTML = '<option value="">Todos</option>';
+        for (const id in estados) {
+            consultaEstadoSelect.innerHTML += `<option value="${id}">${estados[id]}</option>`;
+        }
+        consultaTbody.innerHTML = '<tr><td colspan="6" data-label="Info" style="text-align:center;">Usa los filtros para buscar.</td></tr>';
+    };
+    consultaBuscarBtn.addEventListener('click', () => {
+        consultaTbody.innerHTML = '<tr><td colspan="6" data-label="Info" style="text-align:center;">Buscando...</td></tr>';
+        const params = new URLSearchParams();
+        if (usuarioActivo) { params.append('usuario_involucrado', usuarioActivo); }
+        if (document.getElementById('filtro-estado').value) { params.append('estado', document.getElementById('filtro-estado').value); }
+        if (document.getElementById('filtro-fecha-desde').value) { params.append('fecha_desde', document.getElementById('filtro-fecha-desde').value); }
+        if (document.getElementById('filtro-fecha-hasta').value) { params.append('fecha_hasta', document.getElementById('filtro-fecha-hasta').value); }
+        fetch(`api/buscar_ordenes.php?${params.toString()}`)
+            .then(r => r.json())
+            .then(data => {
+                consultaTbody.innerHTML = '';
+                if (!data || data.length === 0) {
+                    consultaTbody.innerHTML = '<tr><td colspan="6" data-label="Info" style="text-align:center;">No se encontraron resultados.</td></tr>';
+                    return;
                 }
-                consultaTbody.innerHTML += `
-                    <tr>
-                        <td data-label="OC / Fecha"><strong>${oc.numero}</strong><small style="display:block;">${oc.fecha}</small></td>
-                        <td data-label="Proveedor">${oc.proveedor}</td>
-                        <td data-label="Comprador">${oc.comprador}</td>
-                        <td data-label="Estado"><span class="status ${statusClass}">${oc.estado_desc || 'N/A'}</span></td>
-                        ${observacionHtml}
-                        <td data-label="Monto" style="font-weight:700;">${formatCurrency(oc.monto)}</td>
-                    </tr>`;
+                data.forEach(oc => {
+                    const statusClass = `status-${(oc.estado_desc || '').split(' ')[0].toLowerCase().replace('y', '')}`;
+                    let observacionHtml = '';
+                    if (oc.observacion && oc.observacion.trim() !== '') {
+                        observacionHtml = `<td data-label="Observación">${oc.observacion}</td>`;
+                    }
+                    consultaTbody.innerHTML += `
+                        <tr>
+                            <td data-label="OC / Fecha"><strong>${oc.numero}</strong><small style="display:block;">${oc.fecha}</small></td>
+                            <td data-label="Proveedor">${oc.proveedor}</td>
+                            <td data-label="Comprador">${oc.comprador}</td>
+                            <td data-label="Estado"><span class="status ${statusClass}">${oc.estado_desc || 'N/A'}</span></td>
+                            ${observacionHtml}
+                            <td data-label="Monto" style="font-weight:700;">${formatCurrency(oc.monto)}</td>
+                        </tr>`;
+                });
+            }).catch(err => {
+                console.error(err);
+                consultaTbody.innerHTML = '<tr><td colspan="6" data-label="Error" style="text-align:center;">Error al cargar los datos.</td></tr>';
             });
-        }).catch(err => {
-            console.error(err);
-            consultaTbody.innerHTML = '<tr><td colspan="6" data-label="Error" style="text-align:center;">Error al cargar los datos.</td></tr>';
-        });
-});
-// ---- CARGA INICIAL ----
-// SIEMPRE empezamos en la pestaña de Resumen
-loadTabData('tab-resumen');
+    });
+    
+    // ---- CARGA INICIAL ----
+    loadTabData('tab-resumen');
 });
 </script>
 
