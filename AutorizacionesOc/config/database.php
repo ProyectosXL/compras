@@ -1,55 +1,45 @@
 <?php
-// --- config/database.php (VERSIÓN CON .ENV) ---
+// --- config/database.php (VERSIÓN DEFINITIVA CON RUTA A /compras/.env) ---
 
-// 1. Requerir el autoloader de Composer para poder usar las librerías instaladas
-// Esto asume que la carpeta 'vendor' está en la raíz del proyecto ('AutorizacionesOc')
+// 1. Cargar el autoloader de Composer, siempre primero.
 require_once __DIR__ . '/../vendor/autoload.php';
 
-// 2. Cargar el archivo .env
-// Dotenv buscará un archivo .env en la carpeta especificada.
-// '__DIR__ . '/../../'` sube dos niveles desde 'config' hasta 'compras'. Ajusta si es necesario.
+// 2. Cargar las variables de entorno con la ruta correcta.
 try {
-    $dotenv = Dotenv\Dotenv::createImmutable(__DIR__ . '/../../'); // Apunta a la carpeta 'compras'
+    // ---- INICIO DE LA CORRECCIÓN CLAVE ----
+    // __DIR__ es '.../compras/AutorizacionesOc/config'
+    // dirname(__DIR__, 2) sube dos niveles, apuntando a '.../compras/'
+    // Ahora Dotenv buscará el archivo .env en la carpeta 'compras'.
+    $dotenv = Dotenv\Dotenv::createImmutable(dirname(__DIR__, 2)); 
+    // ---- FIN DE LA CORRECCIÓN CLAVE ----
+    
     $dotenv->load();
 } catch (\Dotenv\Exception\InvalidPathException $e) {
-    // Manejar el error si el archivo .env no se encuentra
-    http_response_code(500);
-    header('Content-Type: application/json');
-    die(json_encode(['status' => 'error', 'message' => 'Error crítico: No se encuentra el archivo de configuración .env.']));
+    die("ERROR CRÍTICO: No se puede encontrar el archivo .env. " . $e->getMessage());
 }
 
-// 3. Obtener las variables de entorno
-$serverName = $_ENV['HOST_CENTRAL'] ?? '';
-$database   = $_ENV['DATABASE_CENTRAL'] ?? '';
-$uid        = $_ENV['USER'] ?? '';
-$pwd        = $_ENV['PASS'] ?? '';
-
-// 4. OPCIONES DE CONEXIÓN
-$connectionOptions = [
-    "Database" => $database,
-    "Uid" => $uid,
-    "PWD" => $pwd,
-    "CharacterSet" => "UTF-8"
-];
-
-// 5. ESTABLECER CONEXIÓN
-$conn = sqlsrv_connect($serverName, $connectionOptions);
-
-// 6. MANEJO DE ERRORES DE CONEXIÓN
-if ($conn === false) {
-    http_response_code(500);
-    header('Content-Type: application/json; charset=utf-8');
-    
-    // NO mostrar credenciales en producción
-    $error_message = 'Error crítico: No se pudo conectar a la base de datos.';
-    
-    // Si tienes un modo de depuración, podrías mostrar más detalles.
-    // if ($_ENV['ENV'] === 'DEV') {
-    //     $error_message .= ' Verifique las credenciales en el archivo .env.';
-    // }
-
-    echo json_encode(['status' => 'error', 'message' => $error_message], JSON_UNESCAPED_UNICODE);
-    exit();
+// 3. La función de conexión (esta parte ya estaba bien)
+function getDatabaseConnection($hostKey, $dbKey, $userKey, $passKey) {
+    if (!isset($_ENV[$hostKey], $_ENV[$dbKey], $_ENV[$userKey], $_ENV[$passKey], $_ENV['CHARACTER'])) {
+        error_log("Faltan variables de entorno para la conexión: {$hostKey}, {$dbKey}");
+        return null;
+    }
+    $connectionInfo = ["Database" => $_ENV[$dbKey], "UID" => $_ENV[$userKey], "PWD" => $_ENV[$passKey], "CharacterSet" => $_ENV['CHARACTER']];
+    try {
+        $conn = sqlsrv_connect($_ENV[$hostKey], $connectionInfo);
+        if ($conn === false) {
+            error_log("Error de conexión a la BD {$_ENV[$dbKey]}: ".print_r(sqlsrv_errors(), true));
+            return null;
+        }
+        return $conn;
+    } catch (Exception $e) {
+        error_log("Excepción de conexión a la BD {$_ENV[$dbKey]}: " . $e->getMessage());
+        return null;
+    }
 }
+
+// 4. Se definen las conexiones globales como antes
+$conn = getDatabaseConnection('HOST_CENTRAL', 'DATABASE_CENTRAL', 'USER', 'PASS');
+$conn_sistemas = getDatabaseConnection('HOST_APPS', 'DATABASE_APPS_ARG', 'USER', 'PASS');
 
 ?>

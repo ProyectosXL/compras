@@ -20,11 +20,11 @@
             <div class="kpi-grid" id="kpi-container" style="display: none;"></div>
         </div>
 
-        <!-- Pestaña 2: GESTIÓN (Autorizar/Rechazar) -->
+        <!-- Pestaña 2: GESTIÓN (Autorizar/Rechazar/Derivar) -->
         <div id="tab-gestion" class="tab-content">
-            <div class="header"><h1>Gestión de Pendientes</h1><p id="gestion-subtitulo">Selecciona tu usuario para ver las OCs que te corresponden.</p></div>
-            <div class="filter-card" id="gestion-filtro-usuario">
-                <div class="form-group"><label for="autorizador-select">Tu Usuario Autorizador</label><select id="autorizador-select"><option value="">Cargando...</option></select></div>
+            <div class="header"><h1>Gestión de Pendientes</h1><p id="gestion-subtitulo"></p></div>
+            <div class="filter-card" id="gestion-filtro-usuario" style="display: none;">
+                <div class="form-group"><label for="autorizador-select">Tu Usuario Autorizador</label><select id="autorizador-select"></select></div>
                 <button id="buscar-pendientes-btn" class="btn btn-primary">Buscar Mis Pendientes</button>
             </div>
             <div id="ordenes-container"></div>
@@ -32,10 +32,7 @@
 
         <!-- Pestaña 3: CONSULTA (Monitor) -->
         <div id="tab-consulta" class="tab-content">
-            <div class="header">
-                <h1>Monitor de Órdenes</h1>
-                <p id="consulta-subtitulo">Busca en el historial global de OCs.</p>
-            </div>
+            <div class="header"><h1>Monitor de Órdenes</h1><p id="consulta-subtitulo"></p></div>
             <div class="filter-card">
                 <div class="filtros">
                     <div class="form-group"><label for="filtro-estado">Estado</label><select id="filtro-estado"><option value="">Todos</option></select></div>
@@ -48,14 +45,33 @@
         </div>
     </main>
 
-    <!-- Barra de Navegación Inferior -->
     <nav class="bottom-nav">
         <a href="#resumen" class="nav-item active"><i class="bi bi-pie-chart-fill"></i><span>Resumen</span></a>
         <a href="#gestion" class="nav-item"><i class="bi bi-card-checklist"></i><span>Gestión</span></a>
         <a href="#consulta" class="nav-item"><i class="bi bi-search"></i><span>Consulta</span></a>
     </nav>
     
-    <!-- Modal Genérico para Confirmaciones y Notificaciones -->
+    <!-- Modal para Derivación -->
+    <div class="modal-overlay" id="derivar-modal">
+        <div class="modal-content">
+            <div class="modal-header"><h3 id="derivar-modal-title"></h3></div>
+            <div class="modal-body">
+                <p id="derivar-modal-message"></p>
+                <div class="form-group" style="margin-top: 1rem;">
+                    <label for="derivar-usuario-select">Asignar a Usuario:</label>
+                    <select id="derivar-usuario-select">
+                        <option value="">Cargando autorizadores...</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="derivar-cancelar-btn" class="btn btn-secondary btn-flex">Cancelar</button>
+                <button id="derivar-confirmar-btn" class="btn btn-primary btn-flex">Confirmar Derivación</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Modal Genérico -->
     <div class="modal-overlay" id="generic-modal">
         <div class="modal-content">
             <div class="modal-header"><h3 id="modal-title"></h3></div>
@@ -67,15 +83,13 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', () => {
-    // ---- VARIABLE GLOBAL PARA "RECORDAR" AL USUARIO ACTIVO EN TODA LA APP ----
     let usuarioActivo = "<?php echo $usuario_externo; ?>";
+    const esDispatcher = (usuarioActivo === 'DANM');
 
-    // ---- VARIABLES DEL DOM ----
     const navItems = document.querySelectorAll('.nav-item');
     const tabs = document.querySelectorAll('.tab-content');
-    const formatCurrency = (amount) => new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(amount);
+    const formatCurrency = (amount) => new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(amount || 0);
     
-    // --- LÓGICA DE NAVEGACIÓN POR PESTAÑAS ----
     navItems.forEach(item => {
         item.addEventListener('click', e => {
             e.preventDefault();
@@ -86,7 +100,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const targetTab = document.getElementById(targetId);
             if (targetTab) {
                 targetTab.classList.add('active');
-                if (!targetTab.dataset.loaded || targetId === 'tab-resumen') { // Siempre recargar el resumen
+                if (!targetTab.dataset.loaded || targetId === 'tab-resumen' || targetId === 'tab-gestion') {
                     loadTabData(targetId);
                     targetTab.dataset.loaded = 'true';
                 }
@@ -100,263 +114,241 @@ document.addEventListener('DOMContentLoaded', () => {
         if (tabId === 'tab-consulta') loadConsultaData();
     };
 
-    // --- LÓGICA DE MODALES PERSONALIZADOS ---
-    const modalOverlay = document.getElementById('generic-modal');
-    const modalTitle = document.getElementById('modal-title');
-    const modalMessage = document.getElementById('modal-message');
-    const modalFooter = document.getElementById('modal-footer-buttons');
+    const genericModal = document.getElementById('generic-modal');
     const showModal = (title, message, buttons) => {
-        modalTitle.textContent = title;
-        modalMessage.innerHTML = message;
-        modalFooter.innerHTML = '';
+        genericModal.querySelector('#modal-title').textContent = title;
+        genericModal.querySelector('#modal-message').innerHTML = message;
+        const footer = genericModal.querySelector('#modal-footer-buttons');
+        footer.innerHTML = '';
         buttons.forEach(btnInfo => {
             const button = document.createElement('button');
             button.className = `btn btn-flex ${btnInfo.class}`;
             button.textContent = btnInfo.text;
-            button.onclick = () => { modalOverlay.classList.remove('active'); if (btnInfo.callback) btnInfo.callback(); };
-            modalFooter.appendChild(button);
+            button.onclick = () => { genericModal.classList.remove('active'); if (btnInfo.callback) btnInfo.callback(); };
+            footer.appendChild(button);
         });
-        modalOverlay.classList.add('active');
-    };
-    const showConfirmationModal = (title, message, onConfirm) => {
-        showModal(title, message, [{ text: 'Cancelar', class: 'btn-secondary' }, { text: 'Sí, Autorizar', class: 'btn-success', callback: onConfirm }]);
-    };
-    const showRejectionModal = (title, message, onConfirm) => {
-        const bodyWithMessage = `${message}<br><textarea id="rejection-reason" rows="3" placeholder="El motivo es obligatorio..."></textarea>`;
-        showModal(title, bodyWithMessage, [{ text: 'Cancelar', class: 'btn-secondary' }, { text: 'Rechazar OC', class: 'btn-danger', callback: () => {
-            const reasonInput = document.getElementById('rejection-reason');
-            const reason = reasonInput.value.trim();
-            if (reason) { onConfirm(reason); } 
-            else { reasonInput.style.borderColor = 'var(--danger-color)'; }
-        }}]);
+        genericModal.classList.add('active');
     };
 
-    // --- PESTAÑA 1: RESUMEN ----
-    const kpiContainer = document.getElementById('kpi-container');
-    const kpiLoader = document.getElementById('kpi-loader');
+    const showConfirmationModal = (title, message, onConfirm) => {
+        showModal(title, message, [
+            { text: 'Cancelar', class: 'btn-secondary' },
+            { text: 'Sí, Autorizar', class: 'btn-success', callback: onConfirm }
+        ]);
+    };
+    
+    const showRejectionModal = (title, message, onConfirm) => {
+        const bodyWithMessage = `${message}<br><textarea id="rejection-reason" rows="3" placeholder="El motivo es obligatorio..."></textarea>`;
+        showModal(title, bodyWithMessage, [
+            { text: 'Cancelar', class: 'btn-secondary' },
+            { text: 'Rechazar OC', class: 'btn-danger', callback: () => {
+                const reasonInput = document.getElementById('rejection-reason');
+                const reason = reasonInput.value.trim();
+                if (reason) { 
+                    onConfirm(reason); 
+                } else { 
+                    reasonInput.style.borderColor = 'var(--danger-color)'; 
+                    reasonInput.focus();
+                }
+            }}
+        ]);
+    };
+
     const loadResumenData = () => {
+        const kpiContainer = document.getElementById('kpi-container');
+        const kpiLoader = document.getElementById('kpi-loader');
         kpiLoader.style.display = 'block'; kpiContainer.style.display = 'none';
         let url = `api/get_dashboard_stats.php`;
         if (usuarioActivo) { url += `?usuario=${encodeURIComponent(usuarioActivo)}`; }
         fetch(url).then(res => res.json()).then(stats => {
             kpiLoader.style.display = 'none'; kpiContainer.style.display = 'grid';
             kpiContainer.innerHTML = `
-                <div class="kpi-card pending">
-                    <div class="kpi-card-info"><div class="value">${stats.pendientes_count || 0}</div><div class="label">${stats.pendientes_count === 1 ? 'Pendiente' : 'Pendientes'}</div></div>
-                    <div class="icon"><i class="bi bi-hourglass-split"></i></div>
-                </div>
-                <div class="kpi-card amount">
-                    <div class="kpi-card-info"><div class="value">${formatCurrency(stats.pendientes_monto || 0)}</div><div class="label">Monto Pendiente</div></div>
-                    <div class="icon"><i class="bi bi-cash-coin"></i></div>
-                </div>
-                <div class="kpi-card authorized">
-                    <div class="kpi-card-info"><div class="value">${stats.autorizadas_hoy || 0}</div><div class="label">Autorizadas Hoy</div></div>
-                    <div class="icon"><i class="bi bi-check-circle-fill"></i></div>
-                </div>
-                <div class="kpi-card rejected">
-                    <div class="kpi-card-info"><div class="value">${stats.rechazadas_hoy || 0}</div><div class="label">Rechazadas Hoy</div></div>
-                    <div class="icon"><i class="bi bi-x-circle-fill"></i></div>
-                </div>`;
-            if (usuarioActivo) kpiContainer.querySelector('.kpi-card.pending .label').textContent = 'Mis Pendientes';
-            else kpiContainer.querySelector('.kpi-card.pending .label').textContent = 'Pendientes (Global)';
+                <div class="kpi-card pending"><div class="kpi-card-info"><div class="value">${stats.pendientes_count || 0}</div><div class="label">${esDispatcher ? 'Por Asignar' : 'Mis Pendientes'}</div></div><div class="icon"><i class="bi bi-hourglass-split"></i></div></div>
+                <div class="kpi-card amount"><div class="kpi-card-info"><div class="value">${formatCurrency(stats.pendientes_monto || 0)}</div><div class="label">Monto Pendiente</div></div><div class="icon"><i class="bi bi-cash-coin"></i></div></div>
+                <div class="kpi-card authorized"><div class="kpi-card-info"><div class="value">${stats.autorizadas_hoy || 0}</div><div class="label">Autorizadas Hoy</div></div><div class="icon"><i class="bi bi-check-circle-fill"></i></div></div>
+                <div class="kpi-card rejected"><div class="kpi-card-info"><div class="value">${stats.rechazadas_hoy || 0}</div><div class="label">Rechazadas Hoy</div></div><div class="icon"><i class="bi bi-x-circle-fill"></i></div></div>`;
         }).catch(err => { kpiLoader.textContent = 'Error al cargar indicadores.'; console.error(err); });
     };
 
-    // --- PESTAÑA 2: GESTIÓN ----
-    const gestionSelect = document.getElementById('autorizador-select');
-    const gestionBtn = document.getElementById('buscar-pendientes-btn');
     const gestionContainer = document.getElementById('ordenes-container');
-    const filtroUsuarioCard = document.getElementById('gestion-filtro-usuario');
-    const subtituloGestion = document.getElementById('gestion-subtitulo');
+    const derivarModal = document.getElementById('derivar-modal');
+    const derivarTitle = document.getElementById('derivar-modal-title');
+    const derivarMessage = document.getElementById('derivar-modal-message');
+    const derivarSelect = document.getElementById('derivar-usuario-select');
+
+    document.getElementById('derivar-cancelar-btn').addEventListener('click', () => derivarModal.classList.remove('active'));
+    document.getElementById('derivar-confirmar-btn').addEventListener('click', () => {
+        const usuarioAsignado = derivarSelect.value; const proveedorCodigo = derivarModal.dataset.codProvee;
+        if (!usuarioAsignado) { return alert('Por favor, selecciona un usuario.'); }
+        const formData = new FormData();
+        formData.append('cod_provee', proveedorCodigo); formData.append('usuario_asignado', usuarioAsignado); formData.append('asignado_por', usuarioActivo);
+        fetch('api/derivar_proveedor.php', { method: 'POST', body: formData }).then(res => res.json()).then(data => {
+            derivarModal.classList.remove('active');
+            if (data.status === 'success') { showModal('Éxito', data.message, [{ text: 'Aceptar', class: 'btn-success' }]); loadTabData('tab-gestion');
+            } else { showModal('Error', data.message || 'Error.', [{ text: 'Cerrar', class: 'btn-danger' }]); }
+        }).catch(err => { derivarModal.classList.remove('active'); console.error(err); showModal('Error de Conexión', 'No se pudo comunicar con el servidor.', [{ text: 'Cerrar', class: 'btn-danger' }]); });
+    });
+
     const buscarPendientesParaUsuario = (usuario) => {
-        if (!usuario) { alert("Nombre de usuario no válido."); return; }
-        gestionContainer.innerHTML = '<div class="info-card">Buscando tus órdenes pendientes...</div>';
+        gestionContainer.innerHTML = '<div class="info-card">Buscando...</div>';
         fetch(`api/get_ordenes_pendientes_por_usuario.php?autorizador=${encodeURIComponent(usuario)}`).then(r => r.json()).then(ordenes => {
             gestionContainer.innerHTML = '';
-            if (ordenes.length === 0) { gestionContainer.innerHTML = '<div class="info-card">¡Felicidades! No tienes órdenes pendientes de autorizar.</div>'; return; }
+            if (ordenes.length === 0) { const msg = esDispatcher ? 'No hay proveedores por asignar.' : '¡Felicidades! No tienes órdenes pendientes.'; gestionContainer.innerHTML = `<div class="info-card">${msg}</div>`; return; }
             ordenes.forEach(oc => {
-                const card = document.createElement('div'); card.className = 'action-card'; card.id = `oc-${oc.numero}`;
+                const card = document.createElement('div');
+                card.className = 'action-card';
                 let observacionHtml = '';
                 if (oc.observacion && oc.observacion.trim() !== '') { observacionHtml = `<div class="action-card-header" style="font-size:0.8rem; padding-top: 0.5rem; margin-top: 0.5rem; border-top: 1px solid var(--border-color)"><div class="info"><strong>Observación:</strong><span>${oc.observacion}</span></div></div>`; }
-                card.innerHTML = `<div class="action-card-header"><div class="info"><strong>${oc.proveedor}</strong><span>OC: ${oc.numero} / Fecha: ${oc.fecha}</span></div></div>${observacionHtml}<div class="action-card-monto">${formatCurrency(oc.monto)}</div><div class="action-card-buttons"><button class="btn btn-danger btn-flex rechazar" data-oc="${oc.numero}">Rechazar</button><button class="btn btn-success btn-flex autorizar" data-oc="${oc.numero}">Autorizar</button></div>`;
+                
+                const infoHeader = `
+                    <div class="action-card-header">
+                        <div class="info">
+                            <strong>${oc.proveedor}</strong>
+                            <span>OC: ${oc.numero} / Fecha: ${oc.fecha}</span>
+                            <span>Comprador: <strong>${oc.comprador || 'N/A'}</strong></span>
+                        </div>
+                    </div>
+                `;
+                
+                                // ---- INICIO DE LA MEJORA VISUAL ----
+                // Hemos reestructurado el HTML para que sea más legible, con un layout de "etiqueta-valor".
+                const baseHtml = `
+                    <div class="action-card-header">
+                        <strong>${oc.proveedor}</strong>
+                    </div>
+                    <div class="action-card-details">
+                        <div class="action-card-detail">
+                            <span class="label">OC / Fecha:</span>
+                            <span class="value">${oc.numero} / ${oc.fecha}</span>
+                        </div>
+                        <div class="action-card-detail">
+                            <span class="label">Comprador:</span>
+                            <span class="value"><strong>${oc.comprador || 'N/A'}</strong></span>
+                        </div>
+                        ${observacionHtml}
+                    </div>
+                    <div class="action-card-monto">${formatCurrency(oc.monto)}</div>
+                `;
+                // ---- FIN DE LA MEJORA VISUAL ----
+                const regularButtons = `<div class="action-card-buttons"><button class="btn btn-danger btn-flex rechazar" data-oc="${oc.numero}">Rechazar</button><button class="btn btn-success btn-flex autorizar" data-oc="${oc.numero}">Autorizar</button></div>`;
+                const dispatcherButton = `<div class="action-card-buttons" style="margin-top: 0.5rem;"><button class="btn btn-secondary btn-flex derivar-btn" data-proveedor-nombre="${oc.proveedor}" data-cod-provee="${oc.cod_provee}">Asignar Proveedor a Usuario</button></div>`;
+                
+                if (esDispatcher) {
+                    card.innerHTML = baseHtml + regularButtons + dispatcherButton;
+                } else {
+                    card.innerHTML = baseHtml + regularButtons;
+                }
                 gestionContainer.appendChild(card);
             });
-        }).catch(error => { gestionContainer.innerHTML = '<div class="info-card">Error al cargar las órdenes pendientes.</div>'; console.error('Error:', error); });
+        }).catch(err => { gestionContainer.innerHTML = '<div class="info-card">Error al cargar pendientes.</div>'; console.error('Error:', err); });
     };
+
     const loadGestionData = () => {
+        const subtituloGestion = document.getElementById('gestion-subtitulo'); const filtroUsuarioCard = document.getElementById('gestion-filtro-usuario');
         if (usuarioActivo) {
             filtroUsuarioCard.style.display = 'none';
-            subtituloGestion.textContent = `Mostrando pendientes para: ${usuarioActivo}`;
+            const subtitulo = esDispatcher ? 'Proveedores pendientes de asignación' : `Mostrando pendientes para: ${usuarioActivo}`;
+            subtituloGestion.textContent = subtitulo;
             buscarPendientesParaUsuario(usuarioActivo);
         } else {
-            filtroUsuarioCard.style.display = 'block';
-            subtituloGestion.textContent = 'Selecciona tu usuario para ver las OCs que te corresponden.';
+            filtroUsuarioCard.style.display = 'block'; subtituloGestion.textContent = 'Selecciona tu usuario para ver las OCs.'; gestionContainer.innerHTML = '';
+            const gestionSelect = document.getElementById('autorizador-select');
             fetch('api/get_autorizadores.php').then(r => r.json()).then(data => {
-                gestionSelect.innerHTML = '<option value="">-- Seleccionar Usuario --</option>';
+                gestionSelect.innerHTML = '<option value="">-- Seleccionar --</option>';
                 if (Array.isArray(data)) data.forEach(c => gestionSelect.innerHTML += `<option value="${c}">${c}</option>`);
             });
         }
     };
-    gestionBtn.addEventListener('click', () => {
-        usuarioActivo = gestionSelect.value;
-        if(usuarioActivo) {
-            buscarPendientesParaUsuario(usuarioActivo);
-            document.getElementById('tab-resumen').dataset.loaded = 'false';
-            document.getElementById('tab-consulta').dataset.loaded = 'false';
-        } else {
-            alert('Por favor, selecciona un usuario.');
-        }
+    
+    document.getElementById('buscar-pendientes-btn').addEventListener('click', () => {
+        usuarioActivo = document.getElementById('autorizador-select').value;
+        if (usuarioActivo) { loadGestionData(); document.getElementById('tab-resumen').dataset.loaded = 'false'; document.getElementById('tab-consulta').dataset.loaded = 'false';
+        } else { alert('Por favor, selecciona un usuario.'); }
     });
 
     gestionContainer.addEventListener('click', e => {
-        const isAutorizar = e.target.classList.contains('autorizar');
-        const isRechazar = e.target.classList.contains('rechazar');
-        if (!isAutorizar && !isRechazar) return;
-
-        const boton = e.target;
-        const numeroOC = boton.dataset.oc;
-        const autorizadorSeleccionado = usuarioActivo || gestionSelect.value;
-
-        if (!autorizadorSeleccionado) {
-            showModal('Error', 'No se ha identificado un usuario para esta acción. Por favor, selecciona uno.', [{ text: 'Entendido', class: 'btn-primary' }]);
+        if (e.target.classList.contains('derivar-btn')) {
+            const boton = e.target;
+            derivarModal.dataset.codProvee = boton.dataset.codProvee;
+            derivarTitle.textContent = `Derivar Proveedor`;
+            derivarMessage.innerHTML = `Asignar permanentemente <strong>${boton.dataset.proveedorNombre}</strong> a un usuario:`;
+            derivarSelect.innerHTML = '<option value="">Cargando...</option>';
+            fetch('api/get_autorizadores.php').then(r => r.json()).then(users => {
+                derivarSelect.innerHTML = '<option value="">-- Seleccionar --</option>';
+                users.forEach(user => { if (user !== 'DANM') { derivarSelect.innerHTML += `<option value="${user}">${user}</option>`; }});
+            });
+            derivarModal.classList.add('active');
             return;
         }
+        
+        const isAutorizar = e.target.classList.contains('autorizar'); const isRechazar = e.target.classList.contains('rechazar');
+        if (!isAutorizar && !isRechazar) return;
+        const boton = e.target; const numeroOC = boton.dataset.oc;
 
-        // ================================================================
-        // INICIO DE LA SECCIÓN CORREGIDA Y COMPLETADA
-        // ================================================================
-        const ejecutarAccion = (motivo = '') => {
-            const esRechazo = motivo !== '';
-            const url = esRechazo ? 'api/rechazar_orden.php' : 'api/autorizar_orden.php';
-            
-            const formData = new FormData();
-            formData.append('n_orden_co', numeroOC);
-
-            if (esRechazo) {
-                formData.append('usuario_rechaza', autorizadorSeleccionado);
-                formData.append('motivo', motivo);
-            } else {
-                formData.append('usuario_autoriza', autorizadorSeleccionado);
-            }
-
-            // Muestra un estado de "procesando" en el botón para feedback visual
-            boton.textContent = 'Procesando...';
-            boton.disabled = true;
-
-            fetch(url, {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.json())
-            .then(result => {
-                if (result.status === 'success') {
-                    showModal('Éxito', result.message, [{ text: 'Aceptar', class: 'btn-success' }]);
-                    
-                    // Eliminar la tarjeta de la OC de la vista
-                    const cardToRemove = document.getElementById(`oc-${numeroOC}`);
-                    if (cardToRemove) {
-                        cardToRemove.style.transition = 'opacity 0.5s, transform 0.5s';
-                        cardToRemove.style.opacity = '0';
-                        cardToRemove.style.transform = 'scale(0.9)';
-                        setTimeout(() => {
-                           cardToRemove.remove();
-                           // Si ya no quedan tarjetas, mostrar el mensaje de "felicidades"
-                           if (gestionContainer.children.length === 0) {
-                                gestionContainer.innerHTML = '<div class="info-card">¡Felicidades! No tienes órdenes pendientes de autorizar.</div>';
-                           }
-                        }, 500);
-                    }
-                    
-                    // Forzar recarga de los KPIs del Resumen la próxima vez que se visite la pestaña
+        const ejecutarAccion = (endpoint, formData) => {
+            boton.textContent = '...'; boton.disabled = true;
+            fetch(endpoint, { method: 'POST', body: formData }).then(res => res.json()).then(data => {
+                if (data.status && data.status.includes('success')) {
+                    showModal('Éxito', data.message, [{ text: 'Aceptar', class: 'btn-success' }]);
+                    loadTabData('tab-gestion');
                     document.getElementById('tab-resumen').dataset.loaded = 'false';
-
                 } else {
-                    // Si falla, mostrar el error y restaurar el botón
-                    showModal('Error', result.message || 'Ocurrió un error inesperado.', [{ text: 'Cerrar', class: 'btn-primary' }]);
-                    boton.textContent = esRechazo ? 'Rechazar' : 'Autorizar';
+                    showModal('Error', data.message || 'Error inesperado.', [{ text: 'Cerrar', class: 'btn-danger' }]);
+                    boton.textContent = isAutorizar ? 'Autorizar' : 'Rechazar';
                     boton.disabled = false;
                 }
-            })
-            .catch(error => {
-                console.error('Error en la llamada fetch:', error);
-                showModal('Error de Conexión', 'No se pudo comunicar con el servidor. Por favor, revisa tu conexión a internet.', [{ text: 'Cerrar', class: 'btn-primary' }]);
-                // Restaurar el botón en caso de error de red
-                boton.textContent = esRechazo ? 'Rechazar' : 'Autorizar';
-                boton.disabled = false;
-            });
+            }).catch(err => { console.error(err); showModal('Error de Red', err.message, [{ text: 'Cerrar', class: 'btn-danger'}]); });
         };
-        // ================================================================
-        // FIN DE LA SECCIÓN CORREGIDA Y COMPLETADA
-        // ================================================================
 
         if (isAutorizar) {
-            showConfirmationModal(`Confirmar Autorización`, `¿Estás seguro de que deseas AUTORIZAR la OC Nro. ${numeroOC}?`, () => ejecutarAccion());
+            showConfirmationModal(`Confirmar Autorización`, `¿Estás seguro de autorizar la OC Nro. ${numeroOC}?`, () => {
+                const formData = new FormData();
+                formData.append('n_orden_co', numeroOC); formData.append('usuario_autoriza', usuarioActivo);
+                ejecutarAccion('api/autorizar_orden.php', formData);
+            });
         } else if (isRechazar) {
-            showRejectionModal('Motivo del Rechazo', `(Usuario: ${autorizadorSeleccionado}) Ingresa un motivo para rechazar la OC ${numeroOC}:`, (motivo) => {
-                if (motivo) { ejecutarAccion(motivo); }
+            showRejectionModal('Motivo del Rechazo', `Ingresa un motivo para rechazar la OC Nro. ${numeroOC}:`, (motivo) => {
+                const formData = new FormData();
+                formData.append('n_orden_co', numeroOC); formData.append('usuario_rechaza', usuarioActivo); formData.append('motivo', motivo);
+                ejecutarAccion('api/rechazar_orden.php', formData);
             });
         }
     });
 
-    // --- PESTAÑA 3: CONSULTA ---
-    const consultaSubtitulo = document.getElementById('consulta-subtitulo');
-    const consultaEstadoSelect = document.getElementById('filtro-estado');
-    const consultaBuscarBtn = document.getElementById('btn-buscar-monitor');
-    const consultaTbody = document.getElementById('tabla-resultados-body');
     const loadConsultaData = () => {
-        if (usuarioActivo) {
-            consultaSubtitulo.textContent = `Busca en las OCs donde ${usuarioActivo} estuvo involucrado.`;
-        } else {
-            consultaSubtitulo.textContent = 'Busca en el historial global de OCs.';
-        }
+        const consultaSubtitulo = document.getElementById('consulta-subtitulo');
+        if (usuarioActivo) { consultaSubtitulo.textContent = `Busca en las OCs donde ${usuarioActivo} estuvo involucrado.`;
+        } else { consultaSubtitulo.textContent = 'Busca en el historial global de OCs.'; }
+        const consultaEstadoSelect = document.getElementById('filtro-estado');
         const estados = { 1: 'Ingresada', 2: 'Autorizada', 4: 'Desautorizada', 10: 'Cumplida', 11: 'Cerrada' };
         consultaEstadoSelect.innerHTML = '<option value="">Todos</option>';
-        for (const id in estados) {
-            consultaEstadoSelect.innerHTML += `<option value="${id}">${estados[id]}</option>`;
-        }
-        consultaTbody.innerHTML = '<tr><td colspan="6" data-label="Info" style="text-align:center;">Usa los filtros para buscar.</td></tr>';
+        for (const id in estados) { consultaEstadoSelect.innerHTML += `<option value="${id}">${estados[id]}</option>`; }
+        document.getElementById('tabla-resultados-body').innerHTML = '<tr><td colspan="6" style="text-align:center;">Usa los filtros para buscar.</td></tr>';
     };
-    consultaBuscarBtn.addEventListener('click', () => {
-        consultaTbody.innerHTML = '<tr><td colspan="6" data-label="Info" style="text-align:center;">Buscando...</td></tr>';
+
+    document.getElementById('btn-buscar-monitor').addEventListener('click', () => {
+        const consultaTbody = document.getElementById('tabla-resultados-body');
+        consultaTbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Buscando...</td></tr>';
         const params = new URLSearchParams();
         if (usuarioActivo) { params.append('usuario_involucrado', usuarioActivo); }
         if (document.getElementById('filtro-estado').value) { params.append('estado', document.getElementById('filtro-estado').value); }
         if (document.getElementById('filtro-fecha-desde').value) { params.append('fecha_desde', document.getElementById('filtro-fecha-desde').value); }
         if (document.getElementById('filtro-fecha-hasta').value) { params.append('fecha_hasta', document.getElementById('filtro-fecha-hasta').value); }
-        fetch(`api/buscar_ordenes.php?${params.toString()}`)
-            .then(r => r.json())
-            .then(data => {
-                consultaTbody.innerHTML = '';
-                if (!data || data.length === 0) {
-                    consultaTbody.innerHTML = '<tr><td colspan="6" data-label="Info" style="text-align:center;">No se encontraron resultados.</td></tr>';
-                    return;
-                }
-                data.forEach(oc => {
-                    const statusClass = `status-${(oc.estado_desc || '').split(' ')[0].toLowerCase().replace('y', '')}`;
-                    let observacionHtml = '';
-                    if (oc.observacion && oc.observacion.trim() !== '') {
-                        observacionHtml = `<td data-label="Observación">${oc.observacion}</td>`;
-                    }
-                    consultaTbody.innerHTML += `
-                        <tr>
-                            <td data-label="OC / Fecha"><strong>${oc.numero}</strong><small style="display:block;">${oc.fecha}</small></td>
-                            <td data-label="Proveedor">${oc.proveedor}</td>
-                            <td data-label="Comprador">${oc.comprador}</td>
-                            <td data-label="Estado"><span class="status ${statusClass}">${oc.estado_desc || 'N/A'}</span></td>
-                            ${observacionHtml}
-                            <td data-label="Monto" style="font-weight:700;">${formatCurrency(oc.monto)}</td>
-                        </tr>`;
-                });
-            }).catch(err => {
-                console.error(err);
-                consultaTbody.innerHTML = '<tr><td colspan="6" data-label="Error" style="text-align:center;">Error al cargar los datos.</td></tr>';
+        
+        fetch(`api/buscar_ordenes.php?${params.toString()}`).then(r => r.json()).then(data => {
+            consultaTbody.innerHTML = '';
+            if (!data || data.length === 0) { consultaTbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">No se encontraron resultados.</td></tr>'; return; }
+            data.forEach(oc => {
+                const statusClass = `status-${(oc.estado_desc || '').split(' ')[0].toLowerCase().replace('y', '')}`;
+                let observacionHtml = ''; if(oc.observacion && oc.observacion.trim() !== '') { observacionHtml = `<td data-label="Observación">${oc.observacion}</td>`; }
+                consultaTbody.innerHTML += `<tr><td data-label="OC / Fecha"><strong>${oc.numero}</strong><small style="display:block;">${oc.fecha}</small></td><td data-label="Proveedor">${oc.proveedor}</td><td data-label="Comprador">${oc.comprador}</td><td data-label="Estado"><span class="status ${statusClass}">${oc.estado_desc || 'N/A'}</span></td>${observacionHtml}<td data-label="Monto" style="font-weight:700;">${formatCurrency(oc.monto)}</td></tr>`;
             });
+        }).catch(err => { console.error(err); consultaTbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Error al cargar los datos.</td></tr>'; });
     });
     
-    // ---- CARGA INICIAL ----
+    // Carga inicial
     loadTabData('tab-resumen');
 });
 </script>
-
 </body>
 </html>

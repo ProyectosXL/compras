@@ -341,3 +341,30 @@ input[type="date"] { background-image: none; }
 }
 .btn-secondary { background-color: var(--text-secondary); }
 .btn-secondary:hover { background-color: #5a6268; }
+/* --- Nuevos Estilos para las Tarjetas de Gestión --- */
+.action-card-header strong {
+    font-size: 1.1rem;
+    color: var(--text-primary);
+    display: block;
+    margin-bottom: 0.5rem; /* Espacio entre el proveedor y los detalles */
+}
+
+.action-card-details {
+    margin-bottom: 1rem;
+}
+
+.action-card-detail {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    line-height: 1.5;
+}
+
+.action-card-detail .label {
+    font-weight: 600;
+}
+
+.action-card-detail .value {
+    text-align: right;
+}
