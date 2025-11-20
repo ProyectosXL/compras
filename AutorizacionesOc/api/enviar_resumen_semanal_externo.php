@@ -53,7 +53,8 @@ $sql_pendientes = "
     INNER JOIN
         CPA_PERFIL_AUTORIZACION_OC P ON A.TOTAL_CTE BETWEEN P.IMPORTE_MINIMO_AUTORIZAR AND P.IMPORTE_MAXIMO_AUTORIZAR
     WHERE
-        A.ESTADO = 1 -- Solo OCs con estado 'Ingresada'
+        A.ESTADO = 1
+        AND A.TOTAL_CTE >= 1000000 -- <--- AQUÍ ESTÁ EL FILTRO (Solo >= 1 Millón)
     ORDER BY
         fecha ASC;
 ";
