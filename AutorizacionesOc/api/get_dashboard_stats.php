@@ -18,28 +18,31 @@ $where_pendientes = '';
 // Ya no usamos $params_pendientes para la consulta principal.
 
 if ($usuario_seleccionado) {
-    if ($usuario_seleccionado === 'DANM') {
+        if ($usuario_seleccionado === 'DANM') {
         // LÓGICA PARA DANM (Dispatcher):
-        // 1. Conectar a la BD 'sistemas' para obtener la lista de proveedores que YA están asignados.
+        
+        // 1. Excluir asignados (Existente)
         $sql_asignados = "SELECT COD_PROVEE FROM sistemas.dbo.FP_DERIVACION_OC";
         $stmt_asignados = sqlsrv_query($conn_sistemas, $sql_asignados);
         $proveedores_asignados = [];
         if ($stmt_asignados) {
             while ($row = sqlsrv_fetch_array($stmt_asignados, SQLSRV_FETCH_ASSOC)) {
-                // CORRECCIÓN: Se reemplaza la función inexistente 'sqlsrv_escape_string'.
-                // Se escapan las comillas simples que puedan venir en el código del proveedor.
                 $escaped_provee = str_replace("'", "''", $row['COD_PROVEE']);
                 $proveedores_asignados[] = "'" . $escaped_provee . "'";
             }
             sqlsrv_free_stmt($stmt_asignados);
         }
         
-        // 2. Construimos la cláusula WHERE. Si hay proveedores asignados, los excluimos.
+        $where_pendientes = ""; // Inicializamos vacío
+        
+        // 2. Construimos la cláusula WHERE de proveedores
         if (!empty($proveedores_asignados)) {
             $lista_proveedores_str = implode(',', $proveedores_asignados);
-            $where_pendientes = " AND A.COD_PROVEE NOT IN ({$lista_proveedores_str}) ";
+            $where_pendientes .= " AND A.COD_PROVEE NOT IN ({$lista_proveedores_str}) ";
         }
-        // Si no hay proveedores asignados, $where_pendientes queda vacío, y DANM verá todos.
+        
+        // ---- NUEVA CONDICIÓN: Solo montos >= 1.000.000 para los KPI ----
+        $where_pendientes .= " AND A.TOTAL_CTE >= 1000000 ";
 
     } else {
         // LÓGICA PARA USUARIOS NORMALES:

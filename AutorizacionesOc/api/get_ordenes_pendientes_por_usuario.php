@@ -13,6 +13,11 @@ if (empty($usuario_seleccionado)) { http_response_code(400); echo json_encode(['
 $where_clause = "";
 
 if ($usuario_seleccionado === 'DANM') {
+    // Lógica DANM: 
+    // 1. NO debe ver proveedores que ya tienen dueño asignado (ya implementado).
+    // 2. NO debe ver OCs menores a 1.000.000 (Nueva implementación).
+    
+    // Paso 1: Excluir asignados
     $sql_asignados = "SELECT COD_PROVEE FROM sistemas.dbo.FP_DERIVACION_OC";
     $stmt_asignados = sqlsrv_query($conn_sistemas, $sql_asignados);
     $proveedores_asignados = [];
@@ -23,8 +28,18 @@ if ($usuario_seleccionado === 'DANM') {
         }
         sqlsrv_free_stmt($stmt_asignados);
     }
-    if (!empty($proveedores_asignados)) { $where_clause = " AND A.COD_PROVEE NOT IN (" . implode(',', $proveedores_asignados) . ") "; }
+    
+    if (!empty($proveedores_asignados)) { 
+        // Condición existente: Proveedores no asignados
+        $where_clause .= " AND A.COD_PROVEE NOT IN (" . implode(',', $proveedores_asignados) . ") "; 
+    }
+    
+    // ---- NUEVA CONDICIÓN: Solo montos mayores o iguales a 1.000.000 ----
+    // Usamos >= para que incluya exactamente el millón, si quieres mayor estricto usa >
+    $where_clause .= " AND A.TOTAL_CTE >= 1000000 ";
+
 } else {
+    // Lógica Usuarios Normales (Sin cambios, ven solo lo asignado)
     $sql_asignados = "SELECT COD_PROVEE FROM sistemas.dbo.FP_DERIVACION_OC WHERE USUARIO_AUTORIZADOR = ?";
     $stmt_asignados = sqlsrv_query($conn_sistemas, $sql_asignados, [$usuario_seleccionado]);
     $proveedores_asignados = [];
@@ -35,8 +50,12 @@ if ($usuario_seleccionado === 'DANM') {
         }
         sqlsrv_free_stmt($stmt_asignados);
     }
-    if (!empty($proveedores_asignados)) { $where_clause = " AND A.COD_PROVEE IN (" . implode(',', $proveedores_asignados) . ") "; } 
-    else { $where_clause = " AND 1 = 0 "; }
+    
+    if (!empty($proveedores_asignados)) { 
+        $where_clause = " AND A.COD_PROVEE IN (" . implode(',', $proveedores_asignados) . ") "; 
+    } else { 
+        $where_clause = " AND 1 = 0 "; 
+    }
 }
 sqlsrv_close($conn_sistemas);
 
