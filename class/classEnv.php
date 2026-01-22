@@ -47,7 +47,7 @@ class DotEnv
     }
 
     public function listVars(){
-        (new DotEnv(__DIR__ . '/../.env'))->load();
+        (new DotEnv(__DIR__ . '/../../.env'))->load();
 
         $vars = array(
 

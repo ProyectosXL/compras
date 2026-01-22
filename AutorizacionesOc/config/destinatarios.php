@@ -5,7 +5,7 @@ return [
     'por_usuario' => [
         'ALOMBARDO'        => 'andrea.lombardo@xl.com.ar',
         'JessicaF'         => 'jessica.farias@xl.com.ar',
-        'Ignacio'          => 'ignacio.gouirici@xl.com.ar',
+        'Ignacio'          => 'ignacio.gouiric@xl.com.ar',
         'TAMARAL'          => 'tamara.lavorgna@xl.com.ar',
         'SANTOSG'          => 'santos.garcia@xl.com.ar',
         'AgustinaT'        => 'agustina.taboada@xl.com.ar',
