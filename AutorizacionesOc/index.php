@@ -189,59 +189,82 @@ document.addEventListener('DOMContentLoaded', () => {
         }).catch(err => { derivarModal.classList.remove('active'); console.error(err); showModal('Error de Conexión', 'No se pudo comunicar con el servidor.', [{ text: 'Cerrar', class: 'btn-danger' }]); });
     });
 
-    const buscarPendientesParaUsuario = (usuario) => {
-        gestionContainer.innerHTML = '<div class="info-card">Buscando...</div>';
-        fetch(`api/get_ordenes_pendientes_por_usuario.php?autorizador=${encodeURIComponent(usuario)}`).then(r => r.json()).then(ordenes => {
-            gestionContainer.innerHTML = '';
-            if (ordenes.length === 0) { const msg = esDispatcher ? 'No hay proveedores por asignar.' : '¡Felicidades! No tienes órdenes pendientes.'; gestionContainer.innerHTML = `<div class="info-card">${msg}</div>`; return; }
-            ordenes.forEach(oc => {
-                const card = document.createElement('div');
-                card.className = 'action-card';
-                let observacionHtml = '';
-                if (oc.observacion && oc.observacion.trim() !== '') { observacionHtml = `<div class="action-card-header" style="font-size:0.8rem; padding-top: 0.5rem; margin-top: 0.5rem; border-top: 1px solid var(--border-color)"><div class="info"><strong>Observación:</strong><span>${oc.observacion}</span></div></div>`; }
-                
-                const infoHeader = `
-                    <div class="action-card-header">
-                        <div class="info">
-                            <strong>${oc.proveedor}</strong>
-                            <span>OC: ${oc.numero} / Fecha: ${oc.fecha}</span>
-                            <span>Comprador: <strong>${oc.comprador || 'N/A'}</strong></span>
-                        </div>
+const buscarPendientesParaUsuario = (usuario) => {
+    gestionContainer.innerHTML = '<div class="info-card">Buscando...</div>';
+    fetch(`api/get_ordenes_pendientes_por_usuario.php?autorizador=${encodeURIComponent(usuario)}`).then(r => r.json()).then(ordenes => {
+        gestionContainer.innerHTML = '';
+        if (ordenes.length === 0) {
+            const msg = esDispatcher ? 'No hay proveedores por asignar.' : '¡Felicidades! No tienes órdenes pendientes.';
+            gestionContainer.innerHTML = `<div class="info-card">${msg}</div>`;
+            return;
+        }
+        ordenes.forEach(oc => {
+            const card = document.createElement('div');
+            card.className = 'action-card';
+
+            let observacionHtml = '';
+            if (oc.observacion && oc.observacion.trim() !== '') {
+                observacionHtml = `
+                    <div class="action-card-detail">
+                        <span class="label">Observación:</span>
+                        <span class="value">${oc.observacion}</span>
+                    </div>`;
+            }
+
+            const baseHtml = `
+                <div class="action-card-header">
+                    <strong>${oc.proveedor}</strong>
+                </div>
+                <div class="action-card-details">
+                    <div class="action-card-detail">
+                        <span class="label">OC / Fecha:</span>
+                        <span class="value">${oc.numero} / ${oc.fecha}</span>
                     </div>
-                `;
-                
-                                // ---- INICIO DE LA MEJORA VISUAL ----
-                // Hemos reestructurado el HTML para que sea más legible, con un layout de "etiqueta-valor".
-                const baseHtml = `
-                    <div class="action-card-header">
-                        <strong>${oc.proveedor}</strong>
+                    <div class="action-card-detail">
+                        <span class="label">Comprador:</span>
+                        <span class="value"><strong>${oc.comprador || 'N/A'}</strong></span>
                     </div>
-                    <div class="action-card-details">
-                        <div class="action-card-detail">
-                            <span class="label">OC / Fecha:</span>
-                            <span class="value">${oc.numero} / ${oc.fecha}</span>
-                        </div>
-                        <div class="action-card-detail">
-                            <span class="label">Comprador:</span>
-                            <span class="value"><strong>${oc.comprador || 'N/A'}</strong></span>
-                        </div>
-                        ${observacionHtml}
-                    </div>
-                    <div class="action-card-monto">${formatCurrency(oc.monto)}</div>
-                `;
-                // ---- FIN DE LA MEJORA VISUAL ----
-                const regularButtons = `<div class="action-card-buttons"><button class="btn btn-danger btn-flex rechazar" data-oc="${oc.numero}">Rechazar</button><button class="btn btn-success btn-flex autorizar" data-oc="${oc.numero}">Autorizar</button></div>`;
-                const dispatcherButton = `<div class="action-card-buttons" style="margin-top: 0.5rem;"><button class="btn btn-secondary btn-flex derivar-btn" data-proveedor-nombre="${oc.proveedor}" data-cod-provee="${oc.cod_provee}">Asignar Proveedor a Usuario</button></div>`;
-                
-                if (esDispatcher) {
-                    card.innerHTML = baseHtml + regularButtons + dispatcherButton;
-                } else {
-                    card.innerHTML = baseHtml + regularButtons;
-                }
-                gestionContainer.appendChild(card);
-            });
-        }).catch(err => { gestionContainer.innerHTML = '<div class="info-card">Error al cargar pendientes.</div>'; console.error('Error:', err); });
-    };
+                    ${observacionHtml}
+                </div>
+                <div class="action-card-monto">${formatCurrency(oc.monto)}</div>
+            `;
+
+            const regularButtons = `
+                <div class="action-card-buttons">
+                    <button class="btn btn-danger btn-flex rechazar" data-oc="${oc.numero}">Rechazar</button>
+                    <button class="btn btn-success btn-flex autorizar" data-oc="${oc.numero}">Autorizar</button>
+                </div>`;
+            
+            // --- INICIO DE LA CORRECCIÓN ---
+            // 1. Creamos una variable para el botón del dispatcher, inicialmente vacía.
+            let dispatcherButtonHTML = '';
+
+            // 2. Comprobamos si es el dispatcher Y si el proveedor NO está asignado (oc.asignado == 0).
+            //    El campo 'oc.asignado' viene del API que modificamos antes.
+            if (esDispatcher && oc.asignado == 0) {
+                // 3. Solo si se cumplen las condiciones, creamos el HTML del botón.
+                dispatcherButtonHTML = `
+                    <div class="action-card-buttons" style="margin-top: 0.5rem;">
+                        <button class="btn btn-secondary btn-flex derivar-btn" 
+                                data-proveedor-nombre="${oc.proveedor}" 
+                                data-cod-provee="${oc.cod_provee}">
+                            Asignar Proveedor a Usuario
+                        </button>
+                    </div>`;
+            }
+            
+            // 4. Construimos el HTML final de la tarjeta. 
+            //    La variable dispatcherButtonHTML contendrá el botón o una cadena vacía.
+            card.innerHTML = baseHtml + regularButtons + dispatcherButtonHTML;
+            // --- FIN DE LA CORRECCIÓN ---
+
+            gestionContainer.appendChild(card);
+        });
+    }).catch(err => {
+        gestionContainer.innerHTML = '<div class="info-card">Error al cargar pendientes.</div>';
+        console.error('Error:', err);
+    });
+};
 
     const loadGestionData = () => {
         const subtituloGestion = document.getElementById('gestion-subtitulo'); const filtroUsuarioCard = document.getElementById('gestion-filtro-usuario');
