@@ -29,7 +29,7 @@ if (isset($_GET['accion']) && $_GET['accion'] === 'cambiar_pais') {
         'success' => true,
         'message' => "País cambiado a " . ($pais === 'uruguay' ? 'Uruguay' : 'Argentina'),
         'pais' => $pais,
-        'servidor' => $pais === 'uruguay' ? 'apps_uy' : 'apps'
+        'servidor' => $pais === 'uruguay' ? 'apps_power_uy' : 'apps_power'
     ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
     exit;
 }

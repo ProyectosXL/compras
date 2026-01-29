@@ -41,11 +41,11 @@ class Ventas {
         switch ($pais) {
             case 'uruguay':
             case 'uy':
-                return 'apps_uy';
+                return 'apps_power_uy';
             case 'argentina':
             case 'ar':
             default:
-                return 'apps';
+                return 'apps_power';
         }
     }
 
@@ -79,7 +79,7 @@ class Ventas {
      * Obtener país actual
      */
     public function obtenerPaisActual() {
-        return $this->nameServer === 'apps_uy' ? 'uruguay' : 'argentina';
+        return $this->nameServer === 'apps_power_uy' ? 'uruguay' : 'argentina';
     }
 
     /**

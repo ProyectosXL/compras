@@ -41,11 +41,11 @@ class Presupuesto {
         switch ($pais) {
             case 'uruguay':
             case 'uy':
-                return 'apps_uy';
+                return 'apps_power_uy';
             case 'argentina':
             case 'ar':
             default:
-                return 'apps';
+                return 'apps_power';
         }
     }
 

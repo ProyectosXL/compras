@@ -19,8 +19,8 @@ class Historial {
         if (isset($_SESSION['pais_seleccionado'])) {
             $pais = strtolower($_SESSION['pais_seleccionado']);
         }
-        // FIX: Connect to the application's database ('apps' or 'apps_uy'), not the source ERP database.
-        return $pais === 'uruguay' ? 'apps_uy' : 'apps';
+        // FIX: Connect to the application's database ('apps_power' or 'apps_power_uy'), not the source ERP database.
+        return $pais === 'uruguay' ? 'apps_power_uy' : 'apps_power';
     }
 
     /**

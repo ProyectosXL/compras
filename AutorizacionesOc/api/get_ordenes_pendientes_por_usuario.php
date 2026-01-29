@@ -1,5 +1,5 @@
 <?php
-// --- api/get_ordenes_pendientes_por_usuario.php (VERSIÓN FINAL CORREGIDA) ---
+// --- api/get_ordenes_pendientes_por_usuario.php (CON FILTRO DE OBSERVACIÓN PARA DANM) ---
 ini_set('display_errors', 1); 
 error_reporting(E_ALL);
 
@@ -20,24 +20,21 @@ if (empty($usuario_seleccionado)) {
     exit(); 
 }
 
-// --- CAMBIO CLAVE (PARTE 1) ---
-// Primero, obtenemos TODOS los proveedores que ya tienen una asignación en un array de PHP.
-// Esto lo hacemos ANTES de la consulta principal.
+// 1. Obtenemos los proveedores asignados para manejar la bandera 'asignado' en PHP
 $sql_todos_asignados = "SELECT DISTINCT COD_PROVEE FROM sistemas.dbo.FP_DERIVACION_OC";
 $stmt_todos_asignados = sqlsrv_query($conn_sistemas, $sql_todos_asignados);
-$proveedores_con_asignacion = []; // Usaremos este array para la verificación.
+$proveedores_con_asignacion = [];
 if ($stmt_todos_asignados) {
     while ($row_asignado = sqlsrv_fetch_array($stmt_todos_asignados, SQLSRV_FETCH_ASSOC)) {
-        // Guardamos los códigos como claves para una búsqueda súper rápida después (isset).
         $proveedores_con_asignacion[$row_asignado['COD_PROVEE']] = true;
     }
     sqlsrv_free_stmt($stmt_todos_asignados);
 }
-// --- FIN CAMBIO CLAVE (PARTE 1) ---
 
 $where_clause = "";
 
 if ($usuario_seleccionado === 'DANM') {
+    // Lógica DANM:
     $sql_asignados = "SELECT COD_PROVEE FROM sistemas.dbo.FP_DERIVACION_OC";
     $stmt_asignados = sqlsrv_query($conn_sistemas, $sql_asignados);
     $proveedores_asignados = [];
@@ -51,10 +48,19 @@ if ($usuario_seleccionado === 'DANM') {
     
     if (!empty($proveedores_asignados)) { 
         $lista_excluidos = implode(',', $proveedores_asignados);
-        $where_clause .= " AND (A.COD_PROVEE NOT IN (" . $lista_excluidos . ") OR B.NOM_PROVEE LIKE '%GESTION SERVICIOS%') "; 
+        
+        // --- INICIO CAMBIO LÓGICA DE FILTRADO ---
+        // Se ve si: (No está asignado) O (Es Gestion Servicios Y dice LOGISTICA)
+        $where_clause .= " AND (
+            A.COD_PROVEE NOT IN (" . $lista_excluidos . ") 
+            OR 
+            (B.NOM_PROVEE LIKE '%GESTION SERVICIOS%' AND A.OBSERVACIO LIKE '%LOGISTICA%')
+        ) "; 
+        // --- FIN CAMBIO LÓGICA DE FILTRADO ---
     }
     
 } else {
+    // Lógica Usuarios Normales: Ven solo lo que tienen asignado.
     $sql_asignados = "SELECT COD_PROVEE FROM sistemas.dbo.FP_DERIVACION_OC WHERE USUARIO_AUTORIZADOR = ?";
     $stmt_asignados = sqlsrv_query($conn_sistemas, $sql_asignados, [$usuario_seleccionado]);
     $proveedores_asignados = [];
@@ -74,7 +80,6 @@ if ($usuario_seleccionado === 'DANM') {
 }
 sqlsrv_close($conn_sistemas);
 
-// Se construye la consulta SQL final (SIN el LEFT JOIN que causaba el error)
 $sql_ordenes = "
     SELECT
         A.N_ORDEN_CO AS numero,
@@ -101,21 +106,12 @@ if ($stmt_ordenes === false) {
 
 $ordenes = [];
 while ($row = sqlsrv_fetch_array($stmt_ordenes, SQLSRV_FETCH_ASSOC)) {
-    if ($row['fecha']) {
-        $row['fecha'] = $row['fecha']->format('d-m-Y');
-    }
+    if ($row['fecha']) { $row['fecha'] = $row['fecha']->format('d-m-Y'); }
     $row['observacion'] = $row['observacion'] ?? '';
-    
-    // --- CAMBIO CLAVE (PARTE 2) ---
-    // Aquí, en PHP, añadimos la bandera 'asignado' a cada orden.
-    // Verificamos si el código del proveedor de esta fila existe en el array que creamos al principio.
     $row['asignado'] = isset($proveedores_con_asignacion[$row['cod_provee']]) ? 1 : 0;
-    // --- FIN CAMBIO CLAVE (PARTE 2) ---
-
     $ordenes[] = $row;
 }
 sqlsrv_free_stmt($stmt_ordenes);
-
 echo json_encode($ordenes, JSON_UNESCAPED_UNICODE);
 sqlsrv_close($conn);
 ?>
