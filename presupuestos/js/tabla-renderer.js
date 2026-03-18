@@ -148,7 +148,23 @@ const TablaRendererUtils = {
     },
 
     formatearNombreColumna(columna) {
-        return columna.replace('VTA_', '').replace(/_/g, ' ').trim();
+        // Limpieza básica inicial
+        let nombre = columna.replace('VTA_', '').replace(/_/g, ' ').trim();
+
+        // --- CORRECCIÓN VISUAL DE AÑOS PARA VERANO ---
+        // Si el título es "VERANO XX" o "VERANO XXXX", le restamos 1 al año
+        const match = nombre.match(/^(VERANO)\s+(\d{2,4})$/i);
+        
+        if (match) {
+            const texto = match[1];      // "VERANO"
+            const anio = parseInt(match[2]); // 24, 25, 2026, etc.
+            
+            // Restamos 1 año para corregir la visualización
+            return `${texto} ${anio - 1}`.toUpperCase();
+        }
+        // ----------------------------------------------
+
+        return nombre;
     },
 
     // NUEVO: Obtener índice original del registro

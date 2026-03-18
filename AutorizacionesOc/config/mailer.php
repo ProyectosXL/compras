@@ -10,7 +10,8 @@ use PHPMailer\PHPMailer\SMTP;
 require_once __DIR__ . '/../vendor/autoload.php';
 
 // Esta función creará y configurará una instancia de PHPMailer lista para usar.
-function configurarMailer() {
+function configurarMailer()
+{
     $mail = new PHPMailer(true); // El 'true' activa las excepciones
 
     try {
@@ -18,16 +19,16 @@ function configurarMailer() {
         //$mail->SMTPDebug = SMTP::DEBUG_SERVER;  // Descomenta esta línea si necesitas ver el log detallado de la conexión
 
         $mail->isSMTP();
-        $mail->Host       = 'smtp.gmail.com';             // ¡¡CAMBIAR!! -> Servidor SMTP. Para Office365 es 'smtp.office365.com'
-        $mail->SMTPAuth   = true;
-        $mail->Username   = 'sistemas@xl.com.ar';         // ¡¡CAMBIAR!! -> Tu dirección de correo completa que se usará para enviar
-        $mail->Password   = 'bhwbrwswykkbwcpc'; // ¡¡CAMBIAR!! -> Tu contraseña.
-        $mail->SMTPSecure = PHPMailer::ENCRYPTION_SMTPS;    // Usar 'tls' o 'ssl'. Para Gmail suele ser 'ssl'.
-        $mail->Port       = 465;                            // Puerto SMTP. Para 'ssl' es 465, para 'tls' es 587.
+        $mail->Host = $_ENV['HOST_EMAIL_EGRESOS'] ?? 'smtp.gmail.com';
+        $mail->SMTPAuth = true;
+        $mail->Username = $_ENV['USER_EMAIL_EGRESOS'] ?? 'notificaciones@xl.com.ar';
+        $mail->Password = $_ENV['PASS_EMAIL_EGRESOS'] ?? 'yvsuiewmcztagevs';
+        $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
+        $mail->Port = $_ENV['PORT_EMAIL_EGRESOS'] ?? 587;
 
         // --- REMITENTE (DE PARTE DE QUIÉN) ---
-        $mail->setFrom('sistemas@xl.com.ar', 'Sistema de Autorizaciones OC');
-        
+        $mail->setFrom($mail->Username, 'Sistema de Autorizaciones OC');
+
         $mail->CharSet = 'UTF-8';
 
         return $mail;

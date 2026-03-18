@@ -486,11 +486,16 @@ class PresupuestoApp {
      */
     async exportarExcel(solapa) {
         try {
-            await APIClient.exportarExcel(solapa);
-            UIUtils.mostrarAlerta(`Exportando ${solapa} a Excel...`, 'info');
+            UIUtils.mostrarAlerta(`Generando Excel de ${solapa}...`, 'info');
             
-            // Registrar estadística de exportación
-            this.registrarEstadistica('exportacion', { solapa, timestamp: Date.now() });
+            // Usamos el exportador que soporta filtros
+            if (typeof ExcelExporter !== 'undefined') {
+                // Llamamos al método específico para solapas
+                await ExcelExporter.exportarSolapa(solapa);
+                this.registrarEstadistica('exportacion', { solapa, timestamp: Date.now() });
+            } else {
+                throw new Error('El módulo ExcelExporter no está cargado');
+            }
             
         } catch (error) {
             console.error('Error exportando:', error);

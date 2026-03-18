@@ -1,5 +1,4 @@
-
-// Exportador Excel Unificado usando SheetJS
+// Exportador Excel Unificado usando SheetJS (Con soporte de Filtros)
 // Archivo: presupuestos/js/excel-exporter.js
 
 class ExcelExporter {
@@ -62,7 +61,6 @@ class ExcelExporter {
                     ExcelExporter.ajustarAnchoColumnas(ws, datos);
                     XLSX.utils.book_append_sheet(wb, ws, nombreHoja);
                 } else {
-                    // Crear hoja vacía
                     const ws = XLSX.utils.json_to_sheet([{ 'Sin datos': 'No hay información disponible' }]);
                     XLSX.utils.book_append_sheet(wb, ws, nombreHoja);
                 }
@@ -80,102 +78,74 @@ class ExcelExporter {
         }
     }
 
-    /**
-     * Cargar librería SheetJS desde CDN
-     */
     static async cargarSheetJS() {
         return new Promise((resolve, reject) => {
             if (typeof XLSX !== 'undefined') {
                 resolve();
                 return;
             }
-
             const script = document.createElement('script');
             script.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
-            script.onload = () => {
-                console.log('✅ SheetJS cargado correctamente');
-                resolve();
-            };
-            script.onerror = () => {
-                reject(new Error('Error cargando SheetJS'));
-            };
+            script.onload = () => { console.log('✅ SheetJS cargado'); resolve(); };
+            script.onerror = () => { reject(new Error('Error cargando SheetJS')); };
             document.head.appendChild(script);
         });
     }
 
-    /**
-     * Ajustar ancho de columnas automáticamente
-     */
     static ajustarAnchoColumnas(worksheet, datos) {
         if (!datos || datos.length === 0) return;
-
         const columnas = Object.keys(datos[0]);
-        const anchos = [];
-
-        columnas.forEach((columna, index) => {
-            // Ancho mínimo basado en el nombre de la columna
+        const anchos = columnas.map(columna => {
             let maxAncho = columna.length;
-
-            // Revisar el contenido de las celdas
-            datos.forEach(fila => {
+            // Muestreamos solo las primeras 50 filas para no lentificar
+            const muestra = datos.slice(0, 50);
+            muestra.forEach(fila => {
                 const valor = fila[columna];
                 if (valor != null) {
                     const longitud = valor.toString().length;
-                    if (longitud > maxAncho) {
-                        maxAncho = longitud;
-                    }
+                    if (longitud > maxAncho) maxAncho = longitud;
                 }
             });
-
-            // Limitar ancho máximo y mínimo
-            anchos.push({ wch: Math.min(Math.max(maxAncho, 10), 50) });
+            return { wch: Math.min(Math.max(maxAncho, 10), 50) };
         });
-
         worksheet['!cols'] = anchos;
     }
 
-    /**
-     * Obtener fecha y hora para nombres de archivo
-     */
     static obtenerFechaHora() {
         const ahora = new Date();
         return ahora.toISOString().slice(0, 19).replace(/[T:]/g, '-');
     }
 
     /**
-     * Preparar datos de compras para Excel
+     * Preparar datos tomando lo FILTRADO si existe
      */
-    static prepararDatosCompras(datos) {
-        return datos.map(item => {
-            const total = (item.VERANO || 0) + (item.INVIERNO || 0) + (item.ATEMPORAL || 0);
-            return {
-                'Fecha Emisión': item.FEC_EMISIO || '',
-                'N° Orden': item.N_ORDEN_CO || '',
-                'Proveedor': item.NOM_PROVEE || '',
-                'Código Artículo': item.COD_ARTICU || '',
-                'Descripción': item.DESCRIPCIO || '',
-                'Rubro': item.RUBRO || '',
-                'Categoría': item.CATEGORIA_PADRE || '',
-                'Verano': item.VERANO || 0,
-                'Invierno': item.INVIERNO || 0,
-                'Atemporal': item.ATEMPORAL || 0,
-                'Total': total
-            };
-        });
+    static obtenerDatosFiltradosOCompletos(solapa) {
+        // Prioridad 1: Datos filtrados por el usuario
+        if (typeof TotalesCompra !== 'undefined' && TotalesCompra.datosFiltrados[solapa] && TotalesCompra.datosFiltrados[solapa].length > 0) {
+            console.log(`📊 Exportando datos FILTRADOS de ${solapa} (${TotalesCompra.datosFiltrados[solapa].length} registros)`);
+            return TotalesCompra.datosFiltrados[solapa];
+        }
+        
+        // Prioridad 2: Datos completos de la app
+        const app = window.presupuestoApp;
+        if (app && app.datos && app.datos[solapa]) {
+            console.log(`📊 Exportando datos COMPLETOS de ${solapa} (Fallback)`);
+            return app.datos[solapa];
+        }
+        
+        return [];
     }
 
     static prepararDatosPresupuesto(datos, solapa) {
         if (!datos || datos.length === 0) return [];
 
         return datos.map(item => {
+            // Campos base
             const resultado = {
                 'Rubro': item.RUBRO || '',
                 'Categoría': item.CATEGORIA || item.CATEGORIA_PADRE || '',
-                'Stock Proyectado': item.STOCK_PROYECTADO || 0,
-                'Índice Variación': item.INDICE_VARIACION || 1
             };
 
-            // Agregar campos específicos según la solapa
             if (solapa === 'stock') {
                 resultado['Stock Actual'] = item.STOCK || item.CANT_STOCK || 0;
                 resultado['Stock a Guardar'] = item.STOCK_GUARDAR || item.CANT_STOCK_GUARDAR || 0;
@@ -183,218 +153,182 @@ class ExcelExporter {
                 resultado['Compras Invierno'] = item.COMPRAS_INVIERNO || item.CANT_PEND_OC_INVIERNO || 0;
                 resultado['Compras Atemporal'] = item.COMPRAS_ATEMPORAL || item.CANT_PEND_OC_ATEMPORAL || 0;
                 resultado['Stock Cobertura'] = item.STOCK_COBERTURA || 0;
+                resultado['Stock Proyectado'] = item.STOCK_PROYECTADO || 0;
             } else {
-                // Para verano e invierno - CORREGIDO: Orden correcto de columnas
-                const ventaVeranoAnterior = ExcelExporter.buscarVentaHistorica(item, 'VERANO');
-                const ventaInviernoAnterior = ExcelExporter.buscarVentaHistorica(item, 'INVIERNO');
+                // Verano / Invierno
+                resultado['Stock Proyectado'] = item.STOCK_PROYECTADO || 0;
                 
-                resultado['Venta Anterior Verano'] = ventaVeranoAnterior;
-                resultado['Venta Proyectada Verano'] = item.VENTA_PROY_VERANO || 0;
-                // CORRECCIÓN: Agregar índice invierno DESPUÉS de venta proyectada verano
-                resultado['Índice Variación Invierno'] = item.INDICE_VARIACION_INVIERNO || item.INDICE_VARIACION || 1;
-                resultado['Venta Anterior Invierno'] = ventaInviernoAnterior;
-                resultado['Venta Proyectada Invierno'] = item.VENTA_PROY_INVIERNO || 0;
+                // Índices
+                resultado['Índice Var. Original'] = parseFloat(item.INDICE_VAR_ORIGINAL || item.INDICE_ORIGINAL || 1).toFixed(2);
+                
+                // Campos editables (usamos el valor actual en memoria)
+                resultado['Índice Ver. Variación'] = parseFloat(item.INDICE_VARIACION || 1).toFixed(2);
+                
+                // Ventas anteriores (lógica robusta)
+                resultado['Venta Ver. Anterior'] = ExcelExporter.buscarVentaHistorica(item, 'VERANO');
+                resultado['Proy. Verano'] = item.VENTA_PROY_VERANO || 0;
+                
+                resultado['Índice Inv. Variación'] = parseFloat(item.INDICE_VARIACION_INVIERNO || item.INDICE_VARIACION || 1).toFixed(2);
+                resultado['Venta Inv. Anterior'] = ExcelExporter.buscarVentaHistorica(item, 'INVIERNO');
+                resultado['Proy. Invierno'] = item.VENTA_PROY_INVIERNO || 0;
+                
                 resultado['Compra Proyectada'] = item.COMPRA_PROYECTADA || 0;
                 
-                // Agregar todas las columnas históricas disponibles
+                // Agregar columnas dinámicas (Historial de años al final)
+                // Excluimos las columnas que ya agregamos manualmente o que son de sistema
+                const columnasIgnorar = [
+                    'ID', 'RUBRO', 'CATEGORIA', 'CATEGORIA_PADRE', 'DESCRIPCION',
+                    'STOCK_PROYECTADO', 'STOCK_ACTUAL', 'INDICE_VAR_ORIGINAL', 'INDICE_VARIACION',
+                    'INDICE_VARIACION_INVIERNO', 'COMPRA_PROYECTADA', 'VENTA_PROY_VERANO', 'VENTA_PROY_INVIERNO',
+                    'VTA_VERANO_ACTUAL', 'VTA_INVIERNO_ACTUAL'
+                ];
+
                 Object.keys(item).forEach(key => {
-                    if ((key.includes('VERANO') || key.includes('INVIERNO')) && 
-                        key !== 'VENTA_PROY_VERANO' && key !== 'VENTA_PROY_INVIERNO' &&
+                    // Si es una columna de historial (contiene VERANO, INVIERNO o VTA_)
+                    if (!columnasIgnorar.includes(key) && 
+                        (key.includes('VERANO') || key.includes('INVIERNO') || key.includes('VTA_')) &&
+                        !key.startsWith('PROY') &&
                         !isNaN(parseFloat(item[key]))) {
-                        resultado[key] = item[key];
+                        
+                        // Limpiar nombre (VTA_VERANO_25 -> VERANO 25)
+                        let nombreLimpio = key.replace('VTA_', '').replace(/_/g, ' ');
+                        
+                        // Aplicar corrección de año visual (si dice 24 es 23) si corresponde
+                        // Esto para que coincida con lo que ves en la tabla HTML
+                        const match = nombreLimpio.match(/^(VERANO|INVIERNO)\s+(\d{2,4})$/i);
+                        if (match) {
+                             const temporada = match[1].toUpperCase();
+                             // Solo aplicamos la corrección de año visual si tu sistema lo requiere
+                             // Como hicimos en TablaRenderer.js
+                             if (temporada === 'VERANO') {
+                                 const anio = parseInt(match[2]);
+                                 nombreLimpio = `${temporada} ${anio - 1}`; 
+                             }
+                        }
+                        
+                        resultado[nombreLimpio.toUpperCase()] = item[key];
                     }
                 });
             }
-
             return resultado;
         });
     }
 
     static buscarVentaHistorica(item, temporada) {
-        const anoActual = new Date().getFullYear() % 100; // 25 para 2025
-        const mesActual = new Date().getMonth() + 1; // 1-12
+        // Misma lógica que TotalesCompra para consistencia
+        const anoActual = new Date().getFullYear().toString().substr(-2);
+        const anoAnterior = (parseInt(anoActual) - 1).toString();
         
-        if (temporada === 'VERANO') {
-            // Buscar VTA_VERANO_25 (el último verano completo)
-            const columnaVerano = `VTA_VERANO_${anoActual}`;
-            if (item.hasOwnProperty(columnaVerano) && !isNaN(item[columnaVerano])) {
-                return parseFloat(item[columnaVerano]);
-            }
-            
-            // Si no encuentra el actual, buscar el anterior
-            const anoAnterior = anoActual - 1;
-            const columnaVeranoAnterior = `VTA_VERANO_${anoAnterior}`;
-            if (item.hasOwnProperty(columnaVeranoAnterior) && !isNaN(item[columnaVeranoAnterior])) {
-                return parseFloat(item[columnaVeranoAnterior]);
-            }
-            
-        } else if (temporada === 'INVIERNO') {
-            // CORRECCIÓN: Determinar el último invierno según el mes actual
-            let anoInvierno;
-            
-            if (mesActual >= 8 || mesActual === 1) {
-                // Estamos en verano (Ago-Ene), el último invierno fue este año
-                anoInvierno = anoActual;
-            } else {
-                // Estamos en invierno (Feb-Jul), el último invierno completo fue el año pasado
-                anoInvierno = anoActual - 1;
-            }
-            
-            // Buscar VTA_INVIERNO del último invierno
-            const columnaInvierno = `VTA_INVIERNO_${anoInvierno}`;
-            if (item.hasOwnProperty(columnaInvierno) && !isNaN(item[columnaInvierno])) {
-                return parseFloat(item[columnaInvierno]);
-            }
-            
-            // Si no encuentra, buscar el anterior
-            const anoInviernoAnterior = anoInvierno - 1;
-            const columnaInviernoAnterior = `VTA_INVIERNO_${anoInviernoAnterior}`;
-            if (item.hasOwnProperty(columnaInviernoAnterior) && !isNaN(item[columnaInviernoAnterior])) {
-                return parseFloat(item[columnaInviernoAnterior]);
-            }
+        const posibles = temporada === 'VERANO' 
+            ? ['VENTA_VER_ANT', 'VTA_VERANO_ANT', `VTA_VERANO_${anoActual}`, `VTA_VERANO_${anoAnterior}`]
+            : ['VENTA_INV_ANT', 'VTA_INVIERNO_ANT', `VTA_INVIERNO_${anoActual}`, `VTA_INVIERNO_${anoAnterior}`];
+
+        for (const k of posibles) {
+            if (item[k] !== undefined) return parseFloat(item[k]);
         }
+        
+        // Búsqueda genérica
+        const patron = temporada === 'VERANO' ? 'VTA_VERANO_' : 'VTA_INVIERNO_';
+        const keys = Object.keys(item).filter(k => k.startsWith(patron));
+        if (keys.length > 0) return parseFloat(item[keys[0]]);
         
         return 0;
     }
 
-    /**
-     * Exportar presupuesto completo
-     */
-    static async exportarPresupuestoCompleto() {
-        try {
-            const app = window.presupuestoApp;
-            
-            if (!app || !app.datos) {
-                throw new Error('No hay datos de presupuesto disponibles');
-            }
-
-            const hojas = {};
-
-            // Preparar datos de cada solapa
-            if (app.datos.verano && app.datos.verano.length > 0) {
-                hojas['Compra Verano'] = ExcelExporter.prepararDatosPresupuesto(app.datos.verano, 'verano');
-            }
-
-            if (app.datos.invierno && app.datos.invierno.length > 0) {
-                hojas['Compra Invierno'] = ExcelExporter.prepararDatosPresupuesto(app.datos.invierno, 'invierno');
-            }
-
-            if (app.datos.stock && app.datos.stock.length > 0) {
-                hojas['Stock Proyectado'] = ExcelExporter.prepararDatosPresupuesto(app.datos.stock, 'stock');
-            }
-
-            // Agregar compras detalle si está disponible
-            if (typeof ComprasManager !== 'undefined' && ComprasManager.datos && ComprasManager.datos.length > 0) {
-                hojas['Compras Detalle'] = ExcelExporter.prepararDatosCompras(ComprasManager.datos);
-            }
-
-            if (Object.keys(hojas).length === 0) {
-                throw new Error('No hay datos para exportar');
-            }
-
-            await ExcelExporter.exportarMultiplesHojas(hojas);
-            
-            if (typeof UIUtils !== 'undefined') {
-                UIUtils.mostrarAlerta('Exportación completa realizada correctamente', 'success');
-            }
-
-        } catch (error) {
-            console.error('Error en exportación completa:', error);
-            if (typeof UIUtils !== 'undefined') {
-                UIUtils.mostrarAlerta('Error en exportación: ' + error.message, 'error');
-            }
-        }
+    static prepararDatosCompras(datos) {
+        return datos.map(item => ({
+            'Fecha': item.FEC_EMISIO || '',
+            'Orden': item.N_ORDEN_CO || '',
+            'Proveedor': item.NOM_PROVEE || '',
+            'Artículo': item.COD_ARTICU || '',
+            'Descripción': item.DESCRIPCIO || '',
+            'Rubro': item.RUBRO || '',
+            'Categoría': item.CATEGORIA_PADRE || '',
+            'Verano': item.VERANO || 0,
+            'Invierno': item.INVIERNO || 0,
+            'Atemporal': item.ATEMPORAL || 0,
+            'Total': (item.VERANO || 0) + (item.INVIERNO || 0) + (item.ATEMPORAL || 0)
+        }));
     }
 
-    /**
-     * Preparar datos de ventas para Excel
-     */
     static prepararDatosVentas(datos) {
         return datos.map(item => {
-            const resultado = {
-                'Rubro': item.RUBRO || '',
-                'Categoría': item.CATEGORIA_PADRE || '',
-                'Ventas Últimos 60 días': item.VTA_ULT_60_DIAS || 0,
-                'Ventas Año Anterior': item.VTA_ULT_60_DIAS_ANO_ANT || 0,
-                'Índice Variación': item.INDICE_VARIACION || 1,
-                'Variación %': item.VARIACION_PORCENTUAL || 0,
-                'Estado': item.ESTADO || 'estable'
+            const res = {
+                'Rubro': item.RUBRO,
+                'Categoría': item.CATEGORIA_PADRE,
+                'Venta 60d': item.VTA_ULT_60_DIAS,
+                'Venta Año Ant': item.VTA_ULT_60_DIAS_ANO_ANT,
+                'Variación %': item.VARIACION_PORCENTUAL
             };
-
-            // Agregar columnas dinámicas de meses
-            Object.keys(item).forEach(key => {
-                if (key.startsWith('VTA_') && key.match(/VTA_\d+_\d{4}/)) {
-                    const partes = key.split('_');
-                    if (partes.length === 3) {
-                        const mes = parseInt(partes[1]);
-                        const ano = parseInt(partes[2]);
-                        const nombreMes = VentasManager.formatearNombreMes(mes, ano);
-                        resultado[nombreMes] = item[key] || 0;
-                    }
+            // Agregar meses dinámicos
+            Object.keys(item).forEach(k => {
+                if (k.startsWith('VTA_') && k.includes('_20')) {
+                    res[k.replace('VTA_', '')] = item[k];
                 }
             });
-
-            return resultado;
+            return res;
         });
     }
 
     /**
-     * Exportar solapa individual
+     * Exportar solapa individual (Punto de entrada principal)
      */
     static async exportarSolapa(solapa) {
         try {
-            const app = window.presupuestoApp;
-            let datos, nombreHoja, nombreArchivo;
+            let datosCrudos = [];
+            let datosPreparados = [];
+            let nombreHoja = '';
+            let nombreArchivo = '';
 
             switch (solapa) {
                 case 'verano':
-                    datos = ExcelExporter.prepararDatosPresupuesto(app.datos.verano, 'verano');
+                    datosCrudos = ExcelExporter.obtenerDatosFiltradosOCompletos('verano');
+                    datosPreparados = ExcelExporter.prepararDatosPresupuesto(datosCrudos, 'verano');
                     nombreHoja = 'Compra Verano';
                     nombreArchivo = `compra_verano_${ExcelExporter.obtenerFechaHora()}.xlsx`;
                     break;
                 
                 case 'invierno':
-                    datos = ExcelExporter.prepararDatosPresupuesto(app.datos.invierno, 'invierno');
+                    datosCrudos = ExcelExporter.obtenerDatosFiltradosOCompletos('invierno');
+                    datosPreparados = ExcelExporter.prepararDatosPresupuesto(datosCrudos, 'invierno');
                     nombreHoja = 'Compra Invierno';
                     nombreArchivo = `compra_invierno_${ExcelExporter.obtenerFechaHora()}.xlsx`;
                     break;
                 
                 case 'stock':
-                    datos = ExcelExporter.prepararDatosPresupuesto(app.datos.stock, 'stock');
+                    datosCrudos = ExcelExporter.obtenerDatosFiltradosOCompletos('stock');
+                    datosPreparados = ExcelExporter.prepararDatosPresupuesto(datosCrudos, 'stock');
                     nombreHoja = 'Stock Proyectado';
                     nombreArchivo = `stock_proyectado_${ExcelExporter.obtenerFechaHora()}.xlsx`;
                     break;
                 
                 case 'compras-detalle':
-                    if (typeof ComprasManager === 'undefined' || !ComprasManager.datosFiltrados || ComprasManager.datosFiltrados.length === 0) {
-                        throw new Error('No hay datos de compras disponibles');
+                    if (typeof ComprasManager !== 'undefined') {
+                        datosCrudos = ComprasManager.datosFiltrados || ComprasManager.datos;
+                        datosPreparados = ExcelExporter.prepararDatosCompras(datosCrudos);
+                        nombreHoja = 'Compras Detalle';
+                        nombreArchivo = `compras_detalle_${ExcelExporter.obtenerFechaHora()}.xlsx`;
                     }
-                    datos = ExcelExporter.prepararDatosCompras(ComprasManager.datosFiltrados);
-                    nombreHoja = 'Compras Detalle';
-                    nombreArchivo = `compras_detalle_${ExcelExporter.obtenerFechaHora()}.xlsx`;
                     break;
-                
+
                 case 'ventas-6-meses':
-                    if (typeof VentasManager === 'undefined' || !VentasManager.datosFiltrados || VentasManager.datosFiltrados.length === 0) {
-                        throw new Error('No hay datos de ventas disponibles');
+                    if (typeof VentasManager !== 'undefined') {
+                        datosCrudos = VentasManager.datosFiltrados || VentasManager.datos;
+                        datosPreparados = ExcelExporter.prepararDatosVentas(datosCrudos);
+                        nombreHoja = 'Ventas 6 Meses';
+                        nombreArchivo = `ventas_6meses_${ExcelExporter.obtenerFechaHora()}.xlsx`;
                     }
-                    datos = ExcelExporter.prepararDatosVentas(VentasManager.datosFiltrados);
-                    nombreHoja = 'Ventas 6 Meses';
-                    nombreArchivo = `ventas_6_meses_${ExcelExporter.obtenerFechaHora()}.xlsx`;
                     break;
-                
-                default:
-                    throw new Error('Solapa no válida: ' + solapa);
             }
 
-            if (!datos || datos.length === 0) {
-                throw new Error('No hay datos para exportar en ' + solapa);
+            if (!datosPreparados || datosPreparados.length === 0) {
+                throw new Error('No hay datos visibles para exportar en ' + solapa);
             }
 
-            await ExcelExporter.exportarExcel(datos, nombreHoja, nombreArchivo);
+            await ExcelExporter.exportarExcel(datosPreparados, nombreHoja, nombreArchivo);
             
             if (typeof UIUtils !== 'undefined') {
-                UIUtils.mostrarAlerta('Excel exportado correctamente', 'success');
+                UIUtils.mostrarAlerta(`Excel exportado: ${datosPreparados.length} registros`, 'success');
             }
 
         } catch (error) {
