@@ -9,7 +9,7 @@ if ($conn_sistemas === null) {
 }
 
 $sql = "SELECT COMPRADOR, USR_HASTA_100K, USR_HASTA_500K, USR_HASTA_2M, USR_MAYOR_2M 
-        FROM FP_OC_REGLAS_AUTORIZACION 
+        FROM sistemas.dbo.FP_OC_REGLAS_AUTORIZACION 
         ORDER BY COMPRADOR";
 
 $stmt = sqlsrv_query($conn_sistemas, $sql);

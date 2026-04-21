@@ -394,4 +394,15 @@ input[type="date"] { background-image: none; }
 
 .action-card-detail .value {
     text-align: right;
-}
+}@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+/* --- Estilos Premium para la Matriz de Reglas --- */
+#tab-reglas .table-container { max-height: calc(100vh - 200px); overflow: auto; border: 1px solid var(--border-color); background: white; border-radius: 12px; box-shadow: var(--shadow); margin-top: 1rem; }
+.rules-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 0.85rem; font-family: 'Inter', sans-serif; }
+.rules-table th { position: sticky; top: 0; background: #f8f9fa; padding: 1rem 0.5rem; font-weight: 700; text-transform: uppercase; font-size: 0.7rem; letter-spacing: 0.05em; color: var(--text-secondary); border-bottom: 2px solid var(--border-color); z-index: 10; text-align: center; }
+.rules-table td { padding: 0.5rem; border-bottom: 1px solid #eee; vertical-align: middle; }
+.rules-table tr:hover td { background-color: #f8faff; }
+.rules-table tr td:first-child { font-weight: 600; color: var(--text-primary); background-color: #fafafa; min-width: 150px; text-align: left; position: sticky; left: 0; z-index: 5; border-right: 1px solid #eee; }
+.regla-select { appearance: none !important; background-color: #fafafa; border: 1px solid #ced4da; border-radius: 6px; padding: 0.4rem 1.8rem 0.4rem 0.6rem !important; font-size: 0.8rem; cursor: pointer; background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22%236c757d%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpolyline%20points%3D%226%209%2012%2015%2018%209%22%3E%3C%2Fpolyline%3E%3C%2Fsvg%3E') !important; background-repeat: no-repeat !important; background-position: right 0.4rem center !important; background-size: 1rem !important; transition: all 0.2s; width: 100%; }
+.regla-select:focus { border-color: var(--primary-color); background-color: #fff; outline: none; }
+.regla-select.save-success { border-color: var(--success-color) !important; background-color: #f0fff4 !important; }
+.regla-select.save-loading { border-color: var(--warning-color) !important; background-color: #fffdf0 !important; opacity: 0.7; }

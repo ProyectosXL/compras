@@ -45,11 +45,11 @@
             <table class="resultados-tabla" id="consulta-tabla"><tbody id="tabla-resultados-body"></tbody></table>
         </div>
 
-        <!-- Pestaña 4: REGLAS (Exclusiva RODRIGOAL) -->
+        <!-- Pestaña 4: REGLAS (Administración) -->
         <div id="tab-reglas" class="tab-content">
-            <div class="header"><h1>Reglas de Derivación</h1><p>Configura los autorizadores automáticos por comprador y monto.</p></div>
-            <div class="table-container" style="overflow-x: auto; background: white; border-radius: 12px; padding: 1rem; box-shadow: var(--shadow-sm);">
-                <table class="resultados-tabla" style="font-size: 0.85rem;">
+            <div class="header"><h1>Matriz de Autorizaciones</h1><p>Define quién autoriza cada compra según el comprador y el monto total.</p></div>
+            <div class="table-container">
+                <table class="rules-table">
                     <thead>
                         <tr>
                             <th>Comprador</th>
@@ -71,7 +71,7 @@
         <a href="#resumen" class="nav-item active"><i class="bi bi-pie-chart-fill"></i><span>Resumen</span></a>
         <a href="#gestion" class="nav-item"><i class="bi bi-card-checklist"></i><span>Gestión</span></a>
         <a href="#consulta" class="nav-item"><i class="bi bi-search"></i><span>Consulta</span></a>
-        <?php if ($usuario_externo === 'RODRIGOAL'): ?>
+        <?php if ($usuario_externo === 'RODRIGOAL' || $usuario_externo === 'RODRIAL'): ?>
         <a href="#reglas" class="nav-item"><i class="bi bi-gear-fill"></i><span>Reglas</span></a>
         <?php endif; ?>
     </nav>
@@ -109,7 +109,7 @@
 <script>
 document.addEventListener('DOMContentLoaded', () => {
     let usuarioActivo = "<?php echo $usuario_externo; ?>";
-    const esDispatcher = (usuarioActivo === 'RODRIAL');
+    const esDispatcher = (usuarioActivo === 'RODRIAL' || usuarioActivo === 'RODRIGOAL');
 
     const navItems = document.querySelectorAll('.nav-item');
     const tabs = document.querySelectorAll('.tab-content');
@@ -150,6 +150,14 @@ document.addEventListener('DOMContentLoaded', () => {
             fetch('api/get_autorizadores.php').then(r => r.json())
         ]).then(([reglas, autorizadores]) => {
             body.innerHTML = '';
+            if (reglas.error) {
+                body.innerHTML = `<tr><td colspan="5" style="text-align:center; color:red;">Error: ${reglas.error}</td></tr>`;
+                return;
+            }
+            if (!Array.isArray(reglas)) {
+                body.innerHTML = `<tr><td colspan="5" style="text-align:center;">No se obtuvieron reglas válidas.</td></tr>`;
+                return;
+            }
             reglas.forEach(r => {
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
@@ -161,6 +169,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 `;
                 body.appendChild(tr);
             });
+        }).catch(err => {
+            console.error(err);
+            body.innerHTML = '<tr><td colspan="5" style="text-align:center; color:red;">Error de carga.</td></tr>';
         });
     };
 
@@ -181,19 +192,20 @@ document.addEventListener('DOMContentLoaded', () => {
             formData.append('valor', sel.value);
             formData.append('usuario_modifica', usuarioActivo);
 
-            sel.style.backgroundColor = '#fff3cd'; // Indicador de "guardando"
+            sel.classList.add('save-loading');
             fetch('api/save_reglas_autoc.php', { method: 'POST', body: formData })
                 .then(r => r.json())
                 .then(data => {
+                    sel.classList.remove('save-loading');
                     if (data.status === 'success') {
-                        sel.style.backgroundColor = '#d4edda';
-                        setTimeout(() => sel.style.backgroundColor = 'white', 1000);
+                        sel.classList.add('save-success');
+                        setTimeout(() => sel.classList.remove('save-success'), 1000);
                     } else {
                         alert('Error al guardar: ' + data.message);
-                        sel.style.backgroundColor = '#f8d7da';
                     }
                 })
                 .catch(err => {
+                    sel.classList.remove('save-loading');
                     console.error(err);
                     alert('Error de conexión');
                 });
@@ -249,10 +261,34 @@ document.addEventListener('DOMContentLoaded', () => {
         fetch(url).then(res => res.json()).then(stats => {
             kpiLoader.style.display = 'none'; kpiContainer.style.display = 'grid';
             kpiContainer.innerHTML = `
-                <div class="kpi-card pending"><div class="kpi-card-info"><div class="value">${stats.pendientes_count || 0}</div><div class="label">${esDispatcher ? 'Por Asignar' : 'Mis Pendientes'}</div></div><div class="icon"><i class="bi bi-hourglass-split"></i></div></div>
-                <div class="kpi-card amount"><div class="kpi-card-info"><div class="value">${formatCurrency(stats.pendientes_monto || 0)}</div><div class="label">Monto Pendiente</div></div><div class="icon"><i class="bi bi-cash-coin"></i></div></div>
-                <div class="kpi-card authorized"><div class="kpi-card-info"><div class="value">${stats.autorizadas_hoy || 0}</div><div class="label">Autorizadas Hoy</div></div><div class="icon"><i class="bi bi-check-circle-fill"></i></div></div>
-                <div class="kpi-card rejected"><div class="kpi-card-info"><div class="value">${stats.rechazadas_hoy || 0}</div><div class="label">Rechazadas Hoy</div></div><div class="icon"><i class="bi bi-x-circle-fill"></i></div></div>`;
+                <div class="kpi-card pending">
+                    <div class="kpi-card-info">
+                        <div class="value">${stats.pendientes_count || 0}</div>
+                        <div class="label">${esDispatcher ? 'Global Pendientes' : 'Mis Pendientes'}</div>
+                    </div>
+                    <div class="icon"><i class="bi bi-hourglass-split"></i></div>
+                </div>
+                <div class="kpi-card amount">
+                    <div class="kpi-card-info">
+                        <div class="value">${formatCurrency(stats.pendientes_monto || 0)}</div>
+                        <div class="label">${esDispatcher ? 'Monto Global' : 'Monto Pendiente'}</div>
+                    </div>
+                    <div class="icon"><i class="bi bi-cash-coin"></i></div>
+                </div>
+                <div class="kpi-card authorized">
+                    <div class="kpi-card-info">
+                        <div class="value">${stats.autorizadas_hoy || 0}</div>
+                        <div class="label">${esDispatcher ? 'Global Autorizadas' : 'Autorizadas Hoy'}</div>
+                    </div>
+                    <div class="icon"><i class="bi bi-check-circle-fill"></i></div>
+                </div>
+                <div class="kpi-card rejected">
+                    <div class="kpi-card-info">
+                        <div class="value">${stats.rechazadas_hoy || 0}</div>
+                        <div class="label">${esDispatcher ? 'Global Rechazadas' : 'Rechazadas Hoy'}</div>
+                    </div>
+                    <div class="icon"><i class="bi bi-x-circle-fill"></i></div>
+                </div>`;
         }).catch(err => { kpiLoader.textContent = 'Error al cargar indicadores.'; console.error(err); });
     };
 
@@ -280,13 +316,29 @@ const buscarPendientesParaUsuario = (usuario) => {
     fetch(`api/get_ordenes_pendientes_por_usuario.php?autorizador=${encodeURIComponent(usuario)}`).then(r => r.json()).then(ordenes => {
         gestionContainer.innerHTML = '';
         if (ordenes.length === 0) {
-            const msg = esDispatcher ? 'No hay proveedores por asignar.' : '¡Felicidades! No tienes órdenes pendientes.';
+            const msg = esDispatcher ? 'No hay órdenes pendientes de aprobación en el sistema.' : '¡Felicidades! No tienes órdenes pendientes.';
             gestionContainer.innerHTML = `<div class="info-card">${msg}</div>`;
             return;
         }
         ordenes.forEach(oc => {
             const card = document.createElement('div');
             card.className = 'action-card';
+
+            let autorizadorHtml = '';
+            // Si es dispatcher o tiene autorizador, mostramos la info de asignación
+            if (esDispatcher || oc.autorizador_asignado) {
+                const badgeColor = oc.autorizador_asignado ? 'var(--primary-color)' : 'var(--danger-color)';
+                const labelText = oc.autorizador_asignado ? 'Asignado a:' : 'Estado:';
+                const valorText = oc.autorizador_asignado ? oc.autorizador_asignado : 'SIN REGLA APLICABLE';
+                
+                autorizadorHtml = `
+                    <div class="action-card-detail" style="margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px dashed #eee;">
+                        <span class="label">${labelText}</span>
+                        <span class="value" style="background: ${badgeColor}; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 700;">
+                            <i class="bi bi-person-fill"></i> ${valorText}
+                        </span>
+                    </div>`;
+            }
 
             let observacionHtml = '';
             if (oc.observacion && oc.observacion.trim() !== '') {
@@ -310,12 +362,13 @@ const buscarPendientesParaUsuario = (usuario) => {
                         <span class="label">Comprador:</span>
                         <span class="value"><strong>${oc.comprador || 'N/A'}</strong></span>
                     </div>
+                    ${autorizadorHtml}
                     ${observacionHtml}
                 </div>
                 <div class="action-card-monto">${formatCurrency(oc.monto)}</div>
             `;
 
-            // Botones de Autorizar/Rechazar: Solo si NO es el dispatcher (RODRIAL)
+            // Botones de Autorizar/Rechazar: Solo si NO es un responsable de reglas (RODRIAL/RODRIGOAL)
             let actionButtonsHTML = '';
             if (!esDispatcher) {
                 actionButtonsHTML = `
@@ -325,20 +378,7 @@ const buscarPendientesParaUsuario = (usuario) => {
                 </div>`;
             }
             
-            // Botón de Derivación: Solo si ES el dispatcher Y el proveedor no está asignado.
-            let dispatcherButtonHTML = '';
-            if (esDispatcher && oc.asignado == 0) {
-                dispatcherButtonHTML = `
-                    <div class="action-card-buttons" style="margin-top: 0.5rem;">
-                        <button class="btn btn-secondary btn-flex derivar-btn" 
-                                data-proveedor-nombre="${oc.proveedor}" 
-                                data-cod-provee="${oc.cod_provee}">
-                            Asignar Proveedor a Usuario
-                        </button>
-                    </div>`;
-            }
-            
-            card.innerHTML = baseHtml + actionButtonsHTML + dispatcherButtonHTML;
+            card.innerHTML = baseHtml + actionButtonsHTML;
             gestionContainer.appendChild(card);
         });
     }).catch(err => {
@@ -351,7 +391,7 @@ const buscarPendientesParaUsuario = (usuario) => {
         const subtituloGestion = document.getElementById('gestion-subtitulo'); const filtroUsuarioCard = document.getElementById('gestion-filtro-usuario');
         if (usuarioActivo) {
             filtroUsuarioCard.style.display = 'none';
-            const subtitulo = esDispatcher ? 'Proveedores pendientes de asignación' : `Mostrando pendientes para: ${usuarioActivo}`;
+            const subtitulo = esDispatcher ? 'Monitoreo Global de Pendientes' : `Mostrando pendientes para: ${usuarioActivo}`;
             subtituloGestion.textContent = subtitulo;
             buscarPendientesParaUsuario(usuarioActivo);
         } else {

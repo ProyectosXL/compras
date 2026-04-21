@@ -27,7 +27,7 @@ if (!in_array($campo, $campos_permitidos)) {
     exit();
 }
 
-$sql = "UPDATE FP_OC_REGLAS_AUTORIZACION 
+$sql = "UPDATE sistemas.dbo.FP_OC_REGLAS_AUTORIZACION 
         SET $campo = ?, MODIFICADO_POR = ?, ULTIMA_MODIFICACION = GETDATE()
         WHERE COMPRADOR = ?";
 

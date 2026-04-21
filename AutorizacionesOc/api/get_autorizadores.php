@@ -18,8 +18,7 @@ $sql = "
         CPA_PERFIL_AUTORIZACION_OC_USUARIO
 ";
 
-$params = [$valorFiltro];
-$stmt = sqlsrv_query($conn, $sql, $params);
+$stmt = sqlsrv_query($conn, $sql);
 
 if ($stmt === false) {
     http_response_code(500);
