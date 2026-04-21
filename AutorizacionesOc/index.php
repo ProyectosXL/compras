@@ -43,12 +43,36 @@
             </div>
             <table class="resultados-tabla" id="consulta-tabla"><tbody id="tabla-resultados-body"></tbody></table>
         </div>
+
+        <!-- Pestaña 4: REGLAS (Exclusiva RODRIGOAL) -->
+        <div id="tab-reglas" class="tab-content">
+            <div class="header"><h1>Reglas de Derivación</h1><p>Configura los autorizadores automáticos por comprador y monto.</p></div>
+            <div class="table-container" style="overflow-x: auto; background: white; border-radius: 12px; padding: 1rem; box-shadow: var(--shadow-sm);">
+                <table class="resultados-tabla" style="font-size: 0.85rem;">
+                    <thead>
+                        <tr>
+                            <th>Comprador</th>
+                            <th>Hasta $100k</th>
+                            <th>Hasta $500k</th>
+                            <th>Hasta $2M</th>
+                            <th>Mayor $2M</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tabla-reglas-body">
+                        <tr><td colspan="5" style="text-align:center;">Cargando reglas...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
     </main>
 
     <nav class="bottom-nav">
         <a href="#resumen" class="nav-item active"><i class="bi bi-pie-chart-fill"></i><span>Resumen</span></a>
         <a href="#gestion" class="nav-item"><i class="bi bi-card-checklist"></i><span>Gestión</span></a>
         <a href="#consulta" class="nav-item"><i class="bi bi-search"></i><span>Consulta</span></a>
+        <?php if ($usuario_externo === 'RODRIGOAL'): ?>
+        <a href="#reglas" class="nav-item"><i class="bi bi-gear-fill"></i><span>Reglas</span></a>
+        <?php endif; ?>
     </nav>
     
     <!-- Modal para Derivación -->
@@ -112,7 +136,67 @@ document.addEventListener('DOMContentLoaded', () => {
         if (tabId === 'tab-resumen') loadResumenData();
         if (tabId === 'tab-gestion') loadGestionData();
         if (tabId === 'tab-consulta') loadConsultaData();
+        if (tabId === 'tab-reglas') loadReglasData();
     };
+
+    const loadReglasData = () => {
+        const body = document.getElementById('tabla-reglas-body');
+        body.innerHTML = '<tr><td colspan="5" style="text-align:center;">Cargando...</td></tr>';
+        
+        Promise.all([
+            fetch('api/get_reglas_autoc.php').then(r => r.json()),
+            fetch('api/get_autorizadores.php').then(r => r.json())
+        ]).then(([reglas, autorizadores]) => {
+            body.innerHTML = '';
+            reglas.forEach(r => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td><strong>${r.COMPRADOR}</strong></td>
+                    <td>${renderSelect(r.COMPRADOR, 'USR_HASTA_100K', r.USR_HASTA_100K, autorizadores)}</td>
+                    <td>${renderSelect(r.COMPRADOR, 'USR_HASTA_500K', r.USR_HASTA_500K, autorizadores)}</td>
+                    <td>${renderSelect(r.COMPRADOR, 'USR_HASTA_2M', r.USR_HASTA_2M, autorizadores)}</td>
+                    <td>${renderSelect(r.COMPRADOR, 'USR_MAYOR_2M', r.USR_MAYOR_2M, autorizadores)}</td>
+                `;
+                body.appendChild(tr);
+            });
+        });
+    };
+
+    const renderSelect = (comprador, campo, valorActual, autorizadores) => {
+        let options = '<option value="">-- Seleccionar --</option>';
+        autorizadores.forEach(a => {
+            options += `<option value="${a}" ${a === valorActual ? 'selected' : ''}>${a}</option>`;
+        });
+        return `<select class="regla-select" data-comprador="${comprador}" data-campo="${campo}" style="width:100%; padding:4px; border-radius:4px; border:1px solid #ddd;">${options}</select>`;
+    };
+
+    document.getElementById('tabla-reglas-body').addEventListener('change', (e) => {
+        if (e.target.classList.contains('regla-select')) {
+            const sel = e.target;
+            const formData = new FormData();
+            formData.append('comprador', sel.dataset.comprador);
+            formData.append('campo', sel.dataset.campo);
+            formData.append('valor', sel.value);
+            formData.append('usuario_modifica', usuarioActivo);
+
+            sel.style.backgroundColor = '#fff3cd'; // Indicador de "guardando"
+            fetch('api/save_reglas_autoc.php', { method: 'POST', body: formData })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        sel.style.backgroundColor = '#d4edda';
+                        setTimeout(() => sel.style.backgroundColor = 'white', 1000);
+                    } else {
+                        alert('Error al guardar: ' + data.message);
+                        sel.style.backgroundColor = '#f8d7da';
+                    }
+                })
+                .catch(err => {
+                    console.error(err);
+                    alert('Error de conexión');
+                });
+        }
+    });
 
     const genericModal = document.getElementById('generic-modal');
     const showModal = (title, message, buttons) => {
