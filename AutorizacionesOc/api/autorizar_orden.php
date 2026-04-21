@@ -14,6 +14,13 @@ $n_orden_co = isset($_POST['n_orden_co']) ? $_POST['n_orden_co'] : null;
 $usuario_autoriza = isset($_POST['usuario_autoriza']) ? $_POST['usuario_autoriza'] : null;
 if (empty($n_orden_co) || empty($usuario_autoriza)) { http_response_code(400); exit('...'); }
 
+// --- SEGURIDAD: RODRIAL NO PUEDE AUTORIZAR ---
+if ($usuario_autoriza === 'RODRIAL') {
+    http_response_code(403);
+    echo json_encode(['status' => 'error', 'message' => 'El usuario RODRIAL no tiene permisos para autorizar órdenes. Solo puede derivar.']);
+    exit();
+}
+
 // Obtenemos el nombre del proveedor Y el usuario que ingresó la OC
 $sql_check = "SELECT A.USUARIO_INGRESO AS usuario_creador, B.NOM_PROVEE AS proveedor_nombre FROM CPA35 AS A INNER JOIN CPA01 AS B ON A.COD_PROVEE = B.COD_PROVEE WHERE A.N_ORDEN_CO = ? AND A.ESTADO = 1";
 $params_check = [$n_orden_co];
@@ -58,6 +65,18 @@ if (sqlsrv_rows_affected($stmt_update) > 0) {
         }
     }
     // Si el usuario_creador NO está en el archivo, simplemente no se hace nada.
+
+    // --- LIMPIEZA DE DERIVACIÓN SI ES PROVEEDOR ESPECIAL ---
+    $sql_prov_especial = "SELECT COD_PROVEE FROM CPA35 WHERE N_ORDEN_CO = ?";
+    $stmt_prov_especial = sqlsrv_query($conn, $sql_prov_especial, [$n_orden_co]);
+    if ($stmt_prov_especial && $row_prov = sqlsrv_fetch_array($stmt_prov_especial, SQLSRV_FETCH_ASSOC)) {
+        $cod_provee = $row_prov['COD_PROVEE'];
+        if (in_array($cod_provee, ['OGONIS', 'OGGESS'])) {
+            $sql_del = "DELETE FROM sistemas.dbo.FP_DERIVACION_OC WHERE COD_PROVEE = ?";
+            sqlsrv_query($conn_sistemas, $sql_del, [$cod_provee]);
+        }
+        sqlsrv_free_stmt($stmt_prov_especial);
+    }
     
     echo json_encode(['status' => 'success', 'message' => '¡OC autorizada con éxito!']);
 

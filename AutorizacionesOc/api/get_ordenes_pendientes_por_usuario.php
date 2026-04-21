@@ -33,8 +33,8 @@ if ($stmt_todos_asignados) {
 
 $where_clause = "";
 
-if ($usuario_seleccionado === 'DANM') {
-    // Lógica DANM:
+if ($usuario_seleccionado === 'RODRIAL') {
+    // Lógica RODRIAL (DERIVADOR):
     $sql_asignados = "SELECT COD_PROVEE FROM sistemas.dbo.FP_DERIVACION_OC";
     $stmt_asignados = sqlsrv_query($conn_sistemas, $sql_asignados);
     $proveedores_asignados = [];
@@ -49,14 +49,14 @@ if ($usuario_seleccionado === 'DANM') {
     if (!empty($proveedores_asignados)) { 
         $lista_excluidos = implode(',', $proveedores_asignados);
         
-        // --- INICIO CAMBIO LÓGICA DE FILTRADO ---
+        // --- INICIO LÓGICA DE FILTRADO PARA DERIVADOR ---
         // Se ve si: (No está asignado) O (Es Gestion Servicios Y dice LOGISTICA)
         $where_clause .= " AND (
             A.COD_PROVEE NOT IN (" . $lista_excluidos . ") 
             OR 
             (B.NOM_PROVEE LIKE '%GESTION SERVICIOS%' AND A.OBSERVACIO LIKE '%LOGISTICA%')
         ) "; 
-        // --- FIN CAMBIO LÓGICA DE FILTRADO ---
+        // --- FIN LÓGICA DE FILTRADO PARA DERIVADOR ---
     }
     
 } else {
@@ -93,7 +93,6 @@ $sql_ordenes = "
     INNER JOIN CPA01 B ON A.COD_PROVEE = B.COD_PROVEE
     INNER JOIN CPA50 C ON A.ID_CPA50 = C.ID_CPA50
     WHERE A.ESTADO = 1 
-      AND A.TOTAL_CTE >= 1000000
       " . $where_clause . " 
     ORDER BY A.FECHA_INGRESO ASC;";
 

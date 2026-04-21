@@ -336,13 +336,13 @@ class PresupuestoApp {
      * Cargar datos de solapa específica (lazy loading) - MEJORADO
      */
     async cargarDatosSolapa(solapa) {
-        // La solapa de historial se carga bajo demanda, no aquí.
-        if (solapa === 'historial') {
+        // Solapas con gestores propios se cargan bajo demanda, no aquí.
+        if (solapa === 'historial' || solapa === 'compras-detalle' || solapa === 'ventas-6-meses') {
             return;
         }
 
         // Si ya están cargados, no recargar
-        if (this.datos[solapa].length > 0) {
+        if (this.datos[solapa] && this.datos[solapa].length > 0) {
             return;
         }
 
@@ -504,18 +504,11 @@ class PresupuestoApp {
     }
 
     /**
-     * Actualizar última actualización (SOLO MANUAL)
+     * Actualizar última actualización - valor real viene de la BD vía mostrarInfoTemporada()
      */
     actualizarUltimaActualizacion() {
-        const ahora = new Date();
-        const hora = ahora.toLocaleTimeString('es-AR', { 
-            hour: '2-digit', 
-            minute: '2-digit' 
-        });
-        const elemento = document.getElementById('ultima-actualizacion');
-        if (elemento) {
-            elemento.textContent = hora;
-        }
+        // El valor se muestra desde RO_PC_T_VENTAS_PRESUPUESTO_COMPRAS.ULT_ACTUALIZACION
+        // a través de UIUtils.mostrarInfoTemporada(). No se sobreescribe con la hora local.
     }
 
     /**

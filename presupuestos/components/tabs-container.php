@@ -31,7 +31,13 @@
                     </button>
                 </li>
                 <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="ventas-6-meses-tab" data-bs-toggle="tab" 
+                    <button class="nav-link" id="contenedores-tab" data-bs-toggle="tab"
+                            data-bs-target="#contenedores" type="button" role="tab">
+                        <i class="fas fa-ship me-2"></i>Contenedores
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="ventas-6-meses-tab" data-bs-toggle="tab"
                             data-bs-target="#ventas-6-meses" type="button" role="tab">
                         <i class="fas fa-chart-line me-2"></i>Venta Sucursales (Últ. 6 Meses)
                     </button>
@@ -57,6 +63,9 @@
                 
                 <!-- Compras Pendientes -->
                 <?php include 'components/tabs/compras-detalle-tab.php'; ?>
+
+                <!-- Contenedores -->
+                <?php include 'components/tabs/contenedores-tab.php'; ?>
 
                 <!-- Ventas 6 Meses -->
                 <?php include 'components/tabs/ventas-6-meses-tab.php'; ?>

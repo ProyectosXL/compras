@@ -137,6 +137,21 @@
     max-height: calc(100vh - 400px) !important;
 }
 
+/* Específico para contenedores */
+#contenedores .table-responsive {
+    max-height: calc(100vh - 400px) !important;
+}
+
+#contenedores #tabla-contenedores {
+    width: auto;
+    min-width: unset;
+}
+
+#resumen-contenedores-superior {
+    padding: 0.4rem;
+    flex-shrink: 0;
+}
+
 /* Headers de tabla más compactos */
 .table thead th {
     padding: 0.3rem 0.2rem;
@@ -209,10 +224,11 @@
         max-height: calc(100vh - 120px);
     }
     
-    #compras-detalle .table-responsive {
+    #compras-detalle .table-responsive,
+    #contenedores .table-responsive {
         max-height: calc(100vh - 400px) !important;
     }
-    
+
     .table thead th,
     .table tbody td {
         padding: 0.1rem 0.1rem;
@@ -234,10 +250,11 @@
         max-height: calc(100vh - 100px);
     }
     
-    #compras-detalle .table-responsive {
+    #compras-detalle .table-responsive,
+    #contenedores .table-responsive {
         max-height: calc(100vh - 400px) !important;
     }
-    
+
     /* Mostrar solo columnas esenciales */
     .table th:nth-child(n+5),
     .table td:nth-child(n+5) {

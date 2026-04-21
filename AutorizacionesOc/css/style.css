@@ -186,7 +186,7 @@ label {
     font-size: 0.875rem;
 }
 
-select, input[type="date"] {
+select, input[type="date"], input[type="text"] {
     width: 100%;
     appearance: none;
     padding: 0.75rem;
@@ -194,10 +194,37 @@ select, input[type="date"] {
     border: 1px solid var(--border-color);
     border-radius: 8px;
     background-color: #fff;
+    transition: all 0.2s ease;
+}
+
+select {
     background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20256%20256%22%3E%3Cpath%20fill%3D%22%236c757d%22%20d%3D%22m215.79%2099.41l-80-80a12%2012%200%200%200-17.58%200l-80%2080a12%2012%200%200%200%208.79%2020.59h160a12%2012%200%200%200%208.79-20.59Z%22%20transform%3D%22rotate(180%20128%20128)%22%2F%3E%3C%2Fsvg%3E');
     background-repeat: no-repeat;
     background-position: right .75rem center;
     background-size: 1em;
+}
+
+input[type="text"]:focus, input[type="date"]:focus, select:focus {
+    border-color: var(--primary-color);
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(13, 110, 251, 0.1);
+}
+
+.search-input-wrapper {
+    position: relative;
+}
+
+.search-input-wrapper i {
+    position: absolute;
+    left: 0.875rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-secondary);
+    font-size: 1rem;
+}
+
+.search-input-wrapper input {
+    padding-left: 2.5rem !important;
 }
 
 input[type="date"] { background-image: none; }
@@ -238,18 +265,18 @@ input[type="date"] { background-image: none; }
 /* --- Pestaña de Consulta (Tabla responsiva) --- */
 .filtros { display: grid; grid-template-columns: 1fr; gap: 1rem; }
 .resultados-tabla { width: 100%; }
-#consulta-tabla tr {
+#consulta-tabla tr, #derivaciones-tabla tr {
     display: block; border-radius: var(--border-radius); box-shadow: var(--shadow);
     background: var(--surface); padding: 1.25rem; margin-bottom: 1rem;
 }
-#consulta-tabla thead { display: none; }
-#consulta-tabla td {
+#consulta-tabla thead, #derivaciones-tabla thead { display: none; }
+#consulta-tabla td, #derivaciones-tabla td {
     display: flex; justify-content: space-between; align-items: center;
     padding: 0.5rem 0; border-bottom: 1px solid var(--border-color);
 }
-#consulta-tabla tr:last-child { margin-bottom: 0; }
-#consulta-tabla td:last-child { border: none; }
-#consulta-tabla td::before {
+#consulta-tabla tr:last-child, #derivaciones-tabla tr:last-child { margin-bottom: 0; }
+#consulta-tabla td:last-child, #derivaciones-tabla td:last-child { border: none; }
+#consulta-tabla td::before, #derivaciones-tabla td::before {
     content: attr(data-label); font-weight: 600;
     color: var(--text-secondary); text-align: left;
 }

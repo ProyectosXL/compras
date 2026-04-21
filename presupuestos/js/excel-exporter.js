@@ -319,6 +319,14 @@ class ExcelExporter {
                         nombreArchivo = `ventas_6meses_${ExcelExporter.obtenerFechaHora()}.xlsx`;
                     }
                     break;
+
+                case 'contenedores':
+                    // La exportación de contenedores se delega a ContenedoresManager.exportarExcel()
+                    // que maneja los modos de agrupación (detalle/rubro/proveedor/contenedor)
+                    if (typeof ContenedoresManager !== 'undefined') {
+                        await ContenedoresManager.exportarExcel();
+                    }
+                    return; // Sale sin pasar por ExcelExporter.exportarExcel() abajo
             }
 
             if (!datosPreparados || datosPreparados.length === 0) {

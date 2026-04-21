@@ -13,6 +13,7 @@
     ?>
 
     <main class="container">
+        <?php $es_rodrial = ($usuario_externo === 'RODRIAL'); ?>
         <!-- Pestaña 1: RESUMEN (Dashboard) -->
         <div id="tab-resumen" class="tab-content active">
             <div class="header"><h1>Resumen General</h1><p>Indicadores clave de tus órdenes de compra.</p></div>
@@ -43,12 +44,33 @@
             </div>
             <table class="resultados-tabla" id="consulta-tabla"><tbody id="tabla-resultados-body"></tbody></table>
         </div>
+
+        <!-- Pestaña 4: DERIVACIONES (Solo para RODRIAL) -->
+        <?php if ($usuario_externo === 'RODRIAL'): ?>
+        <div id="tab-derivaciones" class="tab-content">
+            <div class="header"><h1>Historial de Derivación</h1><p>Proveedores asignados a usuarios autorizadores.</p></div>
+            <div class="filter-card">
+                <div class="form-group" style="margin-bottom: 1rem;">
+                    <label for="buscar-derivacion">¿Qué deseas buscar hoy?</label>
+                    <div class="search-input-wrapper">
+                        <i class="bi bi-search"></i>
+                        <input type="text" id="buscar-derivacion" placeholder="Busca por proveedor, código o usuario...">
+                    </div>
+                </div>
+                <button id="btn-actualizar-derivaciones" class="btn btn-primary" style="margin-top:0.5rem;"><i class="bi bi-arrow-clockwise"></i> Actualizar Listado</button>
+            </div>
+            <table class="resultados-tabla" id="derivaciones-tabla"><tbody id="tabla-derivaciones-body"></tbody></table>
+        </div>
+        <?php endif; ?>
     </main>
 
     <nav class="bottom-nav">
         <a href="#resumen" class="nav-item active"><i class="bi bi-pie-chart-fill"></i><span>Resumen</span></a>
         <a href="#gestion" class="nav-item"><i class="bi bi-card-checklist"></i><span>Gestión</span></a>
         <a href="#consulta" class="nav-item"><i class="bi bi-search"></i><span>Consulta</span></a>
+        <?php if ($usuario_externo === 'RODRIAL'): ?>
+        <a href="#derivaciones" class="nav-item"><i class="bi bi-person-gear"></i><span>Derivaciones</span></a>
+        <?php endif; ?>
     </nav>
     
     <!-- Modal para Derivación -->
@@ -84,10 +106,11 @@
 <script>
 document.addEventListener('DOMContentLoaded', () => {
     let usuarioActivo = "<?php echo $usuario_externo; ?>";
-    const esDispatcher = (usuarioActivo === 'DANM');
+    const esDispatcher = (usuarioActivo === 'RODRIAL');
 
     const navItems = document.querySelectorAll('.nav-item');
     const tabs = document.querySelectorAll('.tab-content');
+    let allDerivaciones = []; // Almacén local para filtrado
     const formatCurrency = (amount) => new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(amount || 0);
     
     navItems.forEach(item => {
@@ -112,6 +135,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (tabId === 'tab-resumen') loadResumenData();
         if (tabId === 'tab-gestion') loadGestionData();
         if (tabId === 'tab-consulta') loadConsultaData();
+        if (tabId === 'tab-derivaciones') loadDerivacionesData();
     };
 
     const genericModal = document.getElementById('generic-modal');
@@ -229,20 +253,19 @@ const buscarPendientesParaUsuario = (usuario) => {
                 <div class="action-card-monto">${formatCurrency(oc.monto)}</div>
             `;
 
-            const regularButtons = `
+            // Botones de Autorizar/Rechazar: Solo si NO es el dispatcher (RODRIAL)
+            let actionButtonsHTML = '';
+            if (!esDispatcher) {
+                actionButtonsHTML = `
                 <div class="action-card-buttons">
                     <button class="btn btn-danger btn-flex rechazar" data-oc="${oc.numero}">Rechazar</button>
                     <button class="btn btn-success btn-flex autorizar" data-oc="${oc.numero}">Autorizar</button>
                 </div>`;
+            }
             
-            // --- INICIO DE LA CORRECCIÓN ---
-            // 1. Creamos una variable para el botón del dispatcher, inicialmente vacía.
+            // Botón de Derivación: Solo si ES el dispatcher Y el proveedor no está asignado.
             let dispatcherButtonHTML = '';
-
-            // 2. Comprobamos si es el dispatcher Y si el proveedor NO está asignado (oc.asignado == 0).
-            //    El campo 'oc.asignado' viene del API que modificamos antes.
             if (esDispatcher && oc.asignado == 0) {
-                // 3. Solo si se cumplen las condiciones, creamos el HTML del botón.
                 dispatcherButtonHTML = `
                     <div class="action-card-buttons" style="margin-top: 0.5rem;">
                         <button class="btn btn-secondary btn-flex derivar-btn" 
@@ -253,11 +276,7 @@ const buscarPendientesParaUsuario = (usuario) => {
                     </div>`;
             }
             
-            // 4. Construimos el HTML final de la tarjeta. 
-            //    La variable dispatcherButtonHTML contendrá el botón o una cadena vacía.
-            card.innerHTML = baseHtml + regularButtons + dispatcherButtonHTML;
-            // --- FIN DE LA CORRECCIÓN ---
-
+            card.innerHTML = baseHtml + actionButtonsHTML + dispatcherButtonHTML;
             gestionContainer.appendChild(card);
         });
     }).catch(err => {
@@ -298,7 +317,7 @@ const buscarPendientesParaUsuario = (usuario) => {
             derivarSelect.innerHTML = '<option value="">Cargando...</option>';
             fetch('api/get_autorizadores.php').then(r => r.json()).then(users => {
                 derivarSelect.innerHTML = '<option value="">-- Seleccionar --</option>';
-                users.forEach(user => { if (user !== 'DANM') { derivarSelect.innerHTML += `<option value="${user}">${user}</option>`; }});
+                users.forEach(user => { if (user !== 'RODRIAL') { derivarSelect.innerHTML += `<option value="${user}">${user}</option>`; }});
             });
             derivarModal.classList.add('active');
             return;
@@ -340,7 +359,7 @@ const buscarPendientesParaUsuario = (usuario) => {
 
     const loadConsultaData = () => {
         const consultaSubtitulo = document.getElementById('consulta-subtitulo');
-        if (usuarioActivo) { consultaSubtitulo.textContent = `Busca en las OCs donde ${usuarioActivo} estuvo involucrado.`;
+        if (usuarioActivo && !esDispatcher) { consultaSubtitulo.textContent = `Busca en las OCs donde ${usuarioActivo} estuvo involucrado.`;
         } else { consultaSubtitulo.textContent = 'Busca en el historial global de OCs.'; }
         const consultaEstadoSelect = document.getElementById('filtro-estado');
         const estados = { 1: 'Ingresada', 2: 'Autorizada', 4: 'Desautorizada', 10: 'Cumplida', 11: 'Cerrada' };
@@ -353,7 +372,7 @@ const buscarPendientesParaUsuario = (usuario) => {
         const consultaTbody = document.getElementById('tabla-resultados-body');
         consultaTbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Buscando...</td></tr>';
         const params = new URLSearchParams();
-        if (usuarioActivo) { params.append('usuario_involucrado', usuarioActivo); }
+        if (usuarioActivo && !esDispatcher) { params.append('usuario_involucrado', usuarioActivo); }
         if (document.getElementById('filtro-estado').value) { params.append('estado', document.getElementById('filtro-estado').value); }
         if (document.getElementById('filtro-fecha-desde').value) { params.append('fecha_desde', document.getElementById('filtro-fecha-desde').value); }
         if (document.getElementById('filtro-fecha-hasta').value) { params.append('fecha_hasta', document.getElementById('filtro-fecha-hasta').value); }
@@ -368,6 +387,46 @@ const buscarPendientesParaUsuario = (usuario) => {
             });
         }).catch(err => { console.error(err); consultaTbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">Error al cargar los datos.</td></tr>'; });
     });
+
+    const loadDerivacionesData = () => {
+        const tbody = document.getElementById('tabla-derivaciones-body');
+        if (!tbody) return;
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">Buscando...</td></tr>';
+        fetch('api/get_derivaciones.php').then(r => r.json()).then(data => {
+            allDerivaciones = data;
+            renderDerivaciones(allDerivaciones);
+        }).catch(err => { console.error(err); tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">Error al cargar los datos.</td></tr>'; });
+    };
+
+    const renderDerivaciones = (data) => {
+        const tbody = document.getElementById('tabla-derivaciones-body');
+        if (!tbody) return;
+        tbody.innerHTML = '';
+        if (!data || data.length === 0) { tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">No se encontraron resultados.</td></tr>'; return; }
+        data.forEach(d => {
+            tbody.innerHTML += `
+                <tr>
+                    <td data-label="Proveedor"><strong>${d.COD_PROVEE}</strong><br><small>${d.proveedor || 'N/A'}</small></td>
+                    <td data-label="Usuario Asignado"><span class="status status-autorizada" style="background:var(--primary-color);color:white;">${d.usuario}</span></td>
+                    <td data-label="Asignado Por"><small>${d.ASIGNADO_POR}</small></td>
+                    <td data-label="Fecha">${d.fecha}</td>
+                </tr>`;
+        });
+    };
+
+    if (esDispatcher) {
+        document.getElementById('btn-actualizar-derivaciones')?.addEventListener('click', loadDerivacionesData);
+        document.getElementById('buscar-derivacion')?.addEventListener('input', (e) => {
+            const query = e.target.value.toLowerCase().trim();
+            const filtered = allDerivaciones.filter(d => 
+                (d.COD_PROVEE || '').toLowerCase().includes(query) ||
+                (d.proveedor || '').toLowerCase().includes(query) ||
+                (d.usuario || '').toLowerCase().includes(query) ||
+                (d.ASIGNADO_POR || '').toLowerCase().includes(query)
+            );
+            renderDerivaciones(filtered);
+        });
+    }
     
     // Carga inicial
     loadTabData('tab-resumen');

@@ -21,6 +21,7 @@
 
 <!-- Resto de módulos -->
 <script src="js/compras-manager.js"></script>
+<script src="js/contenedores-manager.js"></script>
 <script src="js/totales-compra.js"></script>
 <script src="js/totales-stock.js"></script>
 <script src="js/excel-exporter.js"></script>
@@ -176,9 +177,10 @@
             'BusquedaManager': typeof BusquedaManager !== 'undefined',
             'IndiceEditor': typeof IndiceEditor !== 'undefined',
             'ComprasManager': typeof ComprasManager !== 'undefined',
+            'ContenedoresManager': typeof ContenedoresManager !== 'undefined',
             'PresupuestoApp': typeof PresupuestoApp !== 'undefined'
         };
-        
+
         const faltantes = Object.entries(modulos)
             .filter(([nombre, cargado]) => !cargado)
             .map(([nombre]) => nombre);
@@ -206,6 +208,7 @@
                     'BusquedaManager': typeof BusquedaManager !== 'undefined',
                     'IndiceEditor': typeof IndiceEditor !== 'undefined',
                     'ComprasManager': typeof ComprasManager !== 'undefined',
+                    'ContenedoresManager': typeof ContenedoresManager !== 'undefined',
                     'PresupuestoApp': typeof PresupuestoApp !== 'undefined'
                 }
             },
@@ -225,6 +228,10 @@
                 {
                     solapa: 'compras-detalle',
                     registros: ComprasManager?.datos?.length || 0
+                },
+                {
+                    solapa: 'contenedores',
+                    registros: ContenedoresManager?.datos?.length || 0
                 }
             ]
         };
@@ -259,9 +266,14 @@
             ComprasManager.datos = [];
             ComprasManager.datosFiltrados = [];
         }
-        
+
+        if (ContenedoresManager) {
+            ContenedoresManager.datos = [];
+            ContenedoresManager.datosFiltrados = [];
+        }
+
         // Limpiar contenido de tablas
-        const tablas = ['tbody-verano', 'tbody-invierno', 'tbody-stock', 'tbody-compras-detalle'];
+        const tablas = ['tbody-verano', 'tbody-invierno', 'tbody-stock', 'tbody-compras-detalle', 'tbody-contenedores'];
         tablas.forEach(id => {
             const tabla = document.getElementById(id);
             if (tabla) {
@@ -270,7 +282,7 @@
         });
         
         // Resetear contadores
-        const contadores = ['count-verano', 'count-invierno', 'count-stock', 'count-compras-detalle'];
+        const contadores = ['count-verano', 'count-invierno', 'count-stock', 'count-compras-detalle', 'count-contenedores'];
         contadores.forEach(id => {
             const contador = document.getElementById(id);
             if (contador) {

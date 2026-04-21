@@ -27,10 +27,16 @@ $cod_provee = isset($_POST['cod_provee']) ? trim($_POST['cod_provee']) : null;
 $usuario_asignado = isset($_POST['usuario_asignado']) ? trim($_POST['usuario_asignado']) : null;
 $asignado_por = isset($_POST['asignado_por']) ? trim($_POST['asignado_por']) : null; // Quién hizo la derivación
 
-// Validamos que los datos necesarios estén presentes
 if (empty($cod_provee) || empty($usuario_asignado) || empty($asignado_por)) {
     http_response_code(400);
     echo json_encode(['status' => 'error', 'message' => 'Faltan parámetros requeridos.']);
+    exit();
+}
+
+// --- SEGURIDAD: SOLO RODRIAL PUEDE DERIVAR ---
+if ($asignado_por !== 'RODRIAL') {
+    http_response_code(403);
+    echo json_encode(['status' => 'error', 'message' => 'No tienes permisos para realizar derivaciones. Solo el usuario RODRIAL está autorizado.']);
     exit();
 }
 

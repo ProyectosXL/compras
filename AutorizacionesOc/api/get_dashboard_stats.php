@@ -18,8 +18,8 @@ $where_pendientes = '';
 
 // 2. Lógica de filtros (DANM vs Usuario Normal)
 if ($usuario_seleccionado) {
-    if ($usuario_seleccionado === 'DANM') {
-        // --- LÓGICA DANM ---
+    if ($usuario_seleccionado === 'RODRIAL') {
+        // --- LÓGICA RODRIAL (DERIVADOR) ---
         $sql_asignados = "SELECT COD_PROVEE FROM sistemas.dbo.FP_DERIVACION_OC";
         $stmt_asignados = sqlsrv_query($conn_sistemas, $sql_asignados);
         
@@ -39,8 +39,8 @@ if ($usuario_seleccionado) {
             $where_pendientes .= " AND A.COD_PROVEE NOT IN ({$lista_proveedores_str}) ";
         }
         
-        // Condición de monto para DANM
-        $where_pendientes .= " AND A.TOTAL_CTE >= 1000000 ";
+        // Se sacó la condición de monto (TOTAL_CTE >= 1.000.000) por pedido usuario.
+        // $where_pendientes .= " AND A.TOTAL_CTE >= 1000000 ";
 
     } else {
         // --- LÓGICA USUARIO NORMAL ---

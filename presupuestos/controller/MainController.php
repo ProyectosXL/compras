@@ -34,7 +34,16 @@ class MainController {
             } else {
                 // Agregar información de temporada
                 $infoTemporada = PresupuestoCalculos::obtenerInfoTemporada();
-                
+
+                // Extraer ULT_ACTUALIZACION del primer registro de la tabla
+                if (!empty($datos) && isset($datos[0]['ULT_ACTUALIZACION'])) {
+                    $ultAct = $datos[0]['ULT_ACTUALIZACION'];
+                    if ($ultAct instanceof DateTime) {
+                        $ultAct = $ultAct->format('d/m/Y H:i');
+                    }
+                    $infoTemporada['ult_actualizacion'] = $ultAct;
+                }
+
                 $this->jsonResponse([
                     'success' => true,
                     'message' => 'Datos base obtenidos correctamente',
@@ -303,6 +312,13 @@ class MainController {
                 $this->delegarIndices($accion);
                 break;
 
+            // Contenedores (OC Pendientes + Importaciones)
+            case 'contenedores-detalle':
+            case 'proveedores-contenedores':
+            case 'rubros-contenedores':
+                $this->delegarContenedores($accion);
+                break;
+
             // Ventas 6 meses
             case 'ventas-6-meses':
             case 'buscar-ventas':
@@ -452,6 +468,26 @@ class MainController {
         
         echo json_encode($data, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
         exit;
+    }
+
+    /**
+     * Delegar funcionalidades de contenedores
+     */
+    private function delegarContenedores($accion) {
+        require_once __DIR__ . '/ContenedoresController.php';
+        $contenedoresController = new ContenedoresController();
+
+        switch ($accion) {
+            case 'contenedores-detalle':
+                $contenedoresController->obtenerContenedoresDetalle();
+                break;
+            case 'proveedores-contenedores':
+                $contenedoresController->obtenerProveedores();
+                break;
+            case 'rubros-contenedores':
+                $contenedoresController->obtenerRubros();
+                break;
+        }
     }
 
     /**

@@ -176,31 +176,36 @@ class UIUtils {
         if (info && info.temporada_actual) {
             const container = document.getElementById('info-temporada-container');
             const temporadaElement = document.getElementById('temporada-actual');
-            const diasTotalesElement = document.getElementById('dias-totales'); // NUEVO
+            const diasTotalesElement = document.getElementById('dias-totales');
             const diasElement = document.getElementById('dias-restantes');
             const fechaElement = document.getElementById('fecha-actual');
-            
+            const ultActElement = document.getElementById('ultima-actualizacion');
+
             if (temporadaElement) {
                 temporadaElement.textContent = `${info.temporada_actual.temporada} ${info.temporada_actual.ano}`;
             }
-            
-            // NUEVO: Mostrar días totales
+
             if (diasTotalesElement && info.dias_totales) {
                 diasTotalesElement.textContent = info.dias_totales;
             }
-            
+
             if (diasElement) {
                 diasElement.textContent = info.dias_restantes;
             }
-            
+
             if (fechaElement) {
                 fechaElement.textContent = `Fecha: ${info.fecha_calculo}`;
             }
-            
+
+            // Mostrar ULT_ACTUALIZACION desde la base de datos
+            if (ultActElement) {
+                ultActElement.textContent = info.ult_actualizacion || '--';
+            }
+
             if (container) {
                 container.style.display = 'block';
             }
-            
+
             // Actualizar headers dinámicos
             UIUtils.actualizarHeadersDinamicos(info);
         }
