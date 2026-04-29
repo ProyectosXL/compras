@@ -96,12 +96,45 @@
         </div>
     </div>
     
-    <!-- Modal Genérico -->
+    <!-- Modal Detalle OC -->
+    <div class="modal-overlay" id="detalle-modal">
+        <div class="modal-content" style="max-width: 850px; width: 95%;">
+            <div class="modal-header">
+                <h3 id="detalle-modal-title" style="margin:0; color:var(--text-primary);">Detalle de la Orden</h3>
+            </div>
+            <div class="modal-body" style="overflow-x: auto; max-height: 60vh;">
+                <table class="detail-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 20%; text-align: left;">Código</th>
+                            <th style="width: 40%; text-align: left;">Descripción</th>
+                            <th style="width: 25%; text-align: left;">Info Adicional</th>
+                            <th style="width: 15%; text-align: center;">Cant.</th>
+                        </tr>
+                    </thead>
+                    <tbody id="detalle-tabla-body">
+                        <!-- JS Dinámico -->
+                    </tbody>
+                </table>
+            </div>
+            <div class="modal-footer" style="background: #f8f9fa; border-radius: 0 0 16px 16px; border-top: 1px solid #eee;">
+                <button id="detalle-cerrar-btn" class="btn btn-secondary btn-flex" style="margin-top:0;">Cerrar Detalle</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Genérico (Confirmaciones/Alertas) -->
     <div class="modal-overlay" id="generic-modal">
         <div class="modal-content">
-            <div class="modal-header"><h3 id="modal-title"></h3></div>
-            <div class="modal-body"><p id="modal-message"></p></div>
-            <div class="modal-footer" id="modal-footer-buttons"></div>
+            <div class="modal-header">
+                <h3 id="modal-title"></h3>
+            </div>
+            <div class="modal-body">
+                <p id="modal-message"></p>
+            </div>
+            <div class="modal-footer" id="modal-footer-buttons">
+                <!-- Botones dinámicos -->
+            </div>
         </div>
     </div>
 
@@ -365,7 +398,12 @@ const buscarPendientesParaUsuario = (usuario) => {
                     ${autorizadorHtml}
                     ${observacionHtml}
                 </div>
-                <div class="action-card-monto">${formatCurrency(oc.monto)}</div>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1rem;">
+                    <button class="btn-detalle ver-detalle-btn" data-oc="${oc.numero}" title="Ver ítems de la OC">
+                        <i class="bi bi-list-ul"></i> Ver Detalle
+                    </button>
+                    <div class="action-card-monto">${formatCurrency(oc.monto)}</div>
+                </div>
             `;
 
             // Botones de Autorizar/Rechazar: Solo si NO es un responsable de reglas (RODRIAL/RODRIGOAL)
@@ -410,24 +448,61 @@ const buscarPendientesParaUsuario = (usuario) => {
         } else { alert('Por favor, selecciona un usuario.'); }
     });
 
+    const detalleModal = document.getElementById('detalle-modal');
+    const detalleTablaBody = document.getElementById('detalle-tabla-body');
+    const detalleCerrarBtn = document.getElementById('detalle-cerrar-btn');
+
+    detalleCerrarBtn.addEventListener('click', () => detalleModal.classList.remove('active'));
+
     gestionContainer.addEventListener('click', e => {
-        if (e.target.classList.contains('derivar-btn')) {
-            const boton = e.target;
-            derivarModal.dataset.codProvee = boton.dataset.codProvee;
-            derivarTitle.textContent = `Derivar Proveedor`;
-            derivarMessage.innerHTML = `Asignar permanentemente <strong>${boton.dataset.proveedorNombre}</strong> a un usuario:`;
-            derivarSelect.innerHTML = '<option value="">Cargando...</option>';
-            fetch('api/get_autorizadores.php').then(r => r.json()).then(users => {
-                derivarSelect.innerHTML = '<option value="">-- Seleccionar --</option>';
-                users.forEach(user => { if (user !== 'RODRIAL') { derivarSelect.innerHTML += `<option value="${user}">${user}</option>`; }});
-            });
-            derivarModal.classList.add('active');
+        const detailBtn = e.target.closest('.ver-detalle-btn');
+        if (detailBtn) {
+            const numeroOC = detailBtn.dataset.oc;
+            document.getElementById('detalle-modal-title').textContent = `Artículos de OC: ${numeroOC}`;
+            detalleTablaBody.innerHTML = '<tr><td colspan="4" style="text-align:center;">Cargando...</td></tr>';
+            detalleModal.classList.add('active');
+
+            fetch(`api/get_detalle_orden.php?n_orden_co=${encodeURIComponent(numeroOC)}`)
+                .then(r => r.json())
+                .then(items => {
+                    detalleTablaBody.innerHTML = '';
+                    if (items.error) {
+                        detalleTablaBody.innerHTML = `<tr><td colspan="4" style="text-align:center; color:red;">${items.error}</td></tr>`;
+                        return;
+                    }
+                    if (items.length === 0) {
+                        detalleTablaBody.innerHTML = '<tr><td colspan="4" style="text-align:center;">No se encontraron artículos.</td></tr>';
+                        return;
+                    }
+                    items.forEach(it => {
+                        const tr = document.createElement('tr');
+                        tr.innerHTML = `
+                            <td><span class="item-code">${it.COD_ARTICU}</span></td>
+                            <td style="font-weight:600;">${it.DESCRIPCION_ARTICULO}</td>
+                            <td><small style="color:var(--text-secondary);">${it.DESC_ADICIONAL_ARTICULO || '-'}</small></td>
+                            <td style="text-align:center;">
+                                <span class="item-qty-badge">${it.CAN_PEDIDA}</span>
+                            </td>
+                        `;
+                        detalleTablaBody.appendChild(tr);
+                    });
+                })
+                .catch(err => {
+                    console.error(err);
+                    detalleTablaBody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:red;">Error de carga.</td></tr>';
+                });
             return;
         }
+
+        const btnAutorizar = e.target.closest('.autorizar');
+        const btnRechazar = e.target.closest('.rechazar');
         
-        const isAutorizar = e.target.classList.contains('autorizar'); const isRechazar = e.target.classList.contains('rechazar');
-        if (!isAutorizar && !isRechazar) return;
-        const boton = e.target; const numeroOC = boton.dataset.oc;
+        if (!btnAutorizar && !btnRechazar) return;
+        
+        const isAutorizar = !!btnAutorizar;
+        const isRechazar = !!btnRechazar;
+        const boton = btnAutorizar || btnRechazar;
+        const numeroOC = boton.dataset.oc;
 
         const ejecutarAccion = (endpoint, formData) => {
             boton.textContent = '...'; boton.disabled = true;

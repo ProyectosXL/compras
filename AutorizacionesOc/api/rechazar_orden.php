@@ -10,7 +10,7 @@ require_once '../config/mailer.php';
 $destinatarios_config = require_once '../config/destinatarios.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') { http_response_code(405); exit('...'); }
-$n_orden_co = isset($_POST['n_orden_co']) ? $_POST['n_orden_co'] : null;
+$n_orden_co = isset($_POST['n_orden_co']) ? trim($_POST['n_orden_co']) : null;
 $usuario_rechaza = isset($_POST['usuario_rechaza']) ? $_POST['usuario_rechaza'] : null;
 $motivo = isset($_POST['motivo']) ? trim($_POST['motivo']) : '';
 if (empty($n_orden_co) || empty($usuario_rechaza) || empty($motivo)) { http_response_code(400); exit('...'); }
@@ -23,7 +23,7 @@ if ($usuario_rechaza === 'RODRIAL') {
 }
 
 // Obtenemos el nombre del proveedor Y el usuario que ingresó la OC
-$sql_check = "SELECT A.USUARIO_INGRESO AS usuario_creador, B.NOM_PROVEE AS proveedor_nombre FROM CPA35 AS A INNER JOIN CPA01 AS B ON A.COD_PROVEE = B.COD_PROVEE WHERE A.N_ORDEN_CO = ? AND A.ESTADO = 1";
+$sql_check = "SELECT A.USUARIO_INGRESO AS usuario_creador, B.NOM_PROVEE AS proveedor_nombre FROM CPA35 AS A INNER JOIN CPA01 AS B ON A.COD_PROVEE = B.COD_PROVEE WHERE LTRIM(A.N_ORDEN_CO) = ? AND A.ESTADO = 1";
 $params_check = [$n_orden_co];
 $stmt_check = sqlsrv_query($conn, $sql_check, $params_check);
 
@@ -36,7 +36,7 @@ if ($stmt_check && sqlsrv_has_rows($stmt_check)) {
 
 $estado_rechazado = 4;
 $motivo_completo = "RECHAZADO APP: " . $motivo;
-$sql_update = "UPDATE CPA35 SET ESTADO = ?, ID_ESTADO_ORDEN_COMPRA = ?, OBSERVACIONES = ?, FECHA_DESAUTORIZACION = GETDATE(), USUARIO_DESAUTORIZACION = ?, TERMINAL_DESAUTORIZACION = 'APP_MOVIL', USUA_ULTIMA_MODIFICACION = ?, HORA_ULTIMA_MODIFICACION = FORMAT(GETDATE(), 'HHmmss'), TERM_ULTIMA_MODIFICACION = 'APP_MOVIL' WHERE N_ORDEN_CO = ? AND ESTADO = 1";
+$sql_update = "UPDATE CPA35 SET ESTADO = ?, ID_ESTADO_ORDEN_COMPRA = ?, OBSERVACIONES = ?, FECHA_DESAUTORIZACION = GETDATE(), USUARIO_DESAUTORIZACION = ?, TERMINAL_DESAUTORIZACION = 'APP_MOVIL', USUA_ULTIMA_MODIFICACION = ?, HORA_ULTIMA_MODIFICACION = FORMAT(GETDATE(), 'HHmmss'), TERM_ULTIMA_MODIFICACION = 'APP_MOVIL' WHERE LTRIM(N_ORDEN_CO) = ? AND ESTADO = 1";
 $params_update = [$estado_rechazado, $estado_rechazado, $motivo_completo, $usuario_rechaza, $usuario_rechaza, $n_orden_co];
 $stmt_update = sqlsrv_query($conn, $sql_update, $params_update);
 
@@ -70,7 +70,7 @@ if (sqlsrv_rows_affected($stmt_update) > 0) {
     // Si no está, no se hace nada.
 
     // --- LIMPIEZA DE DERIVACIÓN SI ES PROVEEDOR ESPECIAL ---
-    $sql_prov_especial = "SELECT COD_PROVEE FROM CPA35 WHERE N_ORDEN_CO = ?";
+    $sql_prov_especial = "SELECT COD_PROVEE FROM CPA35 WHERE LTRIM(N_ORDEN_CO) = ?";
     $stmt_prov_especial = sqlsrv_query($conn, $sql_prov_especial, [$n_orden_co]);
     if ($stmt_prov_especial && $row_prov = sqlsrv_fetch_array($stmt_prov_especial, SQLSRV_FETCH_ASSOC)) {
         $cod_provee = $row_prov['COD_PROVEE'];

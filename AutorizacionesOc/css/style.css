@@ -406,3 +406,21 @@ input[type="date"] { background-image: none; }
 .regla-select:focus { border-color: var(--primary-color); background-color: #fff; outline: none; }
 .regla-select.save-success { border-color: var(--success-color) !important; background-color: #f0fff4 !important; }
 .regla-select.save-loading { border-color: var(--warning-color) !important; background-color: #fffdf0 !important; opacity: 0.7; }
+/* --- Estilos para el Botón de Detalle --- */
+.btn-detalle { background: transparent; border: 1px solid var(--primary-color); color: var(--primary-color); padding: 0.4rem 0.8rem; border-radius: 6px; cursor: pointer; font-size: 0.85rem; font-weight: 600; transition: all 0.2s; display: flex; align-items: center; gap: 0.4rem; }
+.btn-detalle:hover { background: var(--primary-color); color: white; }
+/* --- Estilos para el Modal de Detalle Moderno --- */
+#detalle-modal .modal-content { border-radius: 16px; box-shadow: 0 10px 40px rgba(0,0,0,0.2); border: none; }
+#detalle-modal .modal-header { background: #f8f9fa; border-bottom: 1px solid #eee; padding: 1.25rem; border-radius: 16px 16px 0 0; }
+.detail-table { width: 100%; border-collapse: collapse; margin-top: 0.5rem; }
+.detail-table th { background: #fff; color: var(--text-secondary); text-transform: uppercase; font-size: 0.7rem; font-weight: 700; letter-spacing: 0.05em; padding: 1rem 0.5rem; border-bottom: 2px solid var(--primary-color); text-align: left; }
+.detail-table td { padding: 0.875rem 0.5rem; border-bottom: 1px solid #f1f1f1; font-size: 0.9rem; }
+.detail-table tr:hover td { background: #fcfcfc; }
+.item-code { color: var(--primary-color); font-weight: 700; font-family: monospace; }
+.item-qty-badge { background: #e7f1ff; color: #0056b3; padding: 4px 10px; border-radius: 6px; font-weight: 800; font-size: 0.85rem; border: 1px solid #cfe2ff; }
+/* --- Ajustes de Alineación para Detalle --- */
+.detail-table td { vertical-align: middle; line-height: 1.2; }
+.item-code { display: block; white-space: normal; word-break: break-word; font-size: 0.8rem; line-height: 1.1; max-width: 120px; }
+.detail-table th:nth-child(2), .detail-table td:nth-child(2) { padding-left: 1rem; }
+.detail-table td:nth-child(2) { font-weight: 500; color: #333; }
+.detail-table td:nth-child(3) { color: #888; font-style: italic; }
