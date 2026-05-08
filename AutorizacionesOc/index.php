@@ -539,7 +539,7 @@ const buscarPendientesParaUsuario = (usuario) => {
         if (usuarioActivo && !esDispatcher) { consultaSubtitulo.textContent = `Busca en las OCs donde ${usuarioActivo} estuvo involucrado.`;
         } else { consultaSubtitulo.textContent = 'Busca en el historial global de OCs.'; }
         const consultaEstadoSelect = document.getElementById('filtro-estado');
-        const estados = { 1: 'Ingresada', 2: 'Autorizada', 4: 'Desautorizada', 10: 'Cumplida', 11: 'Cerrada' };
+        const estados = { 1: 'Ingresada', 2: 'Autorizada', 3: 'Emitida', 4: 'Desautorizada', 10: 'Cumplida', 11: 'Cerrada' };
         consultaEstadoSelect.innerHTML = '<option value="">Todos</option>';
         for (const id in estados) { consultaEstadoSelect.innerHTML += `<option value="${id}">${estados[id]}</option>`; }
         document.getElementById('tabla-resultados-body').innerHTML = '<tr><td colspan="6" style="text-align:center;">Usa los filtros para buscar.</td></tr>';
