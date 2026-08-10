@@ -4,7 +4,7 @@
 
 <!-- Scripts modulares del sistema - ORDEN CORRECTO -->
 <script src="js/utils.js"></script>
-<script src="js/api-client.js"></script>
+<script src="js/api-client.js?v=1.5"></script>
 <script src="js/tabla-renderer.js"></script>
 <script src="js/busqueda-manager.js"></script>
 
@@ -26,6 +26,7 @@
 <script src="js/totales-stock.js"></script>
 <script src="js/excel-exporter.js"></script>
 <script src="js/ventas-manager.js"></script>
+<script src="js/distribucion-manager.js?v=1.5"></script>
 
 <!-- Script principal (SIEMPRE AL FINAL) -->
 <script src="js/main.js"></script>
@@ -443,16 +444,7 @@
                     }
                 });
                 
-                // Restaurar solapa activa
-                if (preferencias.ultima_solapa) {
-                    const tab = document.querySelector(`[data-bs-target="#${preferencias.ultima_solapa}"]`);
-                    if (tab) {
-                        setTimeout(() => {
-                            const tabInstance = new bootstrap.Tab(tab);
-                            tabInstance.show();
-                        }, 100);
-                    }
-                }
+                // Restaurar solapa activa (ELIMINADO: Siempre inicia en la primera solapa Verano)
             }
         }
     });

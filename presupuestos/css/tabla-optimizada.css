@@ -403,6 +403,11 @@ html, body {
     max-height: calc(100vh - 350px) !important;
 }
 
+#distribucion .table-responsive,
+#paso-2 .table-responsive {
+    max-height: calc(100vh - 430px) !important;
+}
+
 /* Ajustes específicos para cada solapa */
 .tab-pane {
     height: 100%;

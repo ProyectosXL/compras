@@ -350,4 +350,12 @@
         transform: scale(1.1) !important;
     }
 
+    /* Fix de scroll para Distribución por Canal */
+    #distribucion .table-responsive {
+        max-height: 48vh !important;
+        overflow-y: auto !important;
+        overflow-x: auto !important;
+        display: block !important;
+    }
+
 </style>

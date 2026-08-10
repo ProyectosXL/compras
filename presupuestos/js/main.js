@@ -203,6 +203,13 @@ class PresupuestoApp {
                 // Guardar timestamp de última carga
                 StorageUtils.guardar('ultima_carga', Date.now(), 24 * 60 * 60 * 1000);
                 
+                // Si la solapa activa es distribución, inicializar filtros de fechas
+                const activeTabButton = document.querySelector('#presupuestoTabs button.active');
+                if (activeTabButton && activeTabButton.id === 'distribucion-tab' && typeof DistribucionManager !== 'undefined') {
+                    setTimeout(() => {
+                        DistribucionManager.inicializarFiltrosFechas();
+                    }, 100);
+                }
             } else {
                 throw new Error(datosBase.message);
             }
@@ -337,7 +344,7 @@ class PresupuestoApp {
      */
     async cargarDatosSolapa(solapa) {
         // Solapas con gestores propios se cargan bajo demanda, no aquí.
-        if (solapa === 'historial' || solapa === 'compras-detalle' || solapa === 'ventas-6-meses') {
+        if (solapa === 'historial' || solapa === 'compras-detalle' || solapa === 'ventas-6-meses' || solapa === 'distribucion') {
             return;
         }
 
@@ -395,6 +402,12 @@ class PresupuestoApp {
         // Cargar datos si no están cargados (lazy loading)
         this.cargarDatosSolapa(solapa);
         
+        // Inicializar filtros de fechas y versiones en distribución si se selecciona
+        if (solapa === 'distribucion' && typeof DistribucionManager !== 'undefined') {
+            DistribucionManager.inicializarFiltrosFechas();
+            DistribucionManager.inicializarVersiones();
+        }
+
         // Actualizar preferencias
         this.guardarPreferencia('ultima_solapa', solapa);
         
@@ -674,12 +687,8 @@ class PresupuestoApp {
      * Aplicar preferencias
      */
     aplicarPreferencias(preferencias) {
-        if (preferencias.ultima_solapa) {
-            setTimeout(() => {
-                const tab = document.querySelector(`[data-bs-target="#${preferencias.ultima_solapa}"]`);
-                if (tab) tab.click();
-            }, 1000);
-        }
+        // ELIMINADO: No restaurar la última solapa al recargar para evitar lentitud y concurrencia.
+        // Siempre inicia en la primera solapa por defecto (Compra Proyectada Verano).
 
         if (Date.now() - preferencias.timestamp < 60 * 60 * 1000) {
             Object.keys(preferencias.busquedas || {}).forEach(solapa => {

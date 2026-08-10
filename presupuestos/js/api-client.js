@@ -24,10 +24,17 @@ class APIClient {
                 url.searchParams.append('pais', paisActual);
             }
 
+            if (metodo === 'GET') {
+                url.searchParams.append('_t', Date.now());
+            }
+
             const options = {
                 method: metodo,
+                cache: 'no-store',
                 headers: {
                     'Content-Type': 'application/json',
+                    'Pragma': 'no-cache',
+                    'Cache-Control': 'no-cache, no-store, must-revalidate'
                 }
             };
 
@@ -402,7 +409,52 @@ class APIClient {
         return await APIClient.llamarAPI('cambiar_pais', { pais: pais });
     }
 
+    static async obtenerDistribucionPorCanal(temporada = '', fechaDesde = '', fechaHasta = '', proyeccionesMemoria = [], nombreDistribucion = 'Por defecto') {
+        return await APIClient.llamarAPI('distribucion-canal', { 
+            temporada: temporada, 
+            fecha_desde: fechaDesde, 
+            fecha_hasta: fechaHasta,
+            nombre_distribucion: nombreDistribucion
+        }, 'POST', { proyecciones: proyeccionesMemoria, nombre_distribucion: nombreDistribucion });
+    }
 
+    /**
+     * Guardar distribución por canal
+     */
+    static async guardarDistribucion(filas) {
+        return await APIClient.llamarAPI('guardar-distribucion', {}, 'POST', { filas: filas });
+    }
+
+    /**
+     * Obtener canales disponibles
+     */
+    static async obtenerCanalesDisponibles() {
+        return await APIClient.llamarAPI('canales-disponibles');
+    }
+
+    /**
+     * Obtener lista de versiones guardadas
+     */
+    static async obtenerVersionesGuardadas(temporada = '') {
+        return await APIClient.llamarAPI('obtener-versiones', { temporada: temporada });
+    }
+
+    /**
+     * Obtener datos de costos de proyección agrupados por rubro y categoría
+     */
+    static async obtenerDatosCosto(temporada = '', version = 'Por defecto') {
+        return await APIClient.llamarAPI('costos-proyeccion', { 
+            temporada: temporada, 
+            nombre_distribucion: version 
+        });
+    }
+
+    /**
+     * Guardar costos de proyección
+     */
+    static async guardarCostos(filas) {
+        return await APIClient.llamarAPI('guardar-costos', {}, 'POST', { filas: filas });
+    }
 }
 
 // Configurar interceptores al cargar

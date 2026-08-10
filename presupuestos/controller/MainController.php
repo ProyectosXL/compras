@@ -254,7 +254,7 @@ class MainController {
                     ], 405);
                     break;
             }
-        } catch (Exception $e) {
+        } catch (Throwable $e) {
             $this->jsonResponse([
                 'success' => false,
                 'message' => 'Error procesando solicitud: ' . $e->getMessage()
@@ -327,6 +327,14 @@ class MainController {
             case 'resumen-ventas':
                 $this->delegarVentas($accion);
                 break;
+
+            // Distribución por canal
+            case 'distribucion-canal':
+            case 'canales-disponibles':
+            case 'obtener-versiones':
+            case 'costos-proyeccion':
+                $this->delegarDistribucion($accion);
+                break;
                 
             default:
                 $this->jsonResponse([
@@ -355,6 +363,12 @@ class MainController {
             case 'guardar-presupuesto':
             case 'buscar-historial':
                 $this->delegarHistorial($accion);
+                break;
+            case 'distribucion-canal':
+            case 'canales-disponibles':
+            case 'guardar-distribucion':
+            case 'guardar-costos':
+                $this->delegarDistribucion($accion);
                 break;
             default:
                 $this->jsonResponse([
@@ -529,6 +543,35 @@ class MainController {
                 break;
             case 'buscar-historial':
                 $historialController->buscarHistorial();
+                break;
+        }
+    }
+
+    /**
+     * Delegar funcionalidades de distribución por canal
+     */
+    private function delegarDistribucion($accion) {
+        require_once __DIR__ . '/DistribucionController.php';
+        $distribucionController = new DistribucionController();
+
+        switch ($accion) {
+            case 'distribucion-canal':
+                $distribucionController->obtenerDistribucionPorCanal();
+                break;
+            case 'canales-disponibles':
+                $distribucionController->obtenerCanales();
+                break;
+            case 'obtener-versiones':
+                $distribucionController->obtenerVersiones();
+                break;
+            case 'costos-proyeccion':
+                $distribucionController->obtenerCostosProyeccion();
+                break;
+            case 'guardar-costos':
+                $distribucionController->guardarCostos();
+                break;
+            case 'guardar-distribucion':
+                $distribucionController->guardarDistribucion();
                 break;
         }
     }

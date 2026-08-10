@@ -329,6 +329,69 @@ class UIUtils {
     }
 
     /**
+     * Solicitar texto con un modal personalizado
+     */
+    static async solicitarTexto(titulo, mensaje, valorDefecto = '') {
+        return new Promise((resolve) => {
+            const modalId = 'modal-prompt-' + Date.now();
+            const inputId = 'input-prompt-' + Date.now();
+            
+            const modalHTML = `
+                <div class="modal fade" id="${modalId}" tabindex="-1" aria-hidden="true">
+                    <div class="modal-dialog">
+                        <div class="modal-content shadow-lg border-0">
+                            <div class="modal-header bg-primary text-white" style="background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%) !important;">
+                                <h5 class="modal-title"><i class="fas fa-save me-2"></i>${titulo}</h5>
+                                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body p-4">
+                                <p class="mb-3 text-muted fw-bold" style="font-size: 0.95rem;">${mensaje}</p>
+                                <input type="text" class="form-control form-control-lg border-2" id="${inputId}" value="${valorDefecto}" autocomplete="off" placeholder="Escriba aquí...">
+                            </div>
+                            <div class="modal-footer bg-light border-top-0">
+                                <button type="button" class="btn btn-outline-secondary btn-sm px-3" data-bs-dismiss="modal">Cancelar</button>
+                                <button type="button" class="btn btn-primary btn-sm px-4" id="btn-confirmar-prompt">Aceptar</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            document.body.insertAdjacentHTML('beforeend', modalHTML);
+            
+            const modalElement = document.getElementById(modalId);
+            const inputElement = document.getElementById(inputId);
+            const btnConfirmar = modalElement.querySelector('#btn-confirmar-prompt');
+            
+            const modal = new bootstrap.Modal(modalElement);
+            
+            modalElement.addEventListener('shown.bs.modal', () => {
+                inputElement.focus();
+                inputElement.select();
+            });
+            
+            inputElement.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    btnConfirmar.click();
+                }
+            });
+            
+            btnConfirmar.addEventListener('click', () => {
+                const valor = inputElement.value;
+                modal.hide();
+                resolve(valor);
+            });
+            
+            modalElement.addEventListener('hidden.bs.modal', () => {
+                modalElement.remove();
+                resolve(null);
+            });
+            
+            modal.show();
+        });
+    }
+
+    /**
      * Mostrar modal de progreso
      */
     static mostrarProgreso(titulo, progreso = 0) {

@@ -1,14 +1,19 @@
-
 <?php
 /**
  * API REST para el Sistema de Presupuesto de Compras - Versión 2.0
  */
+
+// Desactivar reporte de avisos deprecados para evitar corromper las respuestas JSON
+error_reporting(E_ALL & ~E_DEPRECATED & ~E_STRICT);
 
 // Configurar headers para CORS y JSON
 header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
 header('Access-Control-Allow-Methods: GET, POST, OPTIONS');
 header('Access-Control-Allow-Headers: Content-Type, Authorization');
+header('Cache-Control: no-cache, no-store, must-revalidate');
+header('Pragma: no-cache');
+header('Expires: 0');
 
 // Manejar preflight requests
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
@@ -44,7 +49,7 @@ try {
     // Procesar la solicitud
     $controller->procesarSolicitud();
     
-} catch (Exception $e) {
+} catch (Throwable $e) {
     // Error general del sistema
     http_response_code(500);
     echo json_encode([
@@ -52,7 +57,7 @@ try {
         'message' => 'Error interno del servidor',
         'error' => $e->getMessage(),
         'timestamp' => date('Y-m-d H:i:s'),
-        'trace' => defined('DEBUG') && DEBUG ? $e->getTraceAsString() : null
+        'trace' => $e->getTraceAsString()
     ], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
 }
 ?>

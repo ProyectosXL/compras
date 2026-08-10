@@ -48,6 +48,12 @@
                         <i class="fas fa-history me-2"></i>Historial Compras Proyectadas
                     </button>
                 </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="distribucion-tab" data-bs-toggle="tab"
+                            data-bs-target="#distribucion" type="button" role="tab">
+                        <i class="fas fa-tasks me-2"></i>Proceso para Presupuesto
+                    </button>
+                </li>
             </ul>
 
             <!-- Tab Content -->
@@ -72,6 +78,9 @@
 
                 <!-- Historial Compras Proyectadas -->
                 <?php include 'components/tabs/historial-tab.php'; ?>
+
+                <!-- Distribución por Canal -->
+                <?php include 'components/tabs/distribucion-tab.php'; ?>
             </div>
         </div>
     </div>

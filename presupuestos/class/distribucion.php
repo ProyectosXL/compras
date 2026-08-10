@@ -1,0 +1,324 @@
+<?php
+
+class Distribucion {
+    private $cid_power;
+    private $cid_sistemas;
+    private $nameServer;
+
+    public function __construct() {
+        $this->nameServer = $this->determinarBaseDatos();
+        
+        require_once __DIR__.'/../../Class/conexion.php';
+        $conexion = new Conexion();
+        
+        // Conexión para obtener ventas comerciales (apps_power o apps_power_uy)
+        $this->cid_power = $conexion->conectar($this->nameServer);
+        
+        // Conexión para guardar la distribución (sistemas)
+        $this->cid_sistemas = $conexion->conectar('apps');
+    }
+
+    private function determinarBaseDatos() {
+        if (session_status() === PHP_SESSION_NONE) {
+            session_start();
+        }
+        $pais = 'argentina';
+        if (isset($_GET['pais'])) {
+            $pais = strtolower($_GET['pais']);
+        } elseif (isset($_POST['pais'])) {
+            $pais = strtolower($_POST['pais']);
+        } elseif (isset($_SESSION['pais_seleccionado'])) {
+            $pais = strtolower($_SESSION['pais_seleccionado']);
+        }
+        
+        switch ($pais) {
+            case 'uruguay':
+            case 'uy':
+                return 'apps_power_uy';
+            case 'argentina':
+            case 'ar':
+            default:
+                return 'apps_power';
+        }
+    }
+
+    public function obtenerPaisActual() {
+        return $this->nameServer === 'apps_power_uy' ? 'uruguay' : 'argentina';
+    }
+
+    /**
+     * Obtener canales comerciales únicos normalizados
+     */
+    public function obtenerCanales() {
+        return ['LOCALES PROPIOS', 'FRANQUICIAS', 'MAYORISTAS', 'ECOMMERCE'];
+    }
+
+    /**
+     * Obtener todas las ventas agrupadas por rubro, categoría, mes, año y canal (Rango de fechas dinámico)
+     */
+    public function obtenerTodasLasVentasPorCanal($fechaDesde, $fechaHasta) {
+        try {
+            if (!$this->cid_power) {
+                throw new Exception("Error de conexión");
+            }
+            
+            $params = [$fechaDesde, $fechaHasta];
+            $sqlDate = "WHERE v.FECHA_VENTA >= ? AND v.FECHA_VENTA <= ?";
+
+            $sql = "SELECT 
+                        v.RUBRO,
+                        v.CATEGORIA_PADRE,
+                        MONTH(v.FECHA_VENTA) AS MES,
+                        YEAR(v.FECHA_VENTA) AS ANIO,
+                        v.DESC_SUCURSAL,
+                        CASE 
+                            WHEN v.CANAL = 'CENTRAL' AND v.DESC_SUCURSAL = 'MAYORISTAS' THEN 'MAYORISTAS'
+                            WHEN v.CANAL = 'CENTRAL' AND v.DESC_SUCURSAL = 'FRANQUICIAS' THEN 'FRANQUICIAS'
+                            WHEN v.CANAL = 'LOCALES PROPIOS' AND v.DESC_SUCURSAL = 'ECOMMERCE' THEN 'ECOMMERCE'
+                            WHEN v.CANAL = 'LOCALES PROPIOS' THEN 'LOCALES PROPIOS'
+                            ELSE v.CANAL
+                        END AS CANAL_NORMALIZADO,
+                        SUM(CAST(v.CANT_VEND AS INT)) AS VENTAS
+                    FROM dbo.RO_VENTAS_COMERCIAL v
+                    $sqlDate
+                    GROUP BY v.RUBRO, v.CATEGORIA_PADRE, MONTH(v.FECHA_VENTA), YEAR(v.FECHA_VENTA), v.DESC_SUCURSAL,
+                             CASE 
+                                 WHEN v.CANAL = 'CENTRAL' AND v.DESC_SUCURSAL = 'MAYORISTAS' THEN 'MAYORISTAS'
+                                 WHEN v.CANAL = 'CENTRAL' AND v.DESC_SUCURSAL = 'FRANQUICIAS' THEN 'FRANQUICIAS'
+                                 WHEN v.CANAL = 'LOCALES PROPIOS' AND v.DESC_SUCURSAL = 'ECOMMERCE' THEN 'ECOMMERCE'
+                                 WHEN v.CANAL = 'LOCALES PROPIOS' THEN 'LOCALES PROPIOS'
+                                 ELSE v.CANAL
+                             END";
+            
+            $stmt = sqlsrv_query($this->cid_power, $sql, $params);
+            
+            if ($stmt === false) {
+                throw new Exception("Error al obtener todas las ventas: " . print_r(sqlsrv_errors(), true));
+            }
+            
+            $ventasMap = [];
+            while ($row = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC)) {
+                $rubro = trim($row['RUBRO'] ?? '');
+                $categoria = trim($row['CATEGORIA_PADRE'] ?? '');
+                $mes = (int)$row['MES'];
+                $anio = (int)$row['ANIO'];
+                $mesAnioClave = "$mes-$anio";
+                $canal = trim($row['CANAL_NORMALIZADO'] ?? '');
+                $sucursal = trim($row['DESC_SUCURSAL'] ?? '');
+                $ventas = (int)$row['VENTAS'];
+                
+                if (!isset($ventasMap[$rubro])) {
+                    $ventasMap[$rubro] = [];
+                }
+                if (!isset($ventasMap[$rubro][$categoria])) {
+                    $ventasMap[$rubro][$categoria] = [];
+                }
+                if (!isset($ventasMap[$rubro][$categoria][$canal])) {
+                    $ventasMap[$rubro][$categoria][$canal] = [
+                        'total' => 0,
+                        'meses' => [],
+                        'sucursales' => []
+                    ];
+                }
+                
+                if (!isset($ventasMap[$rubro][$categoria][$canal]['meses'][$mesAnioClave])) {
+                    $ventasMap[$rubro][$categoria][$canal]['meses'][$mesAnioClave] = 0;
+                }
+                $ventasMap[$rubro][$categoria][$canal]['meses'][$mesAnioClave] += $ventas;
+                $ventasMap[$rubro][$categoria][$canal]['total'] += $ventas;
+                
+                if (!isset($ventasMap[$rubro][$categoria][$canal]['sucursales'][$sucursal])) {
+                    $ventasMap[$rubro][$categoria][$canal]['sucursales'][$sucursal] = [
+                        'total' => 0,
+                        'meses' => []
+                    ];
+                }
+                
+                if (!isset($ventasMap[$rubro][$categoria][$canal]['sucursales'][$sucursal]['meses'][$mesAnioClave])) {
+                    $ventasMap[$rubro][$categoria][$canal]['sucursales'][$sucursal]['meses'][$mesAnioClave] = 0;
+                }
+                
+                $ventasMap[$rubro][$categoria][$canal]['sucursales'][$sucursal]['meses'][$mesAnioClave] += $ventas;
+                $ventasMap[$rubro][$categoria][$canal]['sucursales'][$sucursal]['total'] += $ventas;
+            }
+            sqlsrv_free_stmt($stmt);
+            return $ventasMap;
+        } catch (Exception $e) {
+            error_log("Error en Distribucion::obtenerTodasLasVentasPorCanal: " . $e->getMessage());
+            return [];
+        }
+    }
+
+    /**
+     * Guardar distribución en FP_T_DISTRIBUCION_COMPRAS_CANAL
+     */
+    public function guardarDistribucion($filas) {
+        try {
+            if (!$this->cid_sistemas) {
+                throw new Exception("Error de conexión a XL-APPS/sistemas");
+            }
+
+            // Iniciar transacción
+            if (sqlsrv_begin_transaction($this->cid_sistemas) === false) {
+                throw new Exception("Error al iniciar transacción: " . print_r(sqlsrv_errors(), true));
+            }
+
+            $fechaGuardado = date('Y-m-d H:i:s');
+            
+            // SQL para guardar
+            $sqlInsert = "INSERT INTO dbo.FP_T_DISTRIBUCION_COMPRAS_CANAL (
+                            fecha_guardado, pais, temporada, rubro, categoria_padre, canal,
+                            compra_proyectada, venta_historica_canal, participacion_porcentaje,
+                            compra_distribuida, ajuste_manual, distribucion_final, periodo_analisis, nombre_distribucion
+                          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+
+            foreach ($filas as $fila) {
+                $nombreDist = !empty($fila['nombre_distribucion']) ? trim($fila['nombre_distribucion']) : 'Por defecto';
+                
+                // Primero borrar registros anteriores idénticos para sobreescribir la misma versión
+                $sqlDelete = "DELETE FROM dbo.FP_T_DISTRIBUCION_COMPRAS_CANAL 
+                              WHERE pais = ? AND temporada = ? AND rubro = ? AND categoria_padre = ? AND canal = ? AND nombre_distribucion = ?";
+                $deleteParams = [
+                    $fila['pais'],
+                    $fila['temporada'],
+                    $fila['rubro'],
+                    $fila['categoria_padre'],
+                    $fila['canal'],
+                    $nombreDist
+                ];
+                $deleteStmt = sqlsrv_query($this->cid_sistemas, $sqlDelete, $deleteParams);
+                if ($deleteStmt === false) {
+                    sqlsrv_rollback($this->cid_sistemas);
+                    throw new Exception("Error al limpiar distribución anterior: " . print_r(sqlsrv_errors(), true));
+                }
+                sqlsrv_free_stmt($deleteStmt);
+
+                // Insertar el nuevo
+                $insertParams = [
+                    $fechaGuardado,
+                    $fila['pais'],
+                    $fila['temporada'],
+                    $fila['rubro'],
+                    $fila['categoria_padre'],
+                    $fila['canal'],
+                    (int)$fila['compra_proyectada'],
+                    (int)$fila['venta_historica_canal'],
+                    (float)$fila['participacion_porcentaje'],
+                    (int)$fila['compra_distribuida'],
+                    (int)$fila['ajuste_manual'],
+                    (int)$fila['distribucion_final'],
+                    $fila['periodo_analisis'],
+                    $nombreDist
+                ];
+
+                $insertStmt = sqlsrv_query($this->cid_sistemas, $sqlInsert, $insertParams);
+                if ($insertStmt === false) {
+                    sqlsrv_rollback($this->cid_sistemas);
+                    throw new Exception("Error al insertar distribución: " . print_r(sqlsrv_errors(), true));
+                }
+                sqlsrv_free_stmt($insertStmt);
+            }
+
+            sqlsrv_commit($this->cid_sistemas);
+            return true;
+        } catch (Exception $e) {
+            error_log("Error en Distribucion::guardarDistribucion: " . $e->getMessage());
+            return [
+                'error' => true,
+                'mensaje' => $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Obtener distribución previamente guardada
+     */
+    public function obtenerDistribucionGuardada($pais, $temporada, $nombreDistribucion = 'Por defecto') {
+        try {
+            if (!$this->cid_sistemas) {
+                return [];
+            }
+
+            if (empty($nombreDistribucion)) {
+                $nombreDistribucion = 'Por defecto';
+            }
+
+            $pais = strtolower(trim($pais));
+            // Seleccionar los guardados del grupo rubro/categoría/canal para el nombre especificado
+            $sql = "SELECT * FROM dbo.FP_T_DISTRIBUCION_COMPRAS_CANAL 
+                    WHERE pais = ? AND temporada = ? AND nombre_distribucion = ?
+                    ORDER BY rubro, categoria_padre, canal";
+            
+            $params = [$pais, $temporada, $nombreDistribucion];
+            $stmt = sqlsrv_query($this->cid_sistemas, $sql, $params);
+            
+            if ($stmt === false) {
+                throw new Exception("Error al obtener distribución guardada: " . print_r(sqlsrv_errors(), true));
+            }
+            
+            $distribuciones = [];
+            while ($row = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC)) {
+                $distribuciones[] = $row;
+            }
+            sqlsrv_free_stmt($stmt);
+            return $distribuciones;
+        } catch (Exception $e) {
+            error_log("Error en Distribucion::obtenerDistribucionGuardada: " . $e->getMessage());
+            return [];
+        }
+    }
+
+    /**
+     * Obtener nombres de las distribuciones guardadas
+     */
+    public function obtenerNombresDistribuciones($pais, $temporada) {
+        try {
+            if (!$this->cid_sistemas) {
+                return [['nombre' => 'Por defecto', 'periodo' => '']];
+            }
+
+            $pais = strtolower(trim($pais));
+            $sql = "SELECT nombre_distribucion, MIN(periodo_analisis) AS periodo_analisis 
+                    FROM dbo.FP_T_DISTRIBUCION_COMPRAS_CANAL 
+                    WHERE pais = ? AND temporada = ?
+                    GROUP BY nombre_distribucion
+                    ORDER BY nombre_distribucion";
+            $params = [$pais, $temporada];
+            $stmt = sqlsrv_query($this->cid_sistemas, $sql, $params);
+            
+            if ($stmt === false) {
+                return [['nombre' => 'Por defecto', 'periodo' => '']];
+            }
+
+            $versiones = [];
+            while ($row = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC)) {
+                if (!empty($row['nombre_distribucion'])) {
+                    $versiones[] = [
+                        'nombre' => trim($row['nombre_distribucion']),
+                        'periodo' => trim($row['periodo_analisis'] ?? '')
+                    ];
+                }
+            }
+            sqlsrv_free_stmt($stmt);
+
+            if (empty($versiones)) {
+                $versiones = [['nombre' => 'Por defecto', 'periodo' => '']];
+            }
+
+            return $versiones;
+        } catch (Exception $e) {
+            error_log("Error en Distribucion::obtenerNombresDistribuciones: " . $e->getMessage());
+            return [['nombre' => 'Por defecto', 'periodo' => '']];
+        }
+    }
+
+    public function __destruct() {
+        if ($this->cid_power) {
+            sqlsrv_close($this->cid_power);
+        }
+        if ($this->cid_sistemas) {
+            sqlsrv_close($this->cid_sistemas);
+        }
+    }
+}
+?>

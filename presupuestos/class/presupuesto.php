@@ -53,16 +53,16 @@ class Presupuesto {
      * Cambiar país dinámicamente
      */
     public function cambiarPais($pais) {
-        $this->nameServer = $this->determinarBaseDatos();
+        $nuevaBase = $this->determinarBaseDatos();
+        if ($this->nameServer === $nuevaBase && $this->cid_apps) {
+            return true;
+        }
+        
+        $this->nameServer = $nuevaBase;
         
         // Reconectar con la nueva base
         require_once __DIR__.'/../../Class/conexion.php';
         $conexion = new Conexion();
-        
-        // Cerrar conexión anterior si existe
-        if ($this->cid_apps) {
-            sqlsrv_close($this->cid_apps);
-        }
         
         $this->cid_apps = $conexion->conectar($this->nameServer);
         
