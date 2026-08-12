@@ -15,6 +15,16 @@ class DistribucionManager {
     static mesesCostosClaves = [];
     static periodosVersiones = {};
 
+    // Moneda: ARS o USD (Default USD)
+    static modoMoneda = 'USD';
+    static tipoCambio = {}; // { '1-2025': 1250.0, '2-2025': 1280.0, ... }
+
+    // Mapa mes label (ES) -> número de mes
+    static MESES_NUM = {
+        'Ene': 1, 'Feb': 2, 'Mar': 3, 'Abr': 4, 'May': 5, 'Jun': 6,
+        'Jul': 7, 'Ago': 8, 'Sep': 9, 'Oct': 10, 'Nov': 11, 'Dic': 12
+    };
+
     static inicializarFiltrosFechas() {
         const desdeInput = document.getElementById('filtro-desde-distribucion');
         const hastaInput = document.getElementById('filtro-hasta-distribucion');
@@ -228,11 +238,11 @@ class DistribucionManager {
             let baseHeaderHtml = `
                 <th>Rubro</th>
                 <th>Categoría</th>
-                <th class="text-center bg-secondary text-white">Venta Proyectada</th>
+                <th class="text-center bg-secondary text-white">Venta Proyect</th>
                 <th class="text-center bg-dark text-white">Venta Histórica Total</th>
                 <th class="text-center bg-info text-dark">Canal</th>
                 <th class="text-center">Venta del Canal</th>
-                <th class="text-center bg-warning text-dark" style="width: 120px;">Participación %</th>
+                <th class="text-center bg-warning text-dark" style="width: 100px;">Participación %</th>
                 <th class="text-center bg-success text-white">Venta Distribuida</th>
             `;
             
@@ -244,6 +254,7 @@ class DistribucionManager {
                         <span class="badge bg-light text-dark fs-8">${porc}%</span>
                     </th>`;
             });
+            baseHeaderHtml += `<th class="text-center bg-dark text-white" style="width: 80px;">Total %</th>`;
             theadRow.innerHTML = baseHeaderHtml;
         }
 
@@ -261,12 +272,14 @@ class DistribucionManager {
             
             let sumVentaCanal = 0;
             let sumVentaDist = 0;
+            let sumParticipacion = 0;
             const sumMeses = {};
             DistribucionManager.meses.forEach(m => sumMeses[m] = 0);
 
             grupo.forEach(item => {
                 sumVentaCanal += item.VENTA_CANAL || 0;
                 sumVentaDist  += item.COMPRA_DISTRIBUIDA || 0;
+                sumParticipacion += parseFloat(item.PARTICIPACION) || 0;
                 if (item.DISTRIBUCION_MENSUAL) {
                     DistribucionManager.meses.forEach(m => {
                         sumMeses[m] += (item.DISTRIBUCION_MENSUAL[m]?.unidades || 0);
@@ -279,6 +292,9 @@ class DistribucionManager {
                 mesesSubtotalHtml += `<td class="text-end fw-bold font-monospace" style="background:#e8f5e9; font-size:0.85rem;">${FormatoUtils.formatearNumero(sumMeses[m])}</td>`;
             });
 
+            const is100 = Math.abs(sumParticipacion - 100) < 0.01;
+            const partStyle = is100 ? 'color: #198754; font-weight: bold;' : 'color: #dc3545; background-color: #f8d7da; font-weight: bold; border: 1px solid #f5c2c7;';
+
             return `
                 <tr id="subtotal-${safeRubro}-${safeCat}" style="background: linear-gradient(90deg,#e3f2fd 0%,#f1f8e9 100%); border-top: 2px solid #90caf9; border-bottom: 2px solid #90caf9;">
                     <td colspan="2" class="fw-bold text-primary" style="font-size:0.85rem; padding: 4px 8px;">
@@ -289,9 +305,10 @@ class DistribucionManager {
                     <td class="text-end fw-bold font-monospace" style="background:#e3f2fd; font-size:0.85rem;">${FormatoUtils.formatearNumero(first.VENTA_HISTORICA_TOTAL)}</td>
                     <td style="background:#e3f2fd;"></td>
                     <td class="text-end fw-bold font-monospace" style="background:#e3f2fd; font-size:0.85rem;">${FormatoUtils.formatearNumero(sumVentaCanal)}</td>
-                    <td style="background:#e3f2fd;"></td>
+                    <td class="text-end font-monospace" style="${partStyle} font-size:0.85rem;" id="subtotal-part-${safeRubro}-${safeCat}">${Math.round(sumParticipacion)}%</td>
                     <td class="text-end fw-bold font-monospace" style="background:#c8e6c9; font-size:0.85rem; color:#1b5e20;" id="subtotal-val-${safeRubro}-${safeCat}">${FormatoUtils.formatearNumero(sumVentaDist)}</td>
                     ${mesesSubtotalHtml}
+                    <td style="background:#e8f5e9;"></td>
                 </tr>`;
         };
 
@@ -313,16 +330,31 @@ class DistribucionManager {
             );
 
             let mesesHtml = '';
+            let sumPorc = 0;
             if (DistribucionManager.meses.length > 0 && item.DISTRIBUCION_MENSUAL) {
                 DistribucionManager.meses.forEach(m => {
                     const infoMes = item.DISTRIBUCION_MENSUAL[m] || { unidades: 0, porcentaje: 0 };
+                    sumPorc += parseFloat(infoMes.porcentaje) || 0;
                     mesesHtml += `
                         <td class="text-end font-monospace" style="vertical-align: middle;" id="mes-${originalIndex}-${m}">
-                            ${FormatoUtils.formatearNumero(infoMes.unidades)}<br>
-                            <small class="text-muted">${infoMes.porcentaje}%</small>
+                            <span class="d-block fw-bold">${FormatoUtils.formatearNumero(infoMes.unidades)}</span>
+                            <div class="d-flex align-items-center justify-content-end mt-1">
+                                <input type="number" step="1" class="text-end p-0 pe-1 input-mes-porc" 
+                                       value="${Math.round(infoMes.porcentaje)}" 
+                                       style="max-width: 45px; font-size: 0.75rem; border: none; border-bottom: 1px dashed #ccc; background: transparent; text-align: right;"
+                                       oninput="DistribucionManager.actualizarPorcentajeMes(${originalIndex}, '${m}', this.value)">
+                                <span style="font-size: 0.7rem; color: #777; margin-left: 2px;">%</span>
+                            </div>
                         </td>`;
                 });
             }
+
+            const is100 = Math.abs(sumPorc - 100) < 0.05;
+            const sumPorcBadgeClass = is100 ? 'bg-success' : 'bg-danger';
+            mesesHtml += `
+                <td class="text-center font-monospace" style="vertical-align: middle;" id="mes-total-${originalIndex}">
+                    <span class="badge ${sumPorcBadgeClass} fs-8" id="mes-total-val-${originalIndex}">${Math.round(sumPorc)}%</span>
+                </td>`;
 
             let canalHtml = item.CANAL;
             let rowClass = '';
@@ -336,7 +368,7 @@ class DistribucionManager {
 
             const inputStyle = item.MODIFICADO ? 'background-color: #fff9c4; font-weight: bold; border: 1px solid #ffc107;' : '';
             const indicatorHtml = item.MODIFICADO 
-                ? `<br><span class="badge bg-warning text-dark fs-8 mt-1" title="Valor original: ${item.PARTICIPACION_ORIGINAL}%"><i class="fas fa-history me-1"></i>Orig: ${item.PARTICIPACION_ORIGINAL}%</span>` 
+                ? `<br><span class="badge bg-warning text-dark fs-8 mt-1" title="Valor original: ${Math.round(item.PARTICIPACION_ORIGINAL)}%"><i class="fas fa-history me-1"></i>Orig: ${Math.round(item.PARTICIPACION_ORIGINAL)}%</span>` 
                 : '';
 
             html += `
@@ -348,17 +380,15 @@ class DistribucionManager {
                     <td class="bg-light-blue font-monospace" style="vertical-align: middle;">${canalHtml}</td>
                     <td class="text-end" style="vertical-align: middle;">${FormatoUtils.formatearNumero(item.VENTA_CANAL)}</td>
                     <td class="text-center font-monospace" style="vertical-align: middle;">
-                        <input type="number" step="0.01" class="form-control form-control-sm text-end input-participacion" 
-                                value="${item.PARTICIPACION}" 
-                                style="width: 90px; display: inline-block; ${inputStyle}"
+                        <input type="number" step="1" class="form-control form-control-sm text-end input-participacion" 
+                                value="${Math.round(item.PARTICIPACION)}" 
+                                style="width: 70px; display: inline-block; ${inputStyle}"
                                 oninput="DistribucionManager.actualizarParticipacion(${originalIndex}, this.value)">
                         ${indicatorHtml}
                     </td>
                     <td class="text-end fw-bold bg-light-green" style="vertical-align: middle;" id="distribucion-${originalIndex}">${FormatoUtils.formatearNumero(item.COMPRA_DISTRIBUIDA)}</td>
                     ${mesesHtml}
-                </tr>
-            `;
-
+                </tr>`;
             grupoActual.push(item);
             rubroAnterior = item.RUBRO;
             catAnterior = item.CATEGORIA_PADRE;
@@ -371,6 +401,28 @@ class DistribucionManager {
 
         tbody.innerHTML = html;
         DistribucionManager.validarGrupos();
+
+        // Validar filas mensuales tras renderizar
+        DistribucionManager.datosFiltrados.forEach((item) => {
+            const originalIndex = DistribucionManager.datos.findIndex(d =>
+                d.RUBRO === item.RUBRO &&
+                d.CATEGORIA_PADRE === item.CATEGORIA_PADRE &&
+                d.CANAL === item.CANAL
+            );
+            if (originalIndex !== -1) {
+                DistribucionManager.validarFilaMensual(originalIndex);
+            }
+        });
+
+        // Reconciliar de forma automática las diferencias por redondeo en los grupos que sumen 100%
+        const gruposUnicos = new Set();
+        DistribucionManager.datosFiltrados.forEach(item => {
+            gruposUnicos.add(`${item.RUBRO}|${item.CATEGORIA_PADRE}`);
+        });
+        gruposUnicos.forEach(clave => {
+            const parts = clave.split('|');
+            DistribucionManager.ajustarRedondeoGrupo(parts[0], parts[1]);
+        });
     }
 
     static toggleSucursales(index, element) {
@@ -433,6 +485,89 @@ class DistribucionManager {
         }
     }
 
+    static ajustarRedondeoGrupo(rubro, categoria) {
+        // Encontrar todos los items de este grupo
+        const grupo = DistribucionManager.datos.filter(d => 
+            d.RUBRO === rubro && d.CATEGORIA_PADRE === categoria
+        );
+        if (grupo.length === 0) return;
+
+        // Sumar participación
+        let sumPart = 0;
+        grupo.forEach(item => sumPart += parseFloat(item.PARTICIPACION) || 0);
+
+        // Si la participación suma exactamente 100% (o muy cercano), corregimos diferencias de redondeo
+        if (Math.abs(sumPart - 100) < 0.01) {
+            const compraProyectada = grupo[0].COMPRA_PROYECTADA;
+            let sumDist = 0;
+            let maxPart = -1;
+            let itemMax = null;
+
+            grupo.forEach(item => {
+                // Calcular distribución base redondeada
+                const dist = Math.round(compraProyectada * (item.PARTICIPACION / 100));
+                item.COMPRA_DISTRIBUIDA = dist;
+                item.DISTRIBUCION_FINAL = dist;
+                sumDist += dist;
+
+                if (item.PARTICIPACION > maxPart) {
+                    maxPart = item.PARTICIPACION;
+                    itemMax = item;
+                }
+            });
+
+            // Ajustar diferencia de unidades en el canal con mayor participación
+            if (sumDist !== compraProyectada && itemMax !== null) {
+                const diff = compraProyectada - sumDist;
+                itemMax.COMPRA_DISTRIBUIDA += diff;
+                itemMax.DISTRIBUCION_FINAL = itemMax.COMPRA_DISTRIBUIDA;
+            }
+
+            // Actualizar DOM e índices mensuales para todos los elementos del grupo
+            grupo.forEach(item => {
+                const idx = DistribucionManager.datos.indexOf(item);
+                const cellDist = document.getElementById(`distribucion-${idx}`);
+                if (cellDist) {
+                    cellDist.textContent = FormatoUtils.formatearNumero(item.COMPRA_DISTRIBUIDA);
+                }
+                
+                // Recalcular meses correspondientes con sus redondeos mensuales internos
+                if (item.DISTRIBUCION_MENSUAL) {
+                    let sumMeses = 0;
+                    let maxP = -1;
+                    let mesMax = null;
+                    
+                    Object.keys(item.DISTRIBUCION_MENSUAL).forEach(m => {
+                        const p = (item.DISTRIBUCION_MENSUAL[m].porcentaje || 0) / 100;
+                        if (p > maxP) {
+                            maxP = p;
+                            mesMax = m;
+                        }
+                        const unidades = Math.round(item.COMPRA_DISTRIBUIDA * p);
+                        item.DISTRIBUCION_MENSUAL[m].unidades = unidades;
+                        sumMeses += unidades;
+                    });
+                    
+                    if (item.COMPRA_DISTRIBUIDA !== sumMeses && mesMax !== null) {
+                        const diff = item.COMPRA_DISTRIBUIDA - sumMeses;
+                        item.DISTRIBUCION_MENSUAL[mesMax].unidades += diff;
+                    }
+                    
+                    // Actualizar celdas de mes en el DOM
+                    Object.keys(item.DISTRIBUCION_MENSUAL).forEach(m => {
+                        const cellMes = document.getElementById(`mes-${idx}-${m}`);
+                        if (cellMes) {
+                            const valCell = cellMes.querySelector('.fw-bold');
+                            if (valCell) {
+                                valCell.textContent = FormatoUtils.formatearNumero(item.DISTRIBUCION_MENSUAL[m].unidades);
+                            }
+                        }
+                    });
+                }
+            });
+        }
+    }
+
     static actualizarParticipacion(index, value) {
         const val = parseFloat(value) || 0;
         const item = DistribucionManager.datos[index];
@@ -440,56 +575,132 @@ class DistribucionManager {
         // 1. Guardar el nuevo valor de participación y marcar si cambió
         item.PARTICIPACION = val;
         item.MODIFICADO = (Math.abs(val - item.PARTICIPACION_ORIGINAL) > 0.01);
-        
-        // 2. Calcular nueva venta distribuida
-        item.COMPRA_DISTRIBUIDA = Math.round(item.COMPRA_PROYECTADA * (val / 100));
-        item.DISTRIBUCION_FINAL = item.COMPRA_DISTRIBUIDA;
-        
-        // 3. Actualizar la celda de compra distribuida en el DOM
-        const cellDist = document.getElementById(`distribucion-${index}`);
-        if (cellDist) {
-            cellDist.textContent = FormatoUtils.formatearNumero(item.COMPRA_DISTRIBUIDA);
-        }
-        
-        // 4. Distribuir a los meses correspondientes en base a la estacionalidad (%)
-        if (item.DISTRIBUCION_MENSUAL) {
-            let sumMeses = 0;
-            let maxP = -1;
-            let mesMax = null;
+
+        // 2. Intentar ajustar redondeo del grupo de forma balanceada si la participación suma 100%
+        let sumPart = 0;
+        const grupo = DistribucionManager.datos.filter(d => 
+            d.RUBRO === item.RUBRO && d.CATEGORIA_PADRE === item.CATEGORIA_PADRE
+        );
+        grupo.forEach(g => sumPart += parseFloat(g.PARTICIPACION) || 0);
+
+        if (Math.abs(sumPart - 100) < 0.01) {
+            DistribucionManager.ajustarRedondeoGrupo(item.RUBRO, item.CATEGORIA_PADRE);
+        } else {
+            // Si no suma 100%, realizar el cálculo matemático directo para el elemento modificado
+            item.COMPRA_DISTRIBUIDA = Math.round(item.COMPRA_PROYECTADA * (val / 100));
+            item.DISTRIBUCION_FINAL = item.COMPRA_DISTRIBUIDA;
             
-            Object.keys(item.DISTRIBUCION_MENSUAL).forEach(m => {
-                const p = (item.DISTRIBUCION_MENSUAL[m].porcentaje || 0) / 100;
-                if (p > maxP) {
-                    maxP = p;
-                    mesMax = m;
-                }
-                const unidades = Math.round(item.COMPRA_DISTRIBUIDA * p);
-                item.DISTRIBUCION_MENSUAL[m].unidades = unidades;
-                sumMeses += unidades;
-            });
-            
-            if (item.COMPRA_DISTRIBUIDA !== sumMeses && mesMax !== null) {
-                const diff = item.COMPRA_DISTRIBUIDA - sumMeses;
-                item.DISTRIBUCION_MENSUAL[mesMax].unidades += diff;
+            const cellDist = document.getElementById(`distribucion-${index}`);
+            if (cellDist) {
+                cellDist.textContent = FormatoUtils.formatearNumero(item.COMPRA_DISTRIBUIDA);
             }
             
-            // Actualizar celdas mensuales en el DOM
-            Object.keys(item.DISTRIBUCION_MENSUAL).forEach(m => {
-                const cellMes = document.getElementById(`mes-${index}-${m}`);
-                if (cellMes) {
-                    cellMes.innerHTML = `${FormatoUtils.formatearNumero(item.DISTRIBUCION_MENSUAL[m].unidades)}<br><small class="text-muted">${item.DISTRIBUCION_MENSUAL[m].porcentaje}%</small>`;
+            if (item.DISTRIBUCION_MENSUAL) {
+                let sumMeses = 0;
+                let maxP = -1;
+                let mesMax = null;
+                
+                Object.keys(item.DISTRIBUCION_MENSUAL).forEach(m => {
+                    const p = (item.DISTRIBUCION_MENSUAL[m].porcentaje || 0) / 100;
+                    if (p > maxP) {
+                        maxP = p;
+                        mesMax = m;
+                    }
+                    const unidades = Math.round(item.COMPRA_DISTRIBUIDA * p);
+                    item.DISTRIBUCION_MENSUAL[m].unidades = unidades;
+                    sumMeses += unidades;
+                });
+                
+                if (item.COMPRA_DISTRIBUIDA !== sumMeses && mesMax !== null) {
+                    const diff = item.COMPRA_DISTRIBUIDA - sumMeses;
+                    item.DISTRIBUCION_MENSUAL[mesMax].unidades += diff;
+                }
+                
+                Object.keys(item.DISTRIBUCION_MENSUAL).forEach(m => {
+                    const cellMes = document.getElementById(`mes-${index}-${m}`);
+                    if (cellMes) {
+                        const valCell = cellMes.querySelector('.fw-bold');
+                        if (valCell) {
+                            valCell.textContent = FormatoUtils.formatearNumero(item.DISTRIBUCION_MENSUAL[m].unidades);
+                        }
+                    }
+                });
+            }
+        }
+        
+        // 3. Actualizar subtotal, indicadores generales y validaciones
+        DistribucionManager.actualizarSubtotalGrupo(item.RUBRO, item.CATEGORIA_PADRE);
+        DistribucionManager.actualizarIndicadores();
+        DistribucionManager.validarGrupos();
+        DistribucionManager.validarFilaMensual(index);
+    }
+
+    static actualizarPorcentajeMes(index, mes, value) {
+        const val = parseFloat(value) || 0;
+        const item = DistribucionManager.datos[index];
+        
+        if (item.DISTRIBUCION_MENSUAL && item.DISTRIBUCION_MENSUAL[mes]) {
+            item.DISTRIBUCION_MENSUAL[mes].porcentaje = val;
+            
+            // Recalcular unidades para este mes
+            item.DISTRIBUCION_MENSUAL[mes].unidades = Math.round(item.COMPRA_DISTRIBUIDA * (val / 100));
+            
+            // Actualizar la celda en el DOM
+            const cellMes = document.getElementById(`mes-${index}-${mes}`);
+            if (cellMes) {
+                const valCell = cellMes.querySelector('.fw-bold');
+                if (valCell) {
+                    valCell.textContent = FormatoUtils.formatearNumero(item.DISTRIBUCION_MENSUAL[mes].unidades);
+                }
+            }
+            
+            // Validar la fila
+            DistribucionManager.validarFilaMensual(index);
+            
+            // Actualizar subtotal
+            DistribucionManager.actualizarSubtotalGrupo(item.RUBRO, item.CATEGORIA_PADRE);
+        }
+    }
+
+    static validarFilaMensual(index) {
+        const item = DistribucionManager.datos[index];
+        if (!item.DISTRIBUCION_MENSUAL) return true;
+        
+        let sumPorc = 0;
+        Object.keys(item.DISTRIBUCION_MENSUAL).forEach(m => {
+            sumPorc += parseFloat(item.DISTRIBUCION_MENSUAL[m].porcentaje) || 0;
+        });
+        
+        const is100 = Math.abs(sumPorc - 100) < 0.05;
+        const row = document.getElementById(`row-distrib-${index}`);
+        
+        if (row) {
+            const inputs = row.querySelectorAll('.input-mes-porc');
+            inputs.forEach(input => {
+                if (is100) {
+                    input.style.border = 'none';
+                    input.style.borderBottom = '1px dashed #ccc';
+                    input.style.color = '#555';
+                    input.style.backgroundColor = 'transparent';
+                } else {
+                    input.style.border = '1px solid #dc3545';
+                    input.style.color = '#dc3545';
+                    input.style.backgroundColor = '#f8d7da';
                 }
             });
         }
+
+        const totalCellVal = document.getElementById(`mes-total-val-${index}`);
+        if (totalCellVal) {
+            totalCellVal.textContent = `${Math.round(sumPorc)}%`;
+            if (is100) {
+                totalCellVal.className = 'badge bg-success fs-8';
+            } else {
+                totalCellVal.className = 'badge bg-danger fs-8';
+            }
+        }
         
-        // 5. Actualizar el subtotal de este grupo
-        DistribucionManager.actualizarSubtotalGrupo(item.RUBRO, item.CATEGORIA_PADRE);
-        
-        // 6. Actualizar indicadores superiores
-        DistribucionManager.actualizarIndicadores();
-        
-        // 7. Validar si los totales del grupo cierran
-        DistribucionManager.validarGrupos();
+        return is100;
     }
 
     static actualizarSubtotalGrupo(rubro, categoria) {
@@ -502,12 +713,14 @@ class DistribucionManager {
         const first = grupo[0];
         let sumVentaCanal = 0;
         let sumVentaDist = 0;
+        let sumParticipacion = 0;
         const sumMeses = {};
         DistribucionManager.meses.forEach(m => sumMeses[m] = 0);
 
         grupo.forEach(item => {
             sumVentaCanal += item.VENTA_CANAL || 0;
             sumVentaDist  += item.COMPRA_DISTRIBUIDA || 0;
+            sumParticipacion += parseFloat(item.PARTICIPACION) || 0;
             if (item.DISTRIBUCION_MENSUAL) {
                 DistribucionManager.meses.forEach(m => {
                     sumMeses[m] += (item.DISTRIBUCION_MENSUAL[m]?.unidades || 0);
@@ -525,6 +738,9 @@ class DistribucionManager {
                 mesesSubtotalHtml += `<td class="text-end fw-bold font-monospace" style="background:#e8f5e9; font-size:0.85rem;">${FormatoUtils.formatearNumero(sumMeses[m])}</td>`;
             });
             
+            const is100 = Math.abs(sumParticipacion - 100) < 0.01;
+            const partStyle = is100 ? 'color: #198754; font-weight: bold;' : 'color: #dc3545; background-color: #f8d7da; font-weight: bold; border: 1px solid #f5c2c7;';
+
             subtotalRow.innerHTML = `
                 <td colspan="2" class="fw-bold text-primary" style="font-size:0.85rem; padding: 4px 8px;">
                     <i class="fas fa-sigma me-1 text-primary" style="font-size:0.75rem;"></i>
@@ -534,9 +750,10 @@ class DistribucionManager {
                 <td class="text-end fw-bold font-monospace" style="background:#e3f2fd; font-size:0.85rem;">${FormatoUtils.formatearNumero(first.VENTA_HISTORICA_TOTAL)}</td>
                 <td style="background:#e3f2fd;"></td>
                 <td class="text-end fw-bold font-monospace" style="background:#e3f2fd; font-size:0.85rem;">${FormatoUtils.formatearNumero(sumVentaCanal)}</td>
-                <td style="background:#e3f2fd;"></td>
+                <td class="text-end font-monospace" style="${partStyle} font-size:0.85rem;" id="subtotal-part-${safeRubro}-${safeCat}">${Math.round(sumParticipacion)}%</td>
                 <td class="text-end fw-bold font-monospace" style="background:#c8e6c9; font-size:0.85rem; color:#1b5e20;" id="subtotal-val-${safeRubro}-${safeCat}">${FormatoUtils.formatearNumero(sumVentaDist)}</td>
                 ${mesesSubtotalHtml}
+                <td style="background:#e8f5e9;"></td>
             `;
         }
     }
@@ -647,9 +864,13 @@ class DistribucionManager {
         const rubros = new Set();
         const categorias = new Set();
 
-        DistribucionManager.datos.forEach(item => {
-            rubros.add(item.RUBRO);
-            categorias.add(item.CATEGORIA_PADRE);
+        const fuenteDatos = DistribucionManager.datos.length > 0 
+            ? DistribucionManager.datos 
+            : DistribucionManager.datosCostos;
+
+        fuenteDatos.forEach(item => {
+            if (item.RUBRO) rubros.add(item.RUBRO);
+            if (item.CATEGORIA_PADRE) categorias.add(item.CATEGORIA_PADRE);
         });
 
         // Rubros
@@ -669,18 +890,24 @@ class DistribucionManager {
     }
 
     static filtrarDatos() {
+        // Si está activo el paso 2 (costos), filtrar esa tabla
+        if (DistribucionManager.pasoActivo === 2) {
+            DistribucionManager.filtrarDatosCostos();
+            return;
+        }
+
         const query = document.getElementById('search-distribucion').value.toLowerCase().trim();
         const rubro = document.getElementById('filtro-rubro-distribucion').value;
         const categoria = document.getElementById('filtro-categoria-distribucion').value;
         const canal = document.getElementById('filtro-canal-distribucion').value;
 
         DistribucionManager.datosFiltrados = DistribucionManager.datos.filter(item => {
-            const matchesQuery = !query || 
-                                 item.RUBRO.toLowerCase().includes(query) || 
-                                 item.CATEGORIA_PADRE.toLowerCase().includes(query);
-            const matchesRubro = !rubro || item.RUBRO === rubro;
-            const matchesCat = !categoria || item.CATEGORIA_PADRE === categoria;
-            const matchesCanal = !canal || item.CANAL === canal;
+            const rubroStr = (item.RUBRO || '').toLowerCase();
+            const catStr = (item.CATEGORIA_PADRE || '').toLowerCase();
+            const matchesQuery = !query || rubroStr.includes(query) || catStr.includes(query);
+            const matchesRubro = !rubro || (item.RUBRO || '') === rubro;
+            const matchesCat = !categoria || (item.CATEGORIA_PADRE || '') === categoria;
+            const matchesCanal = !canal || (item.CANAL || '') === canal;
 
             return matchesQuery && matchesRubro && matchesCat && matchesCanal;
         });
@@ -689,15 +916,44 @@ class DistribucionManager {
         document.getElementById('count-distribucion').textContent = `${DistribucionManager.datosFiltrados.length} registros`;
     }
 
+    /**
+     * Filtrar la tabla de costos (Paso 2)
+     */
+    static filtrarDatosCostos() {
+        const query = document.getElementById('search-distribucion').value.toLowerCase().trim();
+        const rubro = document.getElementById('filtro-rubro-distribucion').value;
+        const categoria = document.getElementById('filtro-categoria-distribucion').value;
+
+        const filtrados = DistribucionManager.datosCostos.filter(item => {
+            const rubroStr = (item.RUBRO || '').toLowerCase();
+            const catStr = (item.CATEGORIA_PADRE || '').toLowerCase();
+            const matchesQuery = !query || rubroStr.includes(query) || catStr.includes(query);
+            const matchesRubro = !rubro || (item.RUBRO || '') === rubro;
+            const matchesCat = !categoria || (item.CATEGORIA_PADRE || '') === categoria;
+            return matchesQuery && matchesRubro && matchesCat;
+        });
+
+        const countEl = document.getElementById('count-distribucion');
+        if (countEl) countEl.textContent = `${filtrados.length} registros`;
+
+        DistribucionManager.renderizarTablaCostos(filtrados);
+    }
+
     static limpiarFiltros() {
         document.getElementById('search-distribucion').value = '';
         document.getElementById('filtro-rubro-distribucion').value = '';
         document.getElementById('filtro-categoria-distribucion').value = '';
         document.getElementById('filtro-canal-distribucion').value = '';
         
-        DistribucionManager.datosFiltrados = [...DistribucionManager.datos];
-        DistribucionManager.renderizarTabla();
-        document.getElementById('count-distribucion').textContent = `${DistribucionManager.datosFiltrados.length} registros`;
+        if (DistribucionManager.pasoActivo === 2) {
+            const countEl = document.getElementById('count-distribucion');
+            if (countEl) countEl.textContent = `${DistribucionManager.datosCostos.length} registros`;
+            DistribucionManager.renderizarTablaCostos(); // sin filtro = todos
+        } else {
+            DistribucionManager.datosFiltrados = [...DistribucionManager.datos];
+            DistribucionManager.renderizarTabla();
+            document.getElementById('count-distribucion').textContent = `${DistribucionManager.datosFiltrados.length} registros`;
+        }
     }
 
     static restaurarAutomatico() {
@@ -715,6 +971,7 @@ class DistribucionManager {
         let totalProy = 0;
         let totalFinal = 0;
         const gruposInvalidos = [];
+        const gruposPartInvalidos = [];
 
         // Validar por grupo rubro|categoria
         const agrupado = {};
@@ -723,10 +980,12 @@ class DistribucionManager {
             if (!agrupado[key]) {
                 agrupado[key] = {
                     compraProyectada: item.COMPRA_PROYECTADA,
-                    sumaFinal: 0
+                    sumaFinal: 0,
+                    sumaParticipacion: 0
                 };
             }
             agrupado[key].sumaFinal += item.DISTRIBUCION_FINAL;
+            agrupado[key].sumaParticipacion += parseFloat(item.PARTICIPACION) || 0;
         });
 
         Object.keys(agrupado).forEach(key => {
@@ -735,15 +994,59 @@ class DistribucionManager {
             totalFinal += g.sumaFinal;
 
             if (g.compraProyectada !== g.sumaFinal) {
-                gruposInvalidos.push(key);
+                gruposInvalidos.push(`- ${key.replace('|', ' · ')} (Proyectado: ${FormatoUtils.formatearNumero(g.compraProyectada)}, Distribuido: ${FormatoUtils.formatearNumero(g.sumaFinal)})`);
+            }
+            if (Math.abs(g.sumaParticipacion - 100) > 0.01) {
+                gruposPartInvalidos.push(`- ${key.replace('|', ' · ')} (Suma: ${Math.round(g.sumaParticipacion)}%)`);
             }
         });
 
+        const filasMensualesIncorrectas = [];
+        DistribucionManager.datos.forEach(item => {
+            if (item.DISTRIBUCION_MENSUAL) {
+                let sumPorc = 0;
+                Object.keys(item.DISTRIBUCION_MENSUAL).forEach(m => {
+                    sumPorc += parseFloat(item.DISTRIBUCION_MENSUAL[m].porcentaje) || 0;
+                });
+                if (Math.abs(sumPorc - 100) > 0.05) {
+                    filasMensualesIncorrectas.push(`- ${item.RUBRO} · ${item.CATEGORIA_PADRE} [${item.CANAL}] (Suma: ${Math.round(sumPorc)}%)`);
+                }
+            }
+        });
+
+        if (filasMensualesIncorrectas.length > 0) {
+            let msg = `No se puede guardar. La sumatoria de la distribución mensual (%) por canal debe ser exactamente 100%.`;
+            msg += `\n\nHay ${filasMensualesIncorrectas.length} filas con error (resaltadas con fondo rojo).`;
+            if (filasMensualesIncorrectas.length <= 5) {
+                msg += `\n\nFilas afectadas:\n${filasMensualesIncorrectas.join('\n')}`;
+            } else {
+                msg += `\n\nPor favor, busque los badges rojos en la columna 'Total %'.`;
+            }
+            UIUtils.mostrarAlerta(msg, 'error');
+            return;
+        }
+
+        if (gruposPartInvalidos.length > 0) {
+            let msg = `No se puede guardar. La sumatoria de participación (%) por canal debe ser 100%.`;
+            msg += `\n\nHay ${gruposPartInvalidos.length} grupos con error (resaltados en la columna 'Participación %').`;
+            if (gruposPartInvalidos.length <= 5) {
+                msg += `\n\nGrupos afectados:\n${gruposPartInvalidos.join('\n')}`;
+            } else {
+                msg += `\n\nPor favor, busque las celdas con alerta roja en la columna 'Participación %'.`;
+            }
+            UIUtils.mostrarAlerta(msg, 'error');
+            return;
+        }
+
         if (gruposInvalidos.length > 0) {
-            UIUtils.mostrarAlerta(
-                `No se puede guardar: La suma distribuida no coincide con la Compra Proyectada para ${gruposInvalidos.length} rubros/categorías.`,
-                'error'
-            );
+            let msg = `No se puede guardar. La suma distribuida no coincide con la Compra Proyectada.`;
+            msg += `\n\nHay ${gruposInvalidos.length} rubros/categorías con diferencias.`;
+            if (gruposInvalidos.length <= 5) {
+                msg += `\n\nGrupos afectados:\n${gruposInvalidos.join('\n')}`;
+            } else {
+                msg += `\n\nPor favor, revise los subtotales con diferencias en color rojo.`;
+            }
+            UIUtils.mostrarAlerta(msg, 'error');
             return;
         }
 
@@ -769,7 +1072,8 @@ class DistribucionManager {
                 ajuste_manual: 0,
                 distribucion_final: d.COMPRA_DISTRIBUIDA,
                 periodo_analisis: d.PERIODO_ANALISIS,
-                nombre_distribucion: nombreLimpio
+                nombre_distribucion: nombreLimpio,
+                distribucion_mensual_json: JSON.stringify(d.DISTRIBUCION_MENSUAL)
             }));
 
             const response = await APIClient.guardarDistribucion(filas);
@@ -825,10 +1129,26 @@ class DistribucionManager {
         const activePane = document.getElementById(`paso-${paso}`);
         if (activePane) activePane.classList.add('active');
 
-        // 3. Mostrar/ocultar selector de canal según el paso
+        // 3. Mostrar/ocultar selector de canal y switch de moneda según el paso
         const colCanal = document.getElementById('col-filtro-canal');
         if (colCanal) {
             colCanal.style.display = (paso === 2) ? 'none' : 'block';
+        }
+
+        const colMoneda = document.getElementById('col-switch-moneda');
+        if (colMoneda) {
+            colMoneda.style.display = (paso === 2) ? 'block' : 'none';
+        }
+
+        const btnParametros = document.getElementById('btn-costos-parametros');
+        if (btnParametros) {
+            btnParametros.style.display = (paso === 2) ? 'inline-block' : 'none';
+        }
+
+        // Ocultar botón Guardar en el paso 2 ya que los parámetros son globales (se guardan desde el modal)
+        const btnGuardar = document.querySelector('button[onclick="DistribucionManager.ejecutarGuardar()"]');
+        if (btnGuardar) {
+            btnGuardar.style.display = (paso === 2) ? 'none' : 'inline-block';
         }
     }
 
@@ -877,9 +1197,19 @@ class DistribucionManager {
                 DistribucionManager.mesesCostos = response.meses || [];
                 DistribucionManager.mesesCostosClaves = response.meses_claves || [];
 
-                console.log('Primera fila COSTO_PROM:', response.data[0]?.COSTO_PROM, '| INC_FOB:', response.data[0]?.INC_FOB);
+                // Asegurar carga de tipo de cambio si estamos en USD
+                if (DistribucionManager.modoMoneda === 'USD' && Object.keys(DistribucionManager.tipoCambio).length === 0) {
+                    const tcResponse = await APIClient.obtenerTipoCambio();
+                    if (tcResponse.success) {
+                        DistribucionManager.tipoCambio = tcResponse.tasas || {};
+                    }
+                }
+
+                // Cargar filtros con los rubros y categorías del costo
+                DistribucionManager.cargarFiltros();
                 
                 DistribucionManager.renderizarTablaCostos();
+                DistribucionManager.actualizarVisualizacionMoneda();
                 UIUtils.mostrarAlerta('Costos de proyección cargados', 'success');
             } else {
                 throw new Error(response.message || 'No se recibieron datos de costos válidos');
@@ -892,110 +1222,528 @@ class DistribucionManager {
         }
     }
 
-    static renderizarTablaCostos() {
-        const headRow = document.getElementById('thead-costos-row');
-        const tbody = document.getElementById('tbody-costos');
+    static renderizarTablaCostos(datosParam = null) {
+        const headRowCostos = document.getElementById('thead-costos-row');
+        const tbodyCostos = document.getElementById('tbody-costos');
+        const headRowMarkup = document.getElementById('thead-markup-row');
+        const tbodyMarkup = document.getElementById('tbody-markup');
         
-        if (!headRow || !tbody) return;
+        if (!headRowCostos || !tbodyCostos) return;
+
+        // Usar datos filtrados si se proveen, si no todos los datos
+        const datos = datosParam !== null ? datosParam : DistribucionManager.datosCostos;
+
+        // Configuración de conversión (Fórmula: USD es base, ARS es USD * Tasa)
+        const esARS = DistribucionManager.modoMoneda === 'ARS';
+        const tasaPromedio = esARS ? DistribucionManager.tasaPromedioPeriodo() : 1;
+        const sufMoneda = esARS ? ' ($)' : ' (U$D)';
+
+        // Helper para convertir y formatear dinero
+        const fmtDinero = (v, tasa = null) => {
+            const t = tasa !== null ? tasa : tasaPromedio;
+            const valorFinal = esARS ? (v * t) : v;
+            return FormatoUtils.formatearNumero(Math.round(valorFinal));
+        };
 
         // 1. Reconstruir cabeceras
         let headHtml = `
             <th>Rubro</th>
             <th>Categoría</th>
-            <th class="text-center bg-secondary text-white">Venta Proyectada</th>
-            <th class="text-center bg-info text-dark" style="width: 120px;">Costo Prom</th>
-            <th class="text-center bg-warning text-dark" style="width: 120px;">Inc Fob %</th>
-            <th class="text-center bg-success text-white" style="width: 120px;">Vcosto</th>
+            <th class="bg-light-blue font-monospace">Canal</th>
+            <th class="text-end bg-secondary text-white" style="width: 150px;">Venta Proyectada (U.)</th>
+            <th class="text-end bg-success text-white" style="width: 140px;">Vcosto${sufMoneda}</th>
         `;
 
         DistribucionManager.mesesCostos.forEach(m => {
-            headHtml += `<th class="text-center bg-dark text-white">${m}</th>`;
+            const tasaMes = esARS ? DistribucionManager.tasaParaMes(m) : 1;
+            headHtml += `
+                <th class="text-end bg-dark text-white" style="min-width: 90px;">
+                    ${m}${esARS ? '<br><small style="font-size:0.65rem;opacity:0.8;">TC $' + Math.round(tasaMes) + '</small>' : ''}
+                </th>`;
         });
-        headHtml += `<th class="text-center bg-primary text-white">Costo Total</th>`;
-        headRow.innerHTML = headHtml;
+        headHtml += `<th class="text-end bg-primary text-white" style="width: 150px;">Costo Total${sufMoneda}</th>`;
+        
+        if (headRowCostos) headRowCostos.innerHTML = headHtml;
+        if (headRowMarkup) headRowMarkup.innerHTML = headHtml;
 
         // 2. Renderizar filas de datos
-        if (DistribucionManager.datosCostos.length === 0) {
-            tbody.innerHTML = `
+        if (datos.length === 0) {
+            const emptyHtml = `
                 <tr>
-                    <td colspan="${7 + DistribucionManager.mesesCostos.length}" class="text-center text-muted py-4">
+                    <td colspan="${6 + DistribucionManager.mesesCostos.length}" class="text-center text-muted py-4">
                         No hay datos cargados para esta versión.
                     </td>
                 </tr>`;
+            if (tbodyCostos) tbodyCostos.innerHTML = emptyHtml;
+            if (tbodyMarkup) tbodyMarkup.innerHTML = emptyHtml;
             return;
         }
 
-        let bodyHtml = '';
-        DistribucionManager.datosCostos.forEach((row, index) => {
-            // Calcular Vcosto
+        // Helper para generar fila de subtotal de costos por rubro/categoría
+        const generarSubtotalCostos = (grupo) => {
+            const first = grupo[0];
+            const safeRubro = first.RUBRO.replace(/[^a-zA-Z0-9]/g, '');
+            const safeCat = first.CATEGORIA_PADRE.replace(/[^a-zA-Z0-9]/g, '');
+
+            let sumCompraDist = 0;
+            let sumCostoTotalUSD = 0;
+            const sumMesesUSD = {};
+            DistribucionManager.mesesCostosClaves.forEach(m => sumMesesUSD[m] = 0);
+
+            grupo.forEach(item => {
+                const vcosto = item.COSTO_PROM * (1 + item.INC_FOB / 100);
+                sumCompraDist += item.COMPRA_DISTRIBUIDA || 0;
+
+                DistribucionManager.mesesCostosClaves.forEach(m => {
+                    const unidades = item.MESES_UNIDADES[m] || 0;
+                    sumMesesUSD[m] += (vcosto * unidades);
+                    sumCostoTotalUSD += (vcosto * unidades);
+                });
+            });
+
+            // Formatear meses de subtotal
+            let mesesSubtotalHtml = '';
+            DistribucionManager.mesesCostosClaves.forEach((m, mIdx) => {
+                const labelMes = DistribucionManager.mesesCostos[mIdx];
+                const tasaMes = esARS ? DistribucionManager.tasaParaMes(labelMes) : 1;
+                mesesSubtotalHtml += `<td class="text-end fw-bold font-monospace" style="background:#e8f5e9; font-size:0.85rem;">${fmtDinero(sumMesesUSD[m], tasaMes)}</td>`;
+            });
+
+            const vcostoGrupo = first.COSTO_PROM * (1 + first.INC_FOB / 100);
+            const vcostoGrupoFormatted = esARS ? (vcostoGrupo * tasaPromedio).toFixed(0) : vcostoGrupo.toFixed(2);
+            const vcostoColor = vcostoGrupo > 0 ? 'text-success fw-bold' : 'text-muted';
+
+            return `
+                <tr id="subtotal-costos-${safeRubro}-${safeCat}" style="background: linear-gradient(90deg,#e3f2fd 0%,#f1f8e9 100%); border-top: 2px solid #90caf9; border-bottom: 2px solid #90caf9; vertical-align: middle;">
+                    <td colspan="3" class="fw-bold text-primary" style="font-size:0.85rem; padding: 6px 8px;">
+                        <i class="fas fa-sigma me-1 text-primary" style="font-size:0.75rem;"></i>
+                        SUBTOTAL &nbsp;<span class="text-muted fw-normal">${first.RUBRO} · ${first.CATEGORIA_PADRE}</span>
+                    </td>
+                    <td class="text-end fw-bold font-monospace" style="background:#e3f2fd; font-size:0.85rem;">${FormatoUtils.formatearNumero(sumCompraDist)}</td>
+                    <td class="text-end font-monospace ${vcostoColor}" style="background:#e3f2fd; font-size:0.85rem;">
+                        ${vcostoGrupo > 0 ? (esARS ? '$' : 'U$D') + ' ' + vcostoGrupoFormatted : ''}
+                    </td>
+                    ${mesesSubtotalHtml}
+                    <td class="text-end fw-bold font-monospace bg-primary bg-opacity-10" style="font-size:0.85rem; color:#0d6efd;">${fmtDinero(sumCostoTotalUSD)}</td>
+                </tr>
+            `;
+        };
+
+        // Helper para obtener el markup correspondiente al canal de la fila
+        const obtenerMarkupFila = (row) => {
+            const canal = (row.CANAL || '').toUpperCase();
+            if (canal.includes('LOCAL')) return row.MARKUP_LOCALES_PROPIOS || 0.0;
+            if (canal.includes('FRANQ')) return row.MARKUP_FRANQUICIAS || 0.0;
+            if (canal.includes('MAYOR')) return row.MARKUP_MAYORISTAS || 0.0;
+            if (canal.includes('ECOM') || canal.includes('WEB')) return row.MARKUP_ECOMMERCE || 0.0;
+            return 0.0;
+        };
+
+        // Helper para generar fila de subtotal de markup por rubro/categoría
+        const generarSubtotalMarkup = (grupo) => {
+            const first = grupo[0];
+            const safeRubro = first.RUBRO.replace(/[^a-zA-Z0-9]/g, '');
+            const safeCat = first.CATEGORIA_PADRE.replace(/[^a-zA-Z0-9]/g, '');
+
+            let sumCompraDist = 0;
+            let sumMarkupTotalUSD = 0;
+            const sumMesesUSD = {};
+            DistribucionManager.mesesCostosClaves.forEach(m => sumMesesUSD[m] = 0);
+
+            grupo.forEach(item => {
+                const vcosto = item.COSTO_PROM * (1 + item.INC_FOB / 100);
+                const markup = obtenerMarkupFila(item);
+                sumCompraDist += item.COMPRA_DISTRIBUIDA || 0;
+
+                DistribucionManager.mesesCostosClaves.forEach(m => {
+                    const unidades = item.MESES_UNIDADES[m] || 0;
+                    // Formula: unidades * vcosto * markup
+                    const valorMarkupUSD = unidades * vcosto * markup;
+                    sumMesesUSD[m] += valorMarkupUSD;
+                    sumMarkupTotalUSD += valorMarkupUSD;
+                });
+            });
+
+            // Formatear meses de subtotal
+            let mesesSubtotalHtml = '';
+            DistribucionManager.mesesCostosClaves.forEach((m, mIdx) => {
+                const labelMes = DistribucionManager.mesesCostos[mIdx];
+                const tasaMes = esARS ? DistribucionManager.tasaParaMes(labelMes) : 1;
+                mesesSubtotalHtml += `<td class="text-end fw-bold font-monospace" style="background:#fdf6e2; font-size:0.85rem;">${fmtDinero(sumMesesUSD[m], tasaMes)}</td>`;
+            });
+
+            const vcostoGrupo = first.COSTO_PROM * (1 + first.INC_FOB / 100);
+            const vcostoGrupoFormatted = esARS ? (vcostoGrupo * tasaPromedio).toFixed(0) : vcostoGrupo.toFixed(2);
+            const vcostoColor = vcostoGrupo > 0 ? 'text-success fw-bold' : 'text-muted';
+
+            return `
+                <tr id="subtotal-markup-${safeRubro}-${safeCat}" style="background: linear-gradient(90deg,#fffde7 0%,#f1f8e9 100%); border-top: 2px solid #ffcc80; border-bottom: 2px solid #ffcc80; vertical-align: middle;">
+                    <td colspan="3" class="fw-bold text-warning-emphasis" style="font-size:0.85rem; padding: 6px 8px;">
+                        <i class="fas fa-sigma me-1 text-warning" style="font-size:0.75rem;"></i>
+                        SUBTOTAL &nbsp;<span class="text-muted fw-normal">${first.RUBRO} · ${first.CATEGORIA_PADRE}</span>
+                    </td>
+                    <td class="text-end fw-bold font-monospace" style="background:#fffde7; font-size:0.85rem;">${FormatoUtils.formatearNumero(sumCompraDist)}</td>
+                    <td class="text-end font-monospace ${vcostoColor}" style="background:#fffde7; font-size:0.85rem;">
+                        ${vcostoGrupo > 0 ? (esARS ? '$' : 'U$D') + ' ' + vcostoGrupoFormatted : ''}
+                    </td>
+                    ${mesesSubtotalHtml}
+                    <td class="text-end fw-bold font-monospace bg-warning bg-opacity-10" style="font-size:0.85rem; color:#ff9800;">${fmtDinero(sumMarkupTotalUSD)}</td>
+                </tr>
+            `;
+        };
+
+        let htmlCostos = '';
+        let htmlMarkup = '';
+        let rubroAnterior = '';
+        let catAnterior = '';
+        let grupoActual = [];
+
+        datos.forEach((row, index) => {
+            const esNuevoGrupo = (row.RUBRO !== rubroAnterior || row.CATEGORIA_PADRE !== catAnterior);
+            if (esNuevoGrupo && grupoActual.length > 0) {
+                htmlCostos += generarSubtotalCostos(grupoActual);
+                htmlMarkup += generarSubtotalMarkup(grupoActual);
+                grupoActual = [];
+            }
+
+            // Calcular Vcosto (Base en USD)
             const vcosto = row.COSTO_PROM * (1 + row.INC_FOB / 100);
             row.VCOSTO = vcosto;
 
-            let mesesHtml = '';
-            let costoTotal = 0;
+            const markup = obtenerMarkupFila(row);
 
-            DistribucionManager.mesesCostosClaves.forEach(m => {
+            let mesesHtmlCostos = '';
+            let mesesHtmlMarkup = '';
+            let costoTotalUSD = 0;
+            let markupTotalUSD = 0;
+
+            DistribucionManager.mesesCostosClaves.forEach((m, mIdx) => {
+                const labelMes = DistribucionManager.mesesCostos[mIdx];
                 const unidades = row.MESES_UNIDADES[m] || 0;
-                const costoMes = vcosto * unidades;
-                costoTotal += costoMes;
-                mesesHtml += `<td class="text-end font-monospace" id="costo-mes-${index}-${m}" style="font-size:0.85rem;">${FormatoUtils.formatearNumero(Math.round(costoMes))}</td>`;
+                
+                // Costo mensual base en USD
+                const costoMesUSD = vcosto * unidades;
+                costoTotalUSD += costoMesUSD;
+
+                // Markup mensual base en USD
+                const markupMesUSD = vcosto * unidades * markup;
+                markupTotalUSD += markupMesUSD;
+                
+                const tasaMes = esARS ? DistribucionManager.tasaParaMes(labelMes) : 1;
+                mesesHtmlCostos += `<td class="text-end font-monospace" style="font-size:0.85rem;">${fmtDinero(costoMesUSD, tasaMes)}</td>`;
+                mesesHtmlMarkup += `<td class="text-end font-monospace" style="font-size:0.85rem;">${fmtDinero(markupMesUSD, tasaMes)}</td>`;
             });
 
-            bodyHtml += `
+            const vcostoValorFormatted = esARS ? (vcosto * tasaPromedio).toFixed(0) : vcosto.toFixed(2);
+            const vcostoColor = vcosto > 0 ? 'text-success fw-bold' : 'text-muted';
+
+            // Para limpiar celdas repetidas en visualización
+            const rubroText = esNuevoGrupo ? `<strong>${row.RUBRO}</strong>` : `<span class="text-muted">${row.RUBRO}</span>`;
+            const catText = esNuevoGrupo ? row.CATEGORIA_PADRE : `<span class="text-muted">${row.CATEGORIA_PADRE}</span>`;
+
+            // Construir fila de Costos
+            htmlCostos += `
                 <tr style="vertical-align: middle;">
-                    <td class="fw-bold">${row.RUBRO}</td>
-                    <td>${row.CATEGORIA_PADRE}</td>
+                    <td>${rubroText}</td>
+                    <td>${catText}</td>
+                    <td class="bg-light-blue font-monospace">${row.CANAL}</td>
                     <td class="text-end font-monospace fw-bold" style="background:#f8f9fa;">${FormatoUtils.formatearNumero(row.COMPRA_DISTRIBUIDA)}</td>
-                    <td>
-                        <input type="number" class="form-control form-control-sm text-end font-monospace border-primary-subtle" 
-                            step="any" value="${(row.COSTO_PROM != null && row.COSTO_PROM !== '') ? row.COSTO_PROM : ''}" 
-                            oninput="DistribucionManager.actualizarCostoFila(${index}, 'COSTO_PROM', this.value)" 
-                            style="width: 110px; display: inline-block;">
+                    <td class="text-end font-monospace ${vcostoColor}">
+                        ${vcosto > 0 ? (esARS ? '$' : 'U$D') + ' ' + vcostoValorFormatted : '<span class="badge bg-secondary fs-8">Sin param.</span>'}
                     </td>
-                    <td>
-                        <input type="number" class="form-control form-control-sm text-end font-monospace border-warning-subtle" 
-                            step="any" value="${(row.INC_FOB != null && row.INC_FOB !== '') ? row.INC_FOB : ''}" 
-                            oninput="DistribucionManager.actualizarCostoFila(${index}, 'INC_FOB', this.value)" 
-                            style="width: 110px; display: inline-block;">
-                    </td>
-                    <td class="text-end font-monospace fw-bold text-success" id="vcosto-${index}">${row.VCOSTO.toFixed(2)}</td>
-                    ${mesesHtml}
-                    <td class="text-end font-monospace fw-bold bg-primary bg-opacity-10" id="costo-total-${index}">${FormatoUtils.formatearNumero(Math.round(costoTotal))}</td>
+                    ${mesesHtmlCostos}
+                    <td class="text-end font-monospace fw-bold bg-primary bg-opacity-10">${fmtDinero(costoTotalUSD)}</td>
                 </tr>
             `;
+
+            // Construir fila de Markup
+            htmlMarkup += `
+                <tr style="vertical-align: middle;">
+                    <td>${rubroText}</td>
+                    <td>${catText}</td>
+                    <td class="bg-light-blue font-monospace">${row.CANAL} <span class="badge bg-secondary font-monospace fs-9 ms-1" style="font-weight:normal;">x${markup.toFixed(1)}</span></td>
+                    <td class="text-end font-monospace fw-bold" style="background:#f8f9fa;">${FormatoUtils.formatearNumero(row.COMPRA_DISTRIBUIDA)}</td>
+                    <td class="text-end font-monospace ${vcostoColor}">
+                        ${vcosto > 0 ? (esARS ? '$' : 'U$D') + ' ' + vcostoValorFormatted : '<span class="badge bg-secondary fs-8">Sin param.</span>'}
+                    </td>
+                    ${mesesHtmlMarkup}
+                    <td class="text-end font-monospace fw-bold bg-warning bg-opacity-10">${fmtDinero(markupTotalUSD)}</td>
+                </tr>
+            `;
+
+            grupoActual.push(row);
+            rubroAnterior = row.RUBRO;
+            catAnterior = row.CATEGORIA_PADRE;
         });
 
-        tbody.innerHTML = bodyHtml;
+        if (grupoActual.length > 0) {
+            htmlCostos += generarSubtotalCostos(grupoActual);
+            htmlMarkup += generarSubtotalMarkup(grupoActual);
+        }
+
+        if (tbodyCostos) tbodyCostos.innerHTML = htmlCostos;
+        if (tbodyMarkup) tbodyMarkup.innerHTML = htmlMarkup;
     }
 
-    static actualizarCostoFila(index, campo, valor) {
+    // Propiedad para guardar parámetros cargados en modal
+    static parametrosGlobalesModal = [];
+
+    /**
+     * Cargar y abrir el Modal de Parámetros Globales
+     */
+    static async abrirModalParametros() {
+        try {
+            UIUtils.mostrarLoading(true);
+            const response = await APIClient.obtenerParametrosCostos();
+            if (response.success) {
+                // PRIMERO: cargar combinaciones desde los parámetros globales guardados en la BD
+                // (disponibles siempre, sin necesidad de tener una versión cargada)
+                const combinaciones = {};
+                const mapaParams = {};
+                if (response.parametros) {
+                    response.parametros.forEach(p => {
+                        const clave = `${p.rubro}|${p.categoria_padre}`;
+                        mapaParams[clave] = p;
+                        combinaciones[clave] = {
+                            rubro: p.rubro,
+                            categoria_padre: p.categoria_padre
+                        };
+                    });
+                }
+
+                // LUEGO: agregar nuevas combinaciones desde los datos cargados de la versión actual
+                // (añade rubros/categorías nuevas que aún no están guardadas globalmente)
+                DistribucionManager.datosCostos.forEach(d => {
+                    const clave = `${d.RUBRO}|${d.CATEGORIA_PADRE}`;
+                    if (!combinaciones[clave]) {
+                        combinaciones[clave] = {
+                            rubro: d.RUBRO,
+                            categoria_padre: d.CATEGORIA_PADRE
+                        };
+                    }
+                });
+
+                // Generar lista final de parámetros para el modal
+                DistribucionManager.parametrosGlobalesModal = Object.keys(combinaciones).map(clave => {
+                    const comb = combinaciones[clave];
+                    const paramExistente = mapaParams[clave];
+                    return {
+                        rubro: comb.rubro,
+                        categoria_padre: comb.categoria_padre,
+                        costo_prom: paramExistente ? paramExistente.costo_prom : 0,
+                        inc_fob: paramExistente ? paramExistente.inc_fob : 0,
+                        vcosto: paramExistente ? paramExistente.vcosto : 0,
+                        markup_locales_propios: paramExistente ? (paramExistente.markup_locales_propios || 0) : 0,
+                        markup_franquicias: paramExistente ? (paramExistente.markup_franquicias || 0) : 0,
+                        markup_mayoristas: paramExistente ? (paramExistente.markup_mayoristas || 0) : 0,
+                        markup_ecommerce: paramExistente ? (paramExistente.markup_ecommerce || 0) : 0
+                    };
+                });
+
+                // Renderizar el modal
+                DistribucionManager.renderizarParametrosModal();
+                
+                // Mostrar modal
+                const modalEl = document.getElementById('modal-parametros-costos');
+                if (modalEl) {
+                    // Mover al body si no está allí para evitar conflictos de z-index con el backdrop de Bootstrap
+                    if (modalEl.parentNode !== document.body) {
+                        document.body.appendChild(modalEl);
+                    }
+                    const modal = new bootstrap.Modal(modalEl);
+                    modal.show();
+                }
+            } else {
+                throw new Error(response.message);
+            }
+        } catch (e) {
+            console.error(e);
+            UIUtils.mostrarAlerta('Error al obtener parámetros de costos: ' + e.message, 'error');
+        } finally {
+            UIUtils.mostrarLoading(false);
+        }
+    }
+
+    /**
+     * Renderiza las filas en el modal de parámetros (Costos y Mark-Up por Canal)
+     */
+    static renderizarParametrosModal(lista = null) {
+        const tbodyCostos = document.getElementById('tbody-parametros-globales');
+        const tbodyMarkup = document.getElementById('tbody-parametros-markup');
+        if (!tbodyCostos || !tbodyMarkup) return;
+
+        const items = lista !== null ? lista : DistribucionManager.parametrosGlobalesModal;
+
+        if (items.length === 0) {
+            const emptyCostos = `<tr><td colspan="5" class="text-center text-muted py-3">No hay combinaciones para mostrar</td></tr>`;
+            const emptyMarkup = `<tr><td colspan="6" class="text-center text-muted py-3">No hay combinaciones para mostrar</td></tr>`;
+            tbodyCostos.innerHTML = emptyCostos;
+            tbodyMarkup.innerHTML = emptyMarkup;
+            return;
+        }
+
+        let htmlCostos = '';
+        let htmlMarkup = '';
+
+        items.forEach((item, index) => {
+            // Buscar índice en el array general
+            const idxOriginal = DistribucionManager.parametrosGlobalesModal.findIndex(p =>
+                p.rubro === item.rubro && p.categoria_padre === item.categoria_padre
+            );
+
+            const vcosto = item.costo_prom * (1 + item.inc_fob / 100);
+
+            // Tab 1: Costos
+            htmlCostos += `
+                <tr class="fila-param-modal" data-rubro="${item.rubro.toLowerCase()}" data-categoria="${item.categoria_padre.toLowerCase()}">
+                    <td class="fw-bold">${item.rubro}</td>
+                    <td>${item.categoria_padre}</td>
+                    <td>
+                        <input type="number" step="any" class="form-control form-control-sm text-end font-monospace border-primary-subtle"
+                               value="${item.costo_prom !== 0 ? item.costo_prom : ''}" placeholder="0.00"
+                               oninput="DistribucionManager.actualizarValorParametroModal(${idxOriginal}, 'costo_prom', this.value, this)">
+                    </td>
+                    <td>
+                        <input type="number" step="any" class="form-control form-control-sm text-end font-monospace border-warning-subtle"
+                               value="${item.inc_fob !== 0 ? item.inc_fob : ''}" placeholder="0 %"
+                               oninput="DistribucionManager.actualizarValorParametroModal(${idxOriginal}, 'inc_fob', this.value, this)">
+                    </td>
+                    <td class="text-end font-monospace fw-bold text-success" id="modal-vcosto-${idxOriginal}">
+                        U$D ${vcosto.toFixed(2)}
+                    </td>
+                </tr>`;
+
+            // Tab 2: Mark-Up
+            htmlMarkup += `
+                <tr class="fila-param-modal" data-rubro="${item.rubro.toLowerCase()}" data-categoria="${item.categoria_padre.toLowerCase()}">
+                    <td class="fw-bold">${item.rubro}</td>
+                    <td>${item.categoria_padre}</td>
+                    <td>
+                        <input type="number" step="any" class="form-control form-control-sm text-end font-monospace"
+                               value="${item.markup_locales_propios !== 0 ? item.markup_locales_propios : ''}" placeholder="0.0"
+                               oninput="DistribucionManager.actualizarValorParametroModal(${idxOriginal}, 'markup_locales_propios', this.value, this)">
+                    </td>
+                    <td>
+                        <input type="number" step="any" class="form-control form-control-sm text-end font-monospace"
+                               value="${item.markup_franquicias !== 0 ? item.markup_franquicias : ''}" placeholder="0.0"
+                               oninput="DistribucionManager.actualizarValorParametroModal(${idxOriginal}, 'markup_franquicias', this.value, this)">
+                    </td>
+                    <td>
+                        <input type="number" step="any" class="form-control form-control-sm text-end font-monospace"
+                               value="${item.markup_mayoristas !== 0 ? item.markup_mayoristas : ''}" placeholder="0.0"
+                               oninput="DistribucionManager.actualizarValorParametroModal(${idxOriginal}, 'markup_mayoristas', this.value, this)">
+                    </td>
+                    <td>
+                        <input type="number" step="any" class="form-control form-control-sm text-end font-monospace"
+                               value="${item.markup_ecommerce !== 0 ? item.markup_ecommerce : ''}" placeholder="0.0"
+                               oninput="DistribucionManager.actualizarValorParametroModal(${idxOriginal}, 'markup_ecommerce', this.value, this)">
+                    </td>
+                </tr>`;
+        });
+
+        tbodyCostos.innerHTML = htmlCostos;
+        tbodyMarkup.innerHTML = htmlMarkup;
+    }
+
+    /**
+     * Actualiza el valor del parámetro en memoria al escribir en el modal
+     */
+    static actualizarValorParametroModal(index, campo, valor, element) {
         const val = parseFloat(valor) || 0;
-        const row = DistribucionManager.datosCostos[index];
-        row[campo] = val;
+        const item = DistribucionManager.parametrosGlobalesModal[index];
+        if (item) {
+            item[campo] = val;
+            const vcosto = item.costo_prom * (1 + item.inc_fob / 100);
+            item.vcosto = vcosto;
 
-        // Recalcular Vcosto
-        const vcosto = row.COSTO_PROM * (1 + row.INC_FOB / 100);
-        row.VCOSTO = vcosto;
+            const vcostoCell = document.getElementById(`modal-vcosto-${index}`);
+            if (vcostoCell) {
+                vcostoCell.textContent = `U$D ${vcosto.toFixed(2)}`;
+            }
+        }
+    }
 
-        // Actualizar Vcosto en DOM
-        const vcostoCell = document.getElementById(`vcosto-${index}`);
-        if (vcostoCell) vcostoCell.textContent = vcosto.toFixed(2);
+    /**
+     * Filtrar dinámicamente ambas pestañas del modal usando clases compartidas
+     */
+    static filtrarParametrosModal(query) {
+        const q = query.toLowerCase().trim();
+        const rows = document.querySelectorAll('.fila-param-modal');
+        rows.forEach(row => {
+            const rubro = row.getAttribute('data-rubro') || '';
+            const cat = row.getAttribute('data-categoria') || '';
+            if (!q || rubro.includes(q) || cat.includes(q)) {
+                row.style.display = '';
+            } else {
+                row.style.display = 'none';
+            }
+        });
+    }
 
-        // Recalcular meses de costo en DOM
-        let costoTotal = 0;
-        DistribucionManager.mesesCostosClaves.forEach(m => {
-            const unidades = row.MESES_UNIDADES[m] || 0;
-            const costoMes = vcosto * unidades;
-            costoTotal += costoMes;
 
-            const cellMes = document.getElementById(`costo-mes-${index}-${m}`);
-            if (cellMes) cellMes.textContent = FormatoUtils.formatearNumero(Math.round(costoMes));
+    /**
+     * Toma el valor del primer registro para el campo especificado y lo replica en todos los demás registros
+     * del listado de parámetros globales del modal.
+     */
+    static replicarPrimerValorModal(campo) {
+        const items = DistribucionManager.parametrosGlobalesModal;
+        if (!items || items.length === 0) return;
+
+        // Obtenemos el valor de la primera fila
+        const primerValor = items[0][campo] || 0;
+
+        // Replicamos a todas las filas
+        items.forEach((item, index) => {
+            item[campo] = primerValor;
+            if (campo === 'costo_prom' || campo === 'inc_fob') {
+                item.vcosto = item.costo_prom * (1 + item.inc_fob / 100);
+            }
         });
 
-        // Actualizar costo total en DOM
-        const totalCell = document.getElementById(`costo-total-${index}`);
-        if (totalCell) totalCell.textContent = FormatoUtils.formatearNumero(Math.round(costoTotal));
+        // Re-renderizamos para actualizar visualmente todos los inputs y vcostos
+        const queryBusqueda = document.getElementById('buscar-parametro-modal')?.value || '';
+        if (queryBusqueda.trim() !== '') {
+            // Si hay búsqueda activa, filtramos para no perder el estado visual
+            DistribucionManager.renderizarParametrosModal();
+            DistribucionManager.filtrarParametrosModal(queryBusqueda);
+        } else {
+            DistribucionManager.renderizarParametrosModal();
+        }
+
+        UIUtils.mostrarAlerta(`Se replicó el valor ${primerValor} en todas las filas para ${campo}`, 'success');
     }
+
+    /**
+     * Guardar los parámetros globales editados
+     */
+    static async guardarParametrosModal() {
+        try {
+            UIUtils.mostrarLoading(true);
+            const response = await APIClient.guardarParametrosCostos(DistribucionManager.parametrosGlobalesModal);
+            if (response.success) {
+                UIUtils.mostrarAlerta('Parámetros globales guardados correctamente', 'success');
+                
+                // Ocultar modal
+                const modalEl = document.getElementById('modal-parametros-costos');
+                if (modalEl) {
+                    const modal = bootstrap.Modal.getInstance(modalEl);
+                    if (modal) modal.hide();
+                }
+
+                // Recargar costos para recalcular tabla
+                await DistribucionManager.cargarCostos();
+            } else {
+                throw new Error(response.message);
+            }
+        } catch (e) {
+            console.error(e);
+            UIUtils.mostrarAlerta('Error al guardar parámetros globales: ' + e.message, 'error');
+        } finally {
+            UIUtils.mostrarLoading(false);
+        }
+    }
+
+
 
     static async guardarCostos() {
         try {
@@ -1124,5 +1872,143 @@ class DistribucionManager {
 
     static buscarDatos() {
         DistribucionManager.filtrarDatos();
+    }
+
+    /**
+     * Parsear el label de mes (e.g. "Ene 27") y devolver { mes: 1, anio: 2027 }
+     */
+    static parsearMesAnio(label) {
+        const parts = label.trim().split(/\s+/);
+        if (parts.length < 2) return null;
+        const mesStr = parts[0];
+        const anioSuffix = parseInt(parts[1], 10);
+        // Determinar el año completo (2000+xx)
+        const anio = anioSuffix < 50 ? 2000 + anioSuffix : 1900 + anioSuffix;
+        const mes = DistribucionManager.MESES_NUM[mesStr];
+        if (!mes) return null;
+        return { mes, anio };
+    }
+
+    /**
+     * Obtener la tasa de cambio para un mes mostrado.
+     * El usuario quiere el tipo de cambio del año ANTERIOR al que se muestra.
+     * Ej: para "Ene 27" (Jan 2027), usar la tasa de Enero 2026.
+     */
+    static tasaParaMes(label) {
+        const parsed = DistribucionManager.parsearMesAnio(label);
+        if (!parsed) return 1;
+        const claveAnterior = `${parsed.mes}-${parsed.anio - 1}`;
+        const tasa = DistribucionManager.tipoCambio[claveAnterior];
+        return tasa && tasa > 0 ? tasa : 1;
+    }
+
+    /**
+     * Convertir un valor ARS a USD si el modo es USD, o devolver el valor original.
+     * Para valores agregados (sin mes específico), usa el promedio de tasas del período.
+     */
+    static convertirValor(valor, tasaOverride = null) {
+        if (DistribucionManager.modoMoneda === 'ARS') return valor;
+        const tasa = tasaOverride !== null ? tasaOverride : DistribucionManager.tasaPromedioPeriodo();
+        return tasa > 0 ? valor / tasa : valor;
+    }
+
+    /**
+     * Promedio de tasas del período de meses mostrados
+     * Usa meses de Step 1 si están disponibles, si no usa mesesCostos (Step 2)
+     */
+    static tasaPromedioPeriodo() {
+        const mesesRef = DistribucionManager.meses.length > 0
+            ? DistribucionManager.meses
+            : DistribucionManager.mesesCostos;
+        if (!mesesRef || mesesRef.length === 0) return 1;
+        let sum = 0, count = 0;
+        mesesRef.forEach(m => {
+            const tasa = DistribucionManager.tasaParaMes(m);
+            if (tasa > 1) { sum += tasa; count++; }
+        });
+        return count > 0 ? sum / count : 1;
+    }
+
+    /**
+     * Toggle entre ARS y USD. Carga tasas si es necesario.
+     */
+    static async toggleMoneda(modo) {
+        if (DistribucionManager.modoMoneda === modo) return;
+
+        if (modo === 'USD' && Object.keys(DistribucionManager.tipoCambio).length === 0) {
+            try {
+                UIUtils.mostrarLoading(true);
+                const response = await APIClient.obtenerTipoCambio();
+                if (response.success) {
+                    DistribucionManager.tipoCambio = response.tasas || {};
+                } else {
+                    UIUtils.mostrarAlerta('No se pudieron cargar las tasas de cambio: ' + (response.message || ''), 'error');
+                    UIUtils.mostrarLoading(false);
+                    return;
+                }
+            } catch (e) {
+                UIUtils.mostrarAlerta('Error al cargar tasas de cambio: ' + e.message, 'error');
+                UIUtils.mostrarLoading(false);
+                return;
+            } finally {
+                UIUtils.mostrarLoading(false);
+            }
+        }
+
+        DistribucionManager.modoMoneda = modo;
+        DistribucionManager.actualizarVisualizacionMoneda();
+
+        // Re-renderizar la tabla que corresponda al paso activo
+        if (DistribucionManager.pasoActivo === 2) {
+            DistribucionManager.filtrarDatosCostos(); // Aplica filtros actuales
+        } else {
+            DistribucionManager.renderizarTabla();
+        }
+    }
+
+    /**
+     * Actualiza el estado visual de los botones del switch de moneda
+     */
+    static actualizarVisualizacionMoneda() {
+        const modo = DistribucionManager.modoMoneda;
+        const btnArs = document.getElementById('btn-moneda-ars');
+        const btnUsd = document.getElementById('btn-moneda-usd');
+        const labelTC = document.getElementById('label-tipo-cambio');
+
+        if (btnArs && btnUsd) {
+            if (modo === 'USD') {
+                btnArs.className = 'btn btn-outline-primary btn-sm';
+                btnUsd.className = 'btn btn-success btn-sm';
+                if (labelTC) {
+                    const tasaRef = DistribucionManager.tasaPromedioPeriodo();
+                    labelTC.textContent = `(TC prom: $${tasaRef.toFixed(0)})`;
+                    labelTC.classList.remove('d-none');
+                }
+            } else {
+                btnArs.className = 'btn btn-primary active btn-sm';
+                btnUsd.className = 'btn btn-outline-success btn-sm';
+                if (labelTC) {
+                    labelTC.textContent = '';
+                    labelTC.classList.add('d-none');
+                }
+            }
+        }
+    }
+
+    /**
+     * Alterna la visibilidad (colapsar/expandir) de los contenedores de tablas en el paso 2
+     */
+    static toggleCollapseTabla(containerId, btn) {
+        const container = document.getElementById(containerId);
+        if (!container) return;
+
+        const isCollapsed = container.style.display === 'none';
+        if (isCollapsed) {
+            container.style.display = 'block';
+            btn.innerHTML = `<i class="fas fa-chevron-up me-1"></i>Colapsar`;
+        } else {
+            container.style.display = 'none';
+            btn.innerHTML = `<i class="fas fa-chevron-down me-1"></i>Expandir`;
+        }
     }
 }

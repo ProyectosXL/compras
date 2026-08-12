@@ -169,8 +169,9 @@ class Distribucion {
             $sqlInsert = "INSERT INTO dbo.FP_T_DISTRIBUCION_COMPRAS_CANAL (
                             fecha_guardado, pais, temporada, rubro, categoria_padre, canal,
                             compra_proyectada, venta_historica_canal, participacion_porcentaje,
-                            compra_distribuida, ajuste_manual, distribucion_final, periodo_analisis, nombre_distribucion
-                          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                            compra_distribuida, ajuste_manual, distribucion_final, periodo_analisis, nombre_distribucion,
+                            distribucion_mensual_json
+                          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
             foreach ($filas as $fila) {
                 $nombreDist = !empty($fila['nombre_distribucion']) ? trim($fila['nombre_distribucion']) : 'Por defecto';
@@ -208,7 +209,8 @@ class Distribucion {
                     (int)$fila['ajuste_manual'],
                     (int)$fila['distribucion_final'],
                     $fila['periodo_analisis'],
-                    $nombreDist
+                    $nombreDist,
+                    $fila['distribucion_mensual_json'] ?? null
                 ];
 
                 $insertStmt = sqlsrv_query($this->cid_sistemas, $sqlInsert, $insertParams);

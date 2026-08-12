@@ -333,6 +333,8 @@ class MainController {
             case 'canales-disponibles':
             case 'obtener-versiones':
             case 'costos-proyeccion':
+            case 'obtener-tipo-cambio':
+            case 'obtener-parametros-costos':
                 $this->delegarDistribucion($accion);
                 break;
                 
@@ -368,6 +370,7 @@ class MainController {
             case 'canales-disponibles':
             case 'guardar-distribucion':
             case 'guardar-costos':
+            case 'guardar-parametros-costos':
                 $this->delegarDistribucion($accion);
                 break;
             default:
@@ -572,6 +575,15 @@ class MainController {
                 break;
             case 'guardar-distribucion':
                 $distribucionController->guardarDistribucion();
+                break;
+            case 'obtener-tipo-cambio':
+                $distribucionController->obtenerTipoCambio();
+                break;
+            case 'obtener-parametros-costos':
+                $distribucionController->obtenerParametrosGlobales();
+                break;
+            case 'guardar-parametros-costos':
+                $distribucionController->guardarParametrosGlobales();
                 break;
         }
     }

@@ -128,8 +128,13 @@ class DistribucionController {
             foreach ($comprasProcesadas as $registro) {
                 $rubro = $registro['RUBRO'];
                 $categoria = $registro['CATEGORIA_PADRE'];
-                // Se utiliza el valor de la Venta Proyectada Verano (VENTA_PROY_VERANO) para realizar la distribución
-                $compraProyectada = (int)$registro['VENTA_PROY_VERANO'];
+                // Se utiliza el valor correspondiente de la Venta Proyectada según temporada
+                $compraProyectada = (strtoupper($temporadaFiltro) === 'VERANO') ? (int)$registro['VENTA_PROY_VERANO'] : (int)$registro['VENTA_PROY_INVIERNO'];
+
+                // Requisito: La categoria que sea VENTA PROYECTADA = 0 no debe mostrarse
+                if ($compraProyectada <= 0) {
+                    continue;
+                }
 
                 // Buscar ventas por canal en nuestro mapa en memoria
                 $rubroClave = trim($rubro);
@@ -156,16 +161,15 @@ class DistribucionController {
                 
                 $ventaTotalTemporada = array_sum($ventasPorMes);
                 
-                // 2. Calcular los porcentajes históricos de cada mes para este rubro/categoría
-                $porcentajesMes = [];
+                // 2. Calcular los porcentajes históricos agregados (como fallback)
+                $porcentajesMesGlobal = [];
                 foreach ($mesesTemporada as $mNum => $mName) {
-                    $porcentajesMes[$mNum] = $ventaTotalTemporada > 0 ? ($ventasPorMes[$mNum] / $ventaTotalTemporada) : 0;
+                    $porcentajesMesGlobal[$mNum] = $ventaTotalTemporada > 0 ? ($ventasPorMes[$mNum] / $ventaTotalTemporada) : 0;
                 }
                 
-                // Si no hay ventas en la temporada, repartir equitativamente (1/6)
                 if ($ventaTotalTemporada == 0) {
                     foreach ($mesesTemporada as $mNum => $mName) {
-                        $porcentajesMes[$mNum] = 1 / 6;
+                        $porcentajesMesGlobal[$mNum] = 1 / 6;
                     }
                 }
 
@@ -189,7 +193,7 @@ class DistribucionController {
 
                     $distribucionPorCanal[$canal] = [
                         'venta_canal' => $ventaCanal,
-                        'participacion_original' => round($participacionOriginal * 100, 2)
+                        'participacion_original' => round($participacionOriginal * 100, 0)
                     ];
 
                     if ($ventaCanal > $maxVenta) {
@@ -207,15 +211,18 @@ class DistribucionController {
                     $partOriginal = $distribucionPorCanal[$canal]['participacion_original'];
                     $partActual = $partOriginal;
                     
+                    $savedMonthlyJson = null;
                     if (isset($mapeoGuardados[$claveGuardado])) {
-                        $partActual = round((float)$mapeoGuardados[$claveGuardado]['participacion_porcentaje'], 2);
+                        $partActual = round((float)$mapeoGuardados[$claveGuardado]['participacion_porcentaje'], 0);
+                        $savedMonthlyJson = $mapeoGuardados[$claveGuardado]['distribucion_mensual_json'] ?? null;
                     }
                     
                     $sumaParticipacion += $partActual;
                     $filasCanal[$canal] = [
                         'participacion_original' => $partOriginal,
                         'participacion' => $partActual,
-                        'modificado' => (abs($partActual - $partOriginal) > 0.01)
+                        'modificado' => (abs($partActual - $partOriginal) > 0.01),
+                        'distribucion_mensual_json' => $savedMonthlyJson
                     ];
                 }
 
@@ -240,6 +247,18 @@ class DistribucionController {
                     $partActual = $filasCanal[$canal]['participacion'];
                     $esModificado = $filasCanal[$canal]['modificado'];
                     $distFinal = $filasCanal[$canal]['venta_distribuida'];
+                    $savedMonthlyJson = $filasCanal[$canal]['distribucion_mensual_json'];
+
+                    // Calcular estacionalidad de manera específica para este canal (CORRECCIÓN)
+                    $canalClave = trim($canal);
+                    $ventaCanalTotal = isset($ventasCanalTotales[$canalClave]) ? $ventasCanalTotales[$canalClave] : 0;
+                    $porcentajesMesCanal = [];
+                    foreach ($mesesTemporada as $mClave => $mLabel) {
+                        $vMesCanal = isset($ventasCanal[$canalClave]['meses'][$mClave]) ? $ventasCanal[$canalClave]['meses'][$mClave] : 0;
+                        $porcentajesMesCanal[$mClave] = $ventaCanalTotal > 0 
+                            ? ($vMesCanal / $ventaCanalTotal) 
+                            : $porcentajesMesGlobal[$mClave];
+                    }
 
                     // Distribuir la VENTA PROYECTADA / DISTRIBUCION_FINAL de este canal en base a la estacionalidad (%)
                     $mesesDistribuidos = [];
@@ -247,23 +266,34 @@ class DistribucionController {
                     $mesMayorPorcentaje = null;
                     $maxP = -1;
                     
+                    $savedMonthly = null;
+                    if (!empty($savedMonthlyJson)) {
+                        $savedMonthly = json_decode($savedMonthlyJson, true);
+                    }
+                    
                     foreach ($mesesTemporada as $mClave => $mLabel) {
-                        $p = $porcentajesMes[$mClave];
+                        if ($savedMonthly && isset($savedMonthly[$mLabel])) {
+                            $p = (float)$savedMonthly[$mLabel]['porcentaje'] / 100;
+                            $unidadesProyectadas = (int)$savedMonthly[$mLabel]['unidades'];
+                        } else {
+                            $p = $porcentajesMesCanal[$mClave];
+                            $unidadesProyectadas = (int)round($distFinal * $p);
+                        }
+
                         if ($p > $maxP) {
                             $maxP = $p;
                             $mesMayorPorcentaje = $mLabel;
                         }
                         
-                        $unidadesProyectadas = (int)round($distFinal * $p);
                         $mesesDistribuidos[$mLabel] = [
                             'unidades' => $unidadesProyectadas,
-                            'porcentaje' => round($p * 100, 2)
+                            'porcentaje' => round($p * 100, 0)
                         ];
                         $sumaMesesDistribuidos += $unidadesProyectadas;
                     }
                     
-                    // Ajustar diferencias de redondeo con el mes de mayor porcentaje
-                    if ($distFinal !== $sumaMesesDistribuidos && $mesMayorPorcentaje !== null) {
+                    // Ajustar diferencias de redondeo con el mes de mayor porcentaje (solo si no es override guardado)
+                    if (!$savedMonthly && $distFinal !== $sumaMesesDistribuidos && $mesMayorPorcentaje !== null) {
                         $diferenciaMes = $distFinal - $sumaMesesDistribuidos;
                         $mesesDistribuidos[$mesMayorPorcentaje]['unidades'] += $diferenciaMes;
                     }
@@ -285,7 +315,7 @@ class DistribucionController {
                             $sucMaxP = -1;
                             
                             foreach ($mesesTemporada as $mClave => $mLabel) {
-                                $p = $porcentajesMes[$mClave];
+                                $p = $porcentajesMesCanal[$mClave];
                                 if ($p > $sucMaxP) {
                                     $sucMaxP = $p;
                                     $sucMesMayorP = $mLabel;
@@ -406,6 +436,7 @@ class DistribucionController {
             
             $this->presupuesto->cambiarPais($pais);
             $versiones = $this->distribucion->obtenerNombresDistribuciones($pais, $temporada);
+            file_put_contents(__DIR__ . '/../version_debug.log', date('Y-m-d H:i:s') . " - PAIS: $pais, TEMPORADA: $temporada, IP: " . ($_SERVER['REMOTE_ADDR'] ?? 'CLI') . ", VERSIONES: " . json_encode($versiones) . "\n", FILE_APPEND);
             
             $this->jsonResponse([
                 'success' => true,
@@ -434,12 +465,12 @@ class DistribucionController {
             // 1. Obtener filas guardadas de distribución (Paso 1)
             $guardados = $this->distribucion->obtenerDistribucionGuardada($pais, $temporada, $nombreDistribucion);
 
-            // 2. Obtener costos guardados (Paso 2)
+            // 2. Obtener costos guardados (Parámetros globales)
             $costosModel = new CostoProyeccion();
-            $costosGuardados = $costosModel->obtenerCostosGuardados($pais, $temporada, $nombreDistribucion);
+            $costosGuardados = $costosModel->obtenerParametrosGlobales();
 
-            // Si no hay datos del Paso 1 NI del Paso 2, devolver vacío
-            if (empty($guardados) && empty($costosGuardados)) {
+            // Si no hay datos del Paso 1, devolver vacío
+            if (empty($guardados)) {
                 $this->jsonResponse([
                     'success' => true,
                     'data' => [],
@@ -449,7 +480,7 @@ class DistribucionController {
                 return;
             }
 
-            // 3. Extraer fechas del período de análisis del Paso 1 (si existe)
+            // 3. Extraer fechas del período de análisis del Paso 1
             $fechaDesde = '';
             $fechaHasta = '';
             if (!empty($guardados)) {
@@ -498,81 +529,109 @@ class DistribucionController {
             }
 
             // 5. Obtener todos los históricos para calcular estacionalidad
-            $ventasHistoricasTodas = !empty($guardados) 
-                ? $this->distribucion->obtenerTodasLasVentasPorCanal($fechaDesde, $fechaHasta)
-                : [];
+            $ventasHistoricasTodas = $this->distribucion->obtenerTodasLasVentasPorCanal($fechaDesde, $fechaHasta);
 
-            // 6. Agrupar por rubro y categoría desde el Paso 1 (si hay)
+            // 6. Agrupar por rubro, categoría y canal desde el Paso 1
             $agrupados = [];
             foreach ($guardados as $g) {
                 $rubro = trim($g['rubro']);
                 $categoria = trim($g['categoria_padre']);
-                $clave = $rubro . '|' . $categoria;
+                $canal = trim($g['canal']);
+                $clave = $rubro . '|' . $categoria . '|' . $canal;
 
                 if (!isset($agrupados[$clave])) {
                     $agrupados[$clave] = [
                         'RUBRO' => $rubro,
                         'CATEGORIA_PADRE' => $categoria,
-                        'COMPRA_PROYECTADA' => 0,
+                        'CANAL' => $canal,
+                        'COMPRA_PROYECTADA' => (int)$g['compra_proyectada'],
                         'COMPRA_DISTRIBUIDA' => 0,
                         'MESES_UNIDADES' => array_fill_keys(array_keys($mesesPeriodo), 0)
                     ];
                 }
 
                 $distFinal = (int)$g['compra_distribuida'];
-                $agrupados[$clave]['COMPRA_PROYECTADA'] += (int)$g['compra_proyectada'];
-                $agrupados[$clave]['COMPRA_DISTRIBUIDA'] += $distFinal;
+                $agrupados[$clave]['COMPRA_DISTRIBUIDA'] = $distFinal;
 
-                $ventasCanal = $ventasHistoricasTodas[$rubro][$categoria] ?? [];
-                $ventasCanalTotales = array_fill_keys(array_keys($mesesPeriodo), 0);
-                foreach (array_keys($mesesPeriodo) as $m) {
-                    foreach ($ventasCanal as $canalData) {
-                        if (isset($canalData['meses'][$m])) {
-                            $ventasCanalTotales[$m] += $canalData['meses'][$m];
+                $savedMonthlyJson = $g['distribucion_mensual_json'] ?? null;
+                $savedMonthly = !empty($savedMonthlyJson) ? json_decode($savedMonthlyJson, true) : null;
+                
+                if ($savedMonthly) {
+                    foreach ($savedMonthly as $mLabel => $mInfo) {
+                        foreach ($mesesPeriodo as $mClave => $mName) {
+                            if ($mName === $mLabel) {
+                                $agrupados[$clave]['MESES_UNIDADES'][$mClave] = (int)$mInfo['unidades'];
+                                break;
+                            }
                         }
                     }
-                }
-                
-                $ventaTotal = array_sum($ventasCanalTotales);
-                foreach (array_keys($mesesPeriodo) as $m) {
-                    $p = $ventaTotal > 0 ? ($ventasCanalTotales[$m] / $ventaTotal) * 100 : (100 / count($mesesPeriodo));
-                    $agrupados[$clave]['MESES_UNIDADES'][$m] += round($distFinal * ($p / 100));
+                } else {
+                    $ventasCanalObj = $ventasHistoricasTodas[$rubro][$categoria] ?? [];
+                    $ventasCanal = [];
+                    foreach ($ventasCanalObj as $cData) {
+                        if (trim($cData['canal'] ?? '') === $canal) {
+                            $ventasCanal = $cData;
+                            break;
+                        }
+                    }
+
+                    $ventasCanalTotales = array_fill_keys(array_keys($mesesPeriodo), 0);
+                    if (!empty($ventasCanal)) {
+                        foreach (array_keys($mesesPeriodo) as $m) {
+                            if (isset($ventasCanal['meses'][$m])) {
+                                $ventasCanalTotales[$m] = $ventasCanal['meses'][$m];
+                            }
+                        }
+                    }
+                    
+                    $ventaTotal = array_sum($ventasCanalTotales);
+                    foreach (array_keys($mesesPeriodo) as $m) {
+                        $p = $ventaTotal > 0 ? ($ventasCanalTotales[$m] / $ventaTotal) * 100 : (100 / count($mesesPeriodo));
+                        $agrupados[$clave]['MESES_UNIDADES'][$m] += round($distFinal * ($p / 100));
+                    }
                 }
             }
 
-            // 7. Agregar rubros/categorías desde costos guardados que no estén en el Paso 1
-            foreach ($costosGuardados as $clave => $costoInfo) {
-                if (!isset($agrupados[$clave])) {
-                    list($rubro, $categoria) = explode('|', $clave, 2);
-                    $agrupados[$clave] = [
-                        'RUBRO' => $rubro,
-                        'CATEGORIA_PADRE' => $categoria,
-                        'COMPRA_PROYECTADA' => 0,
-                        'COMPRA_DISTRIBUIDA' => 0,
-                        'MESES_UNIDADES' => array_fill_keys(array_keys($mesesPeriodo), 0)
-                    ];
-                }
-            }
-
-            // 8. Mezclar y preparar respuesta final
+            // 7. Mezclar y preparar respuesta final
             $resultado = [];
             foreach ($agrupados as $clave => $item) {
-                $costoInfo = $costosGuardados[$clave] ?? ['costo_prom' => 0.0, 'inc_fob' => 0.0, 'vcosto' => 0.0];
+                $paramClave = $item['RUBRO'] . '|' . $item['CATEGORIA_PADRE'];
+                $costoInfo = $costosGuardados[$paramClave] ?? ['costo_prom' => 0.0, 'inc_fob' => 0.0, 'vcosto' => 0.0];
 
                 $resultado[] = [
                     'RUBRO' => $item['RUBRO'],
                     'CATEGORIA_PADRE' => $item['CATEGORIA_PADRE'],
+                    'CANAL' => $item['CANAL'],
                     'COMPRA_PROYECTADA' => $item['COMPRA_PROYECTADA'],
                     'COMPRA_DISTRIBUIDA' => $item['COMPRA_DISTRIBUIDA'],
                     'COSTO_PROM' => $costoInfo['costo_prom'],
                     'INC_FOB' => $costoInfo['inc_fob'],
                     'VCOSTO' => $costoInfo['vcosto'],
+                    'MARKUP_LOCALES_PROPIOS' => $costoInfo['markup_locales_propios'] ?? 0.0,
+                    'MARKUP_FRANQUICIAS' => $costoInfo['markup_franquicias'] ?? 0.0,
+                    'MARKUP_MAYORISTAS' => $costoInfo['markup_mayoristas'] ?? 0.0,
+                    'MARKUP_ECOMMERCE' => $costoInfo['markup_ecommerce'] ?? 0.0,
                     'MESES_UNIDADES' => $item['MESES_UNIDADES'],
                     'PAIS' => $pais,
                     'TEMPORADA' => $temporada,
                     'NOMBRE_DISTRIBUCION' => $nombreDistribucion
                 ];
             }
+
+            // Ordenar los resultados para que sigan exactamente el mismo orden de canales que el Paso 1:
+            // LOCALES PROPIOS, FRANQUICIAS, MAYORISTAS, ECOMMERCE
+            $ordenCanales = ['LOCALES PROPIOS' => 0, 'FRANQUICIAS' => 1, 'MAYORISTAS' => 2, 'ECOMMERCE' => 3];
+            usort($resultado, function($a, $b) use ($ordenCanales) {
+                if ($a['RUBRO'] !== $b['RUBRO']) {
+                    return strcmp($a['RUBRO'], $b['RUBRO']);
+                }
+                if ($a['CATEGORIA_PADRE'] !== $b['CATEGORIA_PADRE']) {
+                    return strcmp($a['CATEGORIA_PADRE'], $b['CATEGORIA_PADRE']);
+                }
+                $posA = $ordenCanales[trim($a['CANAL'])] ?? 99;
+                $posB = $ordenCanales[trim($b['CANAL'])] ?? 99;
+                return $posA <=> $posB;
+            });
 
             $this->jsonResponse([
                 'success' => true,
@@ -587,7 +646,50 @@ class DistribucionController {
     }
 
     /**
-     * Guardar costos de proyección
+     * Obtener todos los parámetros globales de costo
+     */
+    public function obtenerParametrosGlobales() {
+        try {
+            $costosModel = new CostoProyeccion();
+            $params = $costosModel->obtenerParametrosGlobales();
+            
+            $this->jsonResponse([
+                'success' => true,
+                'parametros' => array_values($params)
+            ]);
+        } catch (Exception $e) {
+            $this->jsonResponse(['success' => false, 'message' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Guardar parámetros globales de costo
+     */
+    public function guardarParametrosGlobales() {
+        try {
+            $raw = file_get_contents('php://input');
+            $data = json_decode($raw, true);
+
+            if (!isset($data['parametros']) || !is_array($data['parametros'])) {
+                $this->jsonResponse(['success' => false, 'message' => 'Datos de parámetros inválidos'], 400);
+                return;
+            }
+
+            $costosModel = new CostoProyeccion();
+            $res = $costosModel->guardarParametrosGlobales($data['parametros']);
+            
+            if ($res === true) {
+                $this->jsonResponse(['success' => true, 'message' => 'Parámetros guardados con éxito']);
+            } else {
+                $this->jsonResponse(['success' => false, 'message' => $res['mensaje'] ?? 'Error desconocido'], 500);
+            }
+        } catch (Exception $e) {
+            $this->jsonResponse(['success' => false, 'message' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Guardar costos de proyección (Mantenido por compatibilidad de firma o auditoría)
      */
     public function guardarCostos() {
         try {
@@ -607,6 +709,61 @@ class DistribucionController {
             } else {
                 $this->jsonResponse(['success' => false, 'message' => $res['mensaje'] ?? 'Error al guardar costos'], 500);
             }
+        } catch (Exception $e) {
+            $this->jsonResponse(['success' => false, 'message' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Obtener tasas de cierre del dólar oficial BCRA por mes
+     * Para convertir valores de ARS a USD en la vista
+     */
+    public function obtenerTipoCambio() {
+        try {
+            // Conexion ya disponible (se cargó desde distribucion.php en el constructor)
+            // Determinar los años a consultar (el año del período mostrado y el anterior)
+            // El usuario quiere el tipo de cambio del año ANTERIOR al mostrado
+            $anioActual = (int)date('Y');
+            // Buscar tasas para los últimos 3 años para cubrir cualquier período mostrado
+            $anioDesde = $anioActual - 2;
+            $anioHasta = $anioActual;
+            
+            $conn = new Conexion();
+            $cid = $conn->conectar('apps');
+            
+            // Obtener el valor de cierre (último del mes) de cada mes para los años requeridos
+            $sql = "
+                SELECT d.Año, d.Mes, d.Vendedor as Valor
+                FROM dolar_oficial_bcra d
+                INNER JOIN (
+                    SELECT Año, Mes, MAX(Fecha) as FechaMax
+                    FROM dolar_oficial_bcra
+                    WHERE Año BETWEEN ? AND ?
+                    GROUP BY Año, Mes
+                ) cierre ON d.Año = cierre.Año AND d.Mes = cierre.Mes AND d.Fecha = cierre.FechaMax
+                ORDER BY d.Año, d.Mes
+            ";
+            
+            $params = [$anioDesde, $anioHasta];
+            $stmt = sqlsrv_query($cid, $sql, $params);
+            
+            if ($stmt === false) {
+                throw new Exception('Error al consultar tipo de cambio: ' . json_encode(sqlsrv_errors()));
+            }
+            
+            $tasas = [];
+            while ($row = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC)) {
+                $clave = $row['Mes'] . '-' . $row['Año']; // e.g. "1-2025"
+                $tasas[$clave] = (float)$row['Valor'];
+            }
+            
+            $this->jsonResponse([
+                'success' => true,
+                'tasas' => $tasas,
+                'anio_desde' => $anioDesde,
+                'anio_hasta' => $anioHasta
+            ]);
+            
         } catch (Exception $e) {
             $this->jsonResponse(['success' => false, 'message' => $e->getMessage()], 500);
         }

@@ -9,7 +9,7 @@
         </button>
         <button class="step-item" id="btn-step-2" onclick="DistribucionManager.irAPaso(2)">
             <div class="step-circle">2</div>
-            <div class="step-label">Costo de Proyección</div>
+            <div class="step-label">Proyección De Ventas</div>
         </button>
         <button class="step-item" id="btn-step-3" onclick="DistribucionManager.irAPaso(3)">
             <div class="step-circle">3</div>
@@ -70,6 +70,20 @@
                     <input type="date" class="form-control" id="filtro-hasta-distribucion">
                 </div>
             </div>
+            <!-- Switch de moneda -->
+            <div class="col-auto" id="col-switch-moneda" style="display: none;">
+                <div class="btn-group btn-group-sm" role="group" aria-label="Moneda">
+                    <button type="button" class="btn btn-primary active" id="btn-moneda-ars"
+                        onclick="DistribucionManager.toggleMoneda('ARS')" title="Ver en Pesos">
+                        <i class="fas fa-dollar-sign me-1"></i>$
+                    </button>
+                    <button type="button" class="btn btn-outline-success" id="btn-moneda-usd"
+                        onclick="DistribucionManager.toggleMoneda('USD')" title="Ver en Dólares">
+                        <span class="fw-bold">U$D</span>
+                    </button>
+                </div>
+                <small class="text-muted ms-1 d-none" id="label-tipo-cambio" style="font-size:0.72rem;"></small>
+            </div>
             <div class="col text-end export-buttons">
                 <button class="btn btn-primary btn-sm me-1" onclick="DistribucionManager.ejecutarCargar()">
                     <i class="fas fa-sync-alt me-1"></i> Cargar / Recalcular
@@ -80,8 +94,11 @@
                 <button class="btn btn-success btn-sm me-1" onclick="DistribucionManager.ejecutarExcel()">
                     <i class="fas fa-file-excel me-1"></i> Excel
                 </button>
-                <button class="btn btn-dark btn-sm" onclick="window.print()">
+                <button class="btn btn-dark btn-sm me-1" onclick="window.print()">
                     <i class="fas fa-print me-1"></i> Imprimir
+                </button>
+                <button class="btn btn-warning btn-sm fw-bold text-dark" id="btn-costos-parametros" onclick="DistribucionManager.abrirModalParametros()" style="display: none;">
+                    <i class="fas fa-sliders-h me-1"></i> Parámetros
                 </button>
             </div>
         </div>
@@ -143,30 +160,93 @@
         </div>
     </div>
 
-    <!-- PASO 2: Costo de Proyección -->
-    <div class="step-pane" id="paso-2">
-        <div class="table-responsive">
-            <table class="table table-striped table-hover mb-0" id="tabla-costos">
-                <thead class="table-dark sticky-header">
-                    <tr id="thead-costos-row">
-                        <th>Rubro</th>
-                        <th>Categoría</th>
-                        <th class="text-center bg-secondary text-white">Venta Proyectada</th>
-                        <th class="text-center bg-info text-dark" style="width: 130px;">Costo Prom</th>
-                        <th class="text-center bg-warning text-dark" style="width: 130px;">Inc Fob %</th>
-                        <th class="text-center bg-success text-white" style="width: 130px;">Vcosto</th>
-                        <!-- Month columns will be dynamically appended here -->
-                    </tr>
-                </thead>
-                <tbody id="tbody-costos">
-                    <tr>
-                        <td colspan="6" class="text-center text-muted py-4">
-                            <i class="fas fa-info-circle mb-2"></i><br>
-                            Seleccione una versión y presione "Cargar / Recalcular" para calcular los costos
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
+    <div class="step-pane" id="paso-2" style="overflow-y: auto !important; max-height: calc(100vh - 310px) !important; padding-bottom: 20px;">
+        <!-- SECCIÓN: TABLA DE COSTOS -->
+        <div class="card shadow-sm border-0 mb-4" style="border-radius: 12px; overflow: hidden; border-left: 5px solid #0d6efd !important;">
+            <div class="card-header bg-light border-0 py-3 d-flex align-items-center justify-content-between">
+                <h5 class="mb-0 text-primary fw-bold d-flex align-items-center">
+                    <i class="fas fa-file-invoice-dollar me-2"></i>Tabla de Costo
+                    <button type="button" class="btn btn-link text-primary p-0 ms-2 lh-1" 
+                            data-bs-toggle="popover" 
+                            data-bs-trigger="hover focus"
+                            data-bs-placement="right" 
+                            title="¿Cómo se calcula la Tabla de Costo?" 
+                            data-bs-content="Calcula el costo proyectado multiplicando las unidades distribuidas de cada mes por el valor de costo de adquisición (Vcosto = Costo Promedio * (1 + Inc FOB % / 100)).">
+                        <i class="far fa-question-circle" style="font-size: 0.95rem;"></i>
+                    </button>
+                </h5>
+                <button class="btn btn-sm btn-outline-primary rounded-pill px-3" onclick="DistribucionManager.toggleCollapseTabla('tabla-costos-container', this)">
+                    <i class="fas fa-chevron-up me-1"></i>Colapsar
+                </button>
+            </div>
+            <div class="card-body p-0" id="tabla-costos-container">
+                <div class="table-responsive" style="max-height: 450px !important;">
+                    <table class="table table-striped table-hover mb-0" id="tabla-costos">
+                        <thead class="table-dark sticky-header">
+                            <tr id="thead-costos-row">
+                                <th>Rubro</th>
+                                <th>Categoría</th>
+                                <th class="text-center bg-info text-dark">Canal</th>
+                                <th class="text-center bg-secondary text-white">Venta Proyectada (U.)</th>
+                                <th class="text-center bg-success text-white" style="width: 130px;">Vcosto</th>
+                                <!-- Month columns will be dynamically appended here -->
+                            </tr>
+                        </thead>
+                        <tbody id="tbody-costos">
+                            <tr>
+                                <td colspan="6" class="text-center text-muted py-4">
+                                    <i class="fas fa-info-circle mb-2"></i><br>
+                                    Seleccione una versión y presione "Cargar / Recalcular" para calcular los costos
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- SECCIÓN: TABLA DE MARK-UP -->
+        <div class="card shadow-sm border-0 mb-4" style="border-radius: 12px; overflow: hidden; border-left: 5px solid #198754 !important;">
+            <div class="card-header bg-light border-0 py-3 d-flex align-items-center justify-content-between">
+                <h5 class="mb-0 text-success fw-bold d-flex align-items-center">
+                    <i class="fas fa-percentage me-2"></i>Tabla de Mark-Up
+                    <button type="button" class="btn btn-link text-success p-0 ms-2 lh-1" 
+                            data-bs-toggle="popover" 
+                            data-bs-trigger="hover focus" 
+                            data-bs-placement="right"
+                            title="¿Cómo se calcula el Mark-Up?" 
+                            data-bs-content="Calcula el valor comercial proyectado multiplicando las unidades de cada mes por el Vcosto y luego por el multiplicador decimal de Mark-Up asignado globalmente a ese canal de venta (Local Propio, Franquicias, Mayoristas, Ecommerce).">
+                        <i class="far fa-question-circle" style="font-size: 0.95rem;"></i>
+                    </button>
+                </h5>
+                <button class="btn btn-sm btn-outline-success rounded-pill px-3" onclick="DistribucionManager.toggleCollapseTabla('tabla-markup-container', this)">
+                    <i class="fas fa-chevron-up me-1"></i>Colapsar
+                </button>
+            </div>
+            <div class="card-body p-0" id="tabla-markup-container">
+                <div class="table-responsive" style="max-height: 450px !important;">
+                    <table class="table table-striped table-hover mb-0" id="tabla-markup">
+                        <thead class="table-dark sticky-header">
+                            <tr id="thead-markup-row">
+                                <th>Rubro</th>
+                                <th>Categoría</th>
+                                <th class="text-center bg-info text-dark">Canal</th>
+                                <th class="text-center bg-secondary text-white">Venta Proyectada (U.)</th>
+                                <th class="text-center bg-success text-white" style="width: 130px;">Vcosto</th>
+                                <!-- Month columns will be dynamically appended here -->
+                            </tr>
+                        </thead>
+                        <tbody id="tbody-markup">
+                            <tr>
+                                <td colspan="6" class="text-center text-muted py-4">
+                                    <i class="fas fa-info-circle mb-2"></i><br>
+                                    Seleccione una versión y presione "Cargar / Recalcular" para calcular el Mark-Up
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -192,3 +272,129 @@
     </div>
 
 </div>
+
+<!-- MODAL DE PARÁMETROS GLOBALES DE COSTOS -->
+<div class="modal fade" id="modal-parametros-costos" tabindex="-1" aria-labelledby="modalParametrosCostosLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+        <div class="modal-content shadow border-0" style="border-radius: 16px;">
+            <div class="modal-header bg-warning text-dark border-0 py-3" style="border-top-left-radius: 16px; border-top-right-radius: 16px;">
+                <h5 class="modal-title fw-bold" id="modalParametrosCostosLabel">
+                    <i class="fas fa-sliders-h me-2"></i>Parámetros Globales de Costo por Rubro / Categoría
+                </h5>
+                <button type="button" class="btn-close btn-close-dark" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-3">
+                <div class="mb-3 d-flex align-items-center gap-3">
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text bg-white"><i class="fas fa-filter"></i></span>
+                        <input type="text" class="form-control" id="buscar-parametro-modal" placeholder="Filtrar parámetros por rubro o categoría..." onkeyup="DistribucionManager.filtrarParametrosModal(this.value)">
+                    </div>
+                </div>
+
+                <!-- Pestañas internas del Modal -->
+                <ul class="nav nav-pills nav-fill mb-3" id="modalParametrosTabs" role="tablist" style="background: #eef2f7; padding: 4px; border-radius: 8px;">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active fw-bold py-2" id="modal-tab-costos" data-bs-toggle="pill" data-bs-target="#modal-pane-costos" type="button" role="tab" aria-controls="modal-pane-costos" aria-selected="true">
+                            <i class="fas fa-dollar-sign me-2"></i>Costos Globales
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link fw-bold py-2" id="modal-tab-markup" data-bs-toggle="pill" data-bs-target="#modal-pane-markup" type="button" role="tab" aria-controls="modal-pane-markup" aria-selected="false">
+                            <i class="fas fa-percent me-2"></i>Mark-Up por Canal
+                        </button>
+                    </li>
+                </ul>
+
+                <div class="tab-content" id="modalParametrosTabContent">
+                    <!-- PANEL DE COSTOS -->
+                    <div class="tab-pane fade show active" id="modal-pane-costos" role="tabpanel" aria-labelledby="modal-tab-costos">
+                        <div class="table-responsive" id="scroll-costos-modal">
+                            <table class="table table-sm table-hover align-middle mb-0">
+                                <thead>
+                                    <tr class="table-dark">
+                                        <th style="min-width:160px;">Rubro</th>
+                                        <th style="min-width:180px;">Categoría</th>
+                                        <th class="text-center" style="width:140px;">
+                                            <div>Costo Prom (U$D)</div>
+                                            <button type="button" class="btn btn-xxs btn-light text-dark fw-bold mt-1 px-2" title="Replicar primer valor en todas las filas" onclick="DistribucionManager.replicarPrimerValorModal('costo_prom')">
+                                                <i class="fas fa-copy me-1"></i>Replicar
+                                            </button>
+                                        </th>
+                                        <th class="text-center" style="width:130px;">
+                                            <div>Inc FOB %</div>
+                                            <button type="button" class="btn btn-xxs btn-light text-dark fw-bold mt-1 px-2" title="Replicar primer valor en todas las filas" onclick="DistribucionManager.replicarPrimerValorModal('inc_fob')">
+                                                <i class="fas fa-copy me-1"></i>Replicar
+                                            </button>
+                                        </th>
+                                        <th class="text-center text-warning" style="width:130px;">Vcosto (U$D)</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tbody-parametros-globales">
+                                    <!-- Parámetros dinámicos aquí -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- PANEL DE MARK-UP -->
+                    <div class="tab-pane fade" id="modal-pane-markup" role="tabpanel" aria-labelledby="modal-tab-markup">
+                        <div class="table-responsive" id="scroll-markup-modal">
+                            <table class="table table-sm table-hover align-middle mb-0">
+                                <thead>
+                                    <tr class="table-dark">
+                                        <th style="min-width:150px;">Rubro</th>
+                                        <th style="min-width:170px;">Categoría</th>
+                                        <th class="text-center" style="width:120px;">
+                                            <div>Local Propio</div>
+                                            <button type="button" class="btn btn-xxs btn-light text-dark fw-bold mt-1 px-2" title="Replicar primer valor en todas las filas" onclick="DistribucionManager.replicarPrimerValorModal('markup_locales_propios')">
+                                                <i class="fas fa-copy me-1"></i>Replicar
+                                            </button>
+                                        </th>
+                                        <th class="text-center" style="width:120px;">
+                                            <div>Franquicias</div>
+                                            <button type="button" class="btn btn-xxs btn-light text-dark fw-bold mt-1 px-2" title="Replicar primer valor en todas las filas" onclick="DistribucionManager.replicarPrimerValorModal('markup_franquicias')">
+                                                <i class="fas fa-copy me-1"></i>Replicar
+                                            </button>
+                                        </th>
+                                        <th class="text-center" style="width:120px;">
+                                            <div>Mayoristas</div>
+                                            <button type="button" class="btn btn-xxs btn-light text-dark fw-bold mt-1 px-2" title="Replicar primer valor en todas las filas" onclick="DistribucionManager.replicarPrimerValorModal('markup_mayoristas')">
+                                                <i class="fas fa-copy me-1"></i>Replicar
+                                            </button>
+                                        </th>
+                                        <th class="text-center" style="width:120px;">
+                                            <div>Ecommerce</div>
+                                            <button type="button" class="btn btn-xxs btn-light text-dark fw-bold mt-1 px-2" title="Replicar primer valor en todas las filas" onclick="DistribucionManager.replicarPrimerValorModal('markup_ecommerce')">
+                                                <i class="fas fa-copy me-1"></i>Replicar
+                                            </button>
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tbody-parametros-markup">
+                                    <!-- Inputs de markup dinámicos aquí -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer bg-light border-0 py-3" style="border-bottom-left-radius: 16px; border-bottom-right-radius: 16px;">
+                <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill px-3" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-warning btn-sm fw-bold text-dark rounded-pill px-4" onclick="DistribucionManager.guardarParametrosModal()">
+                    <i class="fas fa-save me-1"></i>Guardar Parámetros
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Inicializador de Popovers de Información -->
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        var popoverTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="popover"]'))
+        var popoverList = popoverTriggerList.map(function (popoverTriggerEl) {
+            return new bootstrap.Popover(popoverTriggerEl)
+        })
+    });
+</script>
+

@@ -455,6 +455,27 @@ class APIClient {
     static async guardarCostos(filas) {
         return await APIClient.llamarAPI('guardar-costos', {}, 'POST', { filas: filas });
     }
+
+    /**
+     * Obtener tasas de cierre del dólar oficial BCRA por mes
+     */
+    static async obtenerTipoCambio() {
+        return await APIClient.llamarAPI('obtener-tipo-cambio');
+    }
+
+    /**
+     * Obtener parámetros globales de costo
+     */
+    static async obtenerParametrosCostos() {
+        return await APIClient.llamarAPI('obtener-parametros-costos');
+    }
+
+    /**
+     * Guardar parámetros globales de costo
+     */
+    static async guardarParametrosCostos(parametros) {
+        return await APIClient.llamarAPI('guardar-parametros-costos', {}, 'POST', { parametros: parametros });
+    }
 }
 
 // Configurar interceptores al cargar

@@ -28,6 +28,14 @@
     margin-top: 0.1rem;
 }
 
+
+.btn-xxs {
+    padding: 0.1rem 0.25rem;
+    font-size: 0.65rem;
+    line-height: 1;
+    border-radius: 0.2rem;
+}
+
 /* Información de temporada más compacta */
 .temporada-info {
     padding: 0.4rem;
@@ -403,8 +411,7 @@ html, body {
     max-height: calc(100vh - 350px) !important;
 }
 
-#distribucion .table-responsive,
-#paso-2 .table-responsive {
+#distribucion .table-responsive {
     max-height: calc(100vh - 430px) !important;
 }
 
@@ -544,4 +551,37 @@ html, body {
     .total-compra-container .badge {
         font-size: 0.8rem !important;
     }
+}
+
+/* ===== MODAL PARÁMETROS: scroll simple y confiable ===== */
+
+/* Limitar la altura total del modal */
+#modal-parametros-costos .modal-content {
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+}
+
+#modal-parametros-costos .modal-body {
+    overflow: hidden;
+    flex: 1;
+    min-height: 0;
+}
+
+/* Contenedores de scroll de cada pestaña — !important para ganar a cualquier otra regla */
+#scroll-costos-modal,
+#scroll-markup-modal {
+    max-height: calc(90vh - 220px) !important;
+    overflow-y: auto !important;
+    overflow-x: auto !important;
+}
+
+/* Encabezados sticky dentro de los scrolls del modal */
+#scroll-costos-modal thead th,
+#scroll-markup-modal thead th {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    background-color: #212529 !important;
+    color: #fff !important;
 }
