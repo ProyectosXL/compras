@@ -585,3 +585,43 @@ html, body {
     background-color: #212529 !important;
     color: #fff !important;
 }
+
+/* Optimización scroll completo solo para la pestaña de Proceso para Presupuesto */
+#distribucion {
+    max-height: calc(100vh - 180px) !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    padding-right: 8px !important;
+    padding-bottom: 60px !important;
+}
+
+#paso-1,
+#paso-2,
+#paso-3 {
+    max-height: none !important;
+    overflow-y: visible !important;
+    padding-bottom: 40px !important;
+}
+
+#tabla-markup-container .table-responsive {
+    max-height: 550px !important;
+    overflow-y: auto !important;
+    padding-bottom: 25px !important;
+}
+
+#tabla-costos-container .table-responsive {
+    max-height: 550px !important;
+    overflow-y: auto !important;
+    padding-bottom: 25px !important;
+}
+
+/* Estilos de contraste al pasar el mouse por los botones del modal de Excel */
+.btn-reporte-excel .desc-reporte {
+    color: #6c757d;
+}
+
+.btn-reporte-excel:hover .titulo-reporte,
+.btn-reporte-excel:hover .desc-reporte,
+.btn-reporte-excel:hover .icono-reporte {
+    color: #ffffff !important;
+}

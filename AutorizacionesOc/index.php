@@ -48,6 +48,9 @@
         <!-- Pestaña 4: REGLAS (Administración) -->
         <div id="tab-reglas" class="tab-content">
             <div class="header"><h1>Matriz de Autorizaciones</h1><p>Define quién autoriza cada compra según el comprador y el monto total.</p></div>
+            <div style="display: flex; justify-content: flex-end; margin-bottom: 1rem; padding: 0 10px;">
+                <button id="btn-agregar-comprador" class="btn btn-primary btn-flex" style="margin-top: 0;"><i class="bi bi-person-plus-fill" style="margin-right: 5px;"></i> Agregar Comprador</button>
+            </div>
             <div class="table-container">
                 <table class="rules-table">
                     <thead>
@@ -92,6 +95,25 @@
             <div class="modal-footer">
                 <button id="derivar-cancelar-btn" class="btn btn-secondary btn-flex">Cancelar</button>
                 <button id="derivar-confirmar-btn" class="btn btn-primary btn-flex">Confirmar Derivación</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal para Agregar Comprador -->
+    <div class="modal-overlay" id="agregar-comprador-modal">
+        <div class="modal-content" style="max-width: 450px;">
+            <div class="modal-header">
+                <h3 style="margin:0; color:var(--text-primary);">Agregar Nuevo Comprador</h3>
+            </div>
+            <div class="modal-body">
+                <div class="form-group" style="margin-top: 1rem;">
+                    <label for="nuevo-comprador-nombre" style="display:block; margin-bottom:5px; font-weight:bold;">Nombre del Comprador:</label>
+                    <input type="text" id="nuevo-comprador-nombre" placeholder="Ej. ALE AUTORIZA A DAN" style="width: 100%; box-sizing: border-box; padding: 10px; border-radius: 8px; border: 1px solid #ddd; font-size: 1rem;">
+                </div>
+            </div>
+            <div class="modal-footer" style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 1rem;">
+                <button id="agregar-comprador-cancelar-btn" class="btn btn-secondary btn-flex" style="margin:0;">Cancelar</button>
+                <button id="agregar-comprador-confirmar-btn" class="btn btn-primary btn-flex" style="margin:0;">Agregar</button>
             </div>
         </div>
     </div>
@@ -243,6 +265,52 @@ document.addEventListener('DOMContentLoaded', () => {
                     alert('Error de conexión');
                 });
         }
+    });
+
+    const agregarModal = document.getElementById('agregar-comprador-modal');
+    const inputNombre = document.getElementById('nuevo-comprador-nombre');
+    
+    document.getElementById('btn-agregar-comprador').addEventListener('click', () => {
+        inputNombre.value = '';
+        inputNombre.style.borderColor = '#ddd';
+        agregarModal.classList.add('active');
+        setTimeout(() => inputNombre.focus(), 100);
+    });
+
+    document.getElementById('agregar-comprador-cancelar-btn').addEventListener('click', () => {
+        agregarModal.classList.remove('active');
+    });
+
+    document.getElementById('agregar-comprador-confirmar-btn').addEventListener('click', () => {
+        const nombreLimpio = inputNombre.value.trim();
+        if (nombreLimpio === '') {
+            inputNombre.style.borderColor = 'var(--danger-color)';
+            inputNombre.focus();
+            return;
+        }
+        inputNombre.style.borderColor = '#ddd';
+
+        const formData = new FormData();
+        formData.append('comprador', nombreLimpio);
+        formData.append('usuario_modifica', usuarioActivo);
+
+        fetch('api/add_comprador.php', {
+            method: 'POST',
+            body: formData
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.status === 'success') {
+                agregarModal.classList.remove('active');
+                loadReglasData(); // Recargar la tabla
+            } else {
+                alert('Error al agregar comprador: ' + data.message);
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            alert('Error de conexión');
+        });
     });
 
     const genericModal = document.getElementById('generic-modal');

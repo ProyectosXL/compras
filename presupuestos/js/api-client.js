@@ -476,6 +476,26 @@ class APIClient {
     static async guardarParametrosCostos(parametros) {
         return await APIClient.llamarAPI('guardar-parametros-costos', {}, 'POST', { parametros: parametros });
     }
+
+    /**
+     * Eliminar una versión guardada
+     */
+    static async eliminarVersion(nombreVersion, temporada = 'VERANO') {
+        return await APIClient.llamarAPI('eliminar-version', {}, 'POST', { 
+            nombre_version: nombreVersion,
+            temporada: temporada
+        });
+    }
+
+    /**
+     * Obtener desvíos presupuesto vs real para el Paso 3
+     */
+    static async obtenerDesvios(temporada = 'VERANO', version = 'Por defecto') {
+        return await APIClient.llamarAPI('obtener-desvios', {
+            temporada: temporada,
+            nombre_distribucion: version
+        });
+    }
 }
 
 // Configurar interceptores al cargar

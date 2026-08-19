@@ -371,11 +371,20 @@ class DistribucionManager {
                 ? `<br><span class="badge bg-warning text-dark fs-8 mt-1" title="Valor original: ${Math.round(item.PARTICIPACION_ORIGINAL)}%"><i class="fas fa-history me-1"></i>Orig: ${Math.round(item.PARTICIPACION_ORIGINAL)}%</span>` 
                 : '';
 
+            const inputVentaProyHtml = esNuevoGrupo 
+                ? `<div class="d-flex align-items-center justify-content-end gap-1">
+                    <input type="number" step="1" class="form-control form-control-sm text-end input-compra-proyectada fw-bold" 
+                           value="${item.COMPRA_PROYECTADA}" 
+                           style="max-width: 100px; display: inline-block; background-color: #fffde7; border: 1px solid #ffe082;"
+                           oninput="DistribucionManager.actualizarCompraProyectada('${item.RUBRO.replace(/'/g, "\\'")}', '${item.CATEGORIA_PADRE.replace(/'/g, "\\'")}', this.value)">
+                   </div>`
+                : '';
+
             html += `
                 <tr style="${styleFila}" data-group="${item.RUBRO}|${item.CATEGORIA_PADRE}" class="${rowClass}" id="row-distrib-${originalIndex}">
                     <td style="vertical-align: middle;">${esNuevoGrupo ? `<strong>${item.RUBRO}</strong>` : `<span class="text-muted">${item.RUBRO}</span>`}</td>
                     <td style="vertical-align: middle;">${esNuevoGrupo ? item.CATEGORIA_PADRE : `<span class="text-muted">${item.CATEGORIA_PADRE}</span>`}</td>
-                    <td class="text-end bg-light-yellow fw-bold" style="vertical-align: middle;" data-campo="compra-proyectada">${esNuevoGrupo ? FormatoUtils.formatearNumero(item.COMPRA_PROYECTADA) : ''}</td>
+                    <td class="text-end bg-light-yellow fw-bold" style="vertical-align: middle;" data-campo="compra-proyectada">${inputVentaProyHtml}</td>
                     <td class="text-end" style="vertical-align: middle;" data-campo="venta-historica-total">${esNuevoGrupo ? FormatoUtils.formatearNumero(item.VENTA_HISTORICA_TOTAL) : ''}</td>
                     <td class="bg-light-blue font-monospace" style="vertical-align: middle;">${canalHtml}</td>
                     <td class="text-end" style="vertical-align: middle;">${FormatoUtils.formatearNumero(item.VENTA_CANAL)}</td>
@@ -635,6 +644,34 @@ class DistribucionManager {
         DistribucionManager.validarFilaMensual(index);
     }
 
+    /**
+     * Permite modificar en tiempo real la Venta Proyectada (Compra Proyectada) para un rubro/categoría
+     * Recalcula la distribución final por canal y por mes al instante.
+     */
+    static actualizarCompraProyectada(rubro, categoria, value) {
+        const nuevaCompraProyectada = parseInt(value, 10) || 0;
+        
+        // 1. Buscar todos los ítems del grupo (rubro + categoría)
+        const grupo = DistribucionManager.datos.filter(d => 
+            d.RUBRO === rubro && d.CATEGORIA_PADRE === categoria
+        );
+
+        if (grupo.length === 0) return;
+
+        // 2. Actualizar COMPRA_PROYECTADA en todos los elementos del grupo
+        grupo.forEach(item => {
+            item.COMPRA_PROYECTADA = nuevaCompraProyectada;
+        });
+
+        // 3. Recalcular distribución de los canales del grupo
+        DistribucionManager.ajustarRedondeoGrupo(rubro, categoria);
+
+        // 4. Actualizar subtotal y validaciones en la interfaz
+        DistribucionManager.actualizarSubtotalGrupo(rubro, categoria);
+        DistribucionManager.actualizarIndicadores();
+        DistribucionManager.validarGrupos();
+    }
+
     static actualizarPorcentajeMes(index, mes, value) {
         const val = parseFloat(value) || 0;
         const item = DistribucionManager.datos[index];
@@ -779,8 +816,13 @@ class DistribucionManager {
 
             // Obtener compra proyectada y final
             const compraCell = fila.querySelector('[data-campo="compra-proyectada"]');
-            if (compraCell && compraCell.textContent) {
-                grupos[key].compraProyectada = parseInt(compraCell.textContent.replace(/\./g, '')) || 0;
+            if (compraCell) {
+                const inputProy = compraCell.querySelector('input');
+                if (inputProy) {
+                    grupos[key].compraProyectada = parseInt(inputProy.value, 10) || 0;
+                } else if (compraCell.textContent) {
+                    grupos[key].compraProyectada = parseInt(compraCell.textContent.replace(/\./g, ''), 10) || 0;
+                }
             }
 
             const distCell = fila.querySelector('[id^="distribucion-"]');
@@ -810,42 +852,81 @@ class DistribucionManager {
     }
 
     static actualizarIndicadores() {
-        // Calcular sumas
+        // Usar los datos filtrados actualmente visibles (o todos si no hay filtro)
+        const listaDatos = (DistribucionManager.datosFiltrados && DistribucionManager.datosFiltrados.length > 0)
+            ? DistribucionManager.datosFiltrados
+            : DistribucionManager.datos;
+
         const rubrosUnicos = new Set();
         const categoriasUnicas = new Set();
         let totalCompra = 0;
-        let totalDistribuido = 0;
+        let totalVentaHistorica = 0;
 
-        // Sumar compra proyectada solo una vez por grupo rubro|categoria
+        // Sumas por Canal en Paso 1 (Venta Histórica por Canal)
+        const ventaPorCanal = {
+            'LOCALES PROPIOS': 0,
+            'FRANQUICIAS': 0,
+            'MAYORISTAS': 0,
+            'ECOMMERCE': 0
+        };
+
+        // Sumar compra proyectada y venta histórica solo una vez por grupo rubro|categoria
         const gruposVistos = new Set();
 
-        DistribucionManager.datos.forEach(item => {
+        listaDatos.forEach(item => {
             rubrosUnicos.add(item.RUBRO);
             categoriasUnicas.add(item.RUBRO + '|' + item.CATEGORIA_PADRE);
-            totalDistribuido += item.DISTRIBUCION_FINAL;
+
+            // Sumar venta distribuida por canal
+            const canalNorm = (item.CANAL || '').toUpperCase().trim();
+            const ventaDist = Number(item.COMPRA_DISTRIBUIDA ?? item.DISTRIBUCION_FINAL ?? 0) || 0;
+            if (canalNorm.includes('LOCAL')) {
+                ventaPorCanal['LOCALES PROPIOS'] += ventaDist;
+            } else if (canalNorm.includes('FRANQ')) {
+                ventaPorCanal['FRANQUICIAS'] += ventaDist;
+            } else if (canalNorm.includes('MAYOR')) {
+                ventaPorCanal['MAYORISTAS'] += ventaDist;
+            } else if (canalNorm.includes('ECOM') || canalNorm.includes('WEB')) {
+                ventaPorCanal['ECOMMERCE'] += ventaDist;
+            }
 
             const grupoClave = item.RUBRO + '|' + item.CATEGORIA_PADRE;
             if (!gruposVistos.has(grupoClave)) {
                 gruposVistos.add(grupoClave);
-                totalCompra += item.COMPRA_PROYECTADA;
+                totalCompra += (item.COMPRA_PROYECTADA || 0);
+                totalVentaHistorica += (item.VENTA_HISTORICA_TOTAL || 0);
             }
         });
 
         // Escribir en DOM
         const format = FormatoUtils.formatearNumero;
-        document.getElementById('card-compra-total').textContent = format(totalCompra);
-        document.getElementById('card-total-distribuido').textContent = format(totalDistribuido);
-        document.getElementById('card-cant-canales').textContent = DistribucionManager.canales.length;
-        document.getElementById('card-cant-rubros').textContent = rubrosUnicos.size;
-        document.getElementById('card-cant-categorias').textContent = categoriasUnicas.size;
-        document.getElementById('card-ult-act').textContent = new Date().toLocaleTimeString();
-        
-        // Coincide total?
+        const cardCompra = document.getElementById('card-compra-total');
+        if (cardCompra) cardCompra.textContent = format(totalCompra);
+
         const cardTotal = document.getElementById('card-total-distribuido');
-        if (totalCompra === totalDistribuido) {
-            cardTotal.className = 'badge bg-success fs-5 fw-bold';
-        } else {
-            cardTotal.className = 'badge bg-danger fs-5 fw-bold';
+        if (cardTotal) {
+            cardTotal.textContent = format(totalVentaHistorica);
+            cardTotal.className = 'badge bg-primary fs-5 fw-bold';
+        }
+
+        const cardRubros = document.getElementById('card-cant-rubros');
+        if (cardRubros) cardRubros.textContent = rubrosUnicos.size;
+
+        const cardCats = document.getElementById('card-cant-categorias');
+        if (cardCats) cardCats.textContent = categoriasUnicas.size;
+
+        const cardUltAct = document.getElementById('card-ult-act');
+        if (cardUltAct) cardUltAct.textContent = new Date().toLocaleTimeString();
+
+        // Actualizar indicadores por canal
+        const containerCanales = document.getElementById('indicadores-canales-paso1');
+        if (containerCanales) {
+            containerCanales.innerHTML = `
+                <span class="badge bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25 px-2 py-1 font-monospace" style="font-size:0.75rem;" title="Locales Propios">LP: ${format(ventaPorCanal['LOCALES PROPIOS'])}</span>
+                <span class="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 px-2 py-1 font-monospace" style="font-size:0.75rem;" title="Franquicias">FR: ${format(ventaPorCanal['FRANQUICIAS'])}</span>
+                <span class="badge bg-info bg-opacity-10 text-info border border-info border-opacity-25 px-2 py-1 font-monospace" style="font-size:0.75rem;" title="Mayoristas">MA: ${format(ventaPorCanal['MAYORISTAS'])}</span>
+                <span class="badge bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25 px-2 py-1 font-monospace" style="font-size:0.75rem;" title="Ecommerce">EC: ${format(ventaPorCanal['ECOMMERCE'])}</span>
+            `;
         }
     }
 
@@ -913,6 +994,7 @@ class DistribucionManager {
         });
 
         DistribucionManager.renderizarTabla();
+        DistribucionManager.actualizarIndicadores();
         document.getElementById('count-distribucion').textContent = `${DistribucionManager.datosFiltrados.length} registros`;
     }
 
@@ -948,11 +1030,12 @@ class DistribucionManager {
         if (DistribucionManager.pasoActivo === 2) {
             const countEl = document.getElementById('count-distribucion');
             if (countEl) countEl.textContent = `${DistribucionManager.datosCostos.length} registros`;
-            DistribucionManager.renderizarTablaCostos(); // sin filtro = todos
+            DistribucionManager.renderizarTablaCostos(DistribucionManager.datosCostos);
         } else {
             DistribucionManager.datosFiltrados = [...DistribucionManager.datos];
             DistribucionManager.renderizarTabla();
-            document.getElementById('count-distribucion').textContent = `${DistribucionManager.datosFiltrados.length} registros`;
+            DistribucionManager.actualizarIndicadores();
+            document.getElementById('count-distribucion').textContent = `${DistribucionManager.datos.length} registros`;
         }
     }
 
@@ -967,86 +1050,14 @@ class DistribucionManager {
     }
 
     static async guardarDistribucion() {
-        // Verificar si la suma de todas las distribuciones finales coincide con las compras proyectadas
-        let totalProy = 0;
-        let totalFinal = 0;
-        const gruposInvalidos = [];
-        const gruposPartInvalidos = [];
-
-        // Validar por grupo rubro|categoria
-        const agrupado = {};
-        DistribucionManager.datos.forEach(item => {
-            const key = item.RUBRO + '|' + item.CATEGORIA_PADRE;
-            if (!agrupado[key]) {
-                agrupado[key] = {
-                    compraProyectada: item.COMPRA_PROYECTADA,
-                    sumaFinal: 0,
-                    sumaParticipacion: 0
-                };
-            }
-            agrupado[key].sumaFinal += item.DISTRIBUCION_FINAL;
-            agrupado[key].sumaParticipacion += parseFloat(item.PARTICIPACION) || 0;
-        });
-
-        Object.keys(agrupado).forEach(key => {
-            const g = agrupado[key];
-            totalProy += g.compraProyectada;
-            totalFinal += g.sumaFinal;
-
-            if (g.compraProyectada !== g.sumaFinal) {
-                gruposInvalidos.push(`- ${key.replace('|', ' · ')} (Proyectado: ${FormatoUtils.formatearNumero(g.compraProyectada)}, Distribuido: ${FormatoUtils.formatearNumero(g.sumaFinal)})`);
-            }
-            if (Math.abs(g.sumaParticipacion - 100) > 0.01) {
-                gruposPartInvalidos.push(`- ${key.replace('|', ' · ')} (Suma: ${Math.round(g.sumaParticipacion)}%)`);
-            }
-        });
-
-        const filasMensualesIncorrectas = [];
-        DistribucionManager.datos.forEach(item => {
-            if (item.DISTRIBUCION_MENSUAL) {
-                let sumPorc = 0;
-                Object.keys(item.DISTRIBUCION_MENSUAL).forEach(m => {
-                    sumPorc += parseFloat(item.DISTRIBUCION_MENSUAL[m].porcentaje) || 0;
-                });
-                if (Math.abs(sumPorc - 100) > 0.05) {
-                    filasMensualesIncorrectas.push(`- ${item.RUBRO} · ${item.CATEGORIA_PADRE} [${item.CANAL}] (Suma: ${Math.round(sumPorc)}%)`);
-                }
-            }
-        });
-
-        if (filasMensualesIncorrectas.length > 0) {
-            let msg = `No se puede guardar. La sumatoria de la distribución mensual (%) por canal debe ser exactamente 100%.`;
-            msg += `\n\nHay ${filasMensualesIncorrectas.length} filas con error (resaltadas con fondo rojo).`;
-            if (filasMensualesIncorrectas.length <= 5) {
-                msg += `\n\nFilas afectadas:\n${filasMensualesIncorrectas.join('\n')}`;
-            } else {
-                msg += `\n\nPor favor, busque los badges rojos en la columna 'Total %'.`;
-            }
-            UIUtils.mostrarAlerta(msg, 'error');
-            return;
+        if (!DistribucionManager.datos || DistribucionManager.datos.length === 0) {
+            UIUtils.mostrarLoading(true);
+            await DistribucionManager.cargarDatos();
+            UIUtils.mostrarLoading(false);
         }
 
-        if (gruposPartInvalidos.length > 0) {
-            let msg = `No se puede guardar. La sumatoria de participación (%) por canal debe ser 100%.`;
-            msg += `\n\nHay ${gruposPartInvalidos.length} grupos con error (resaltados en la columna 'Participación %').`;
-            if (gruposPartInvalidos.length <= 5) {
-                msg += `\n\nGrupos afectados:\n${gruposPartInvalidos.join('\n')}`;
-            } else {
-                msg += `\n\nPor favor, busque las celdas con alerta roja en la columna 'Participación %'.`;
-            }
-            UIUtils.mostrarAlerta(msg, 'error');
-            return;
-        }
-
-        if (gruposInvalidos.length > 0) {
-            let msg = `No se puede guardar. La suma distribuida no coincide con la Compra Proyectada.`;
-            msg += `\n\nHay ${gruposInvalidos.length} rubros/categorías con diferencias.`;
-            if (gruposInvalidos.length <= 5) {
-                msg += `\n\nGrupos afectados:\n${gruposInvalidos.join('\n')}`;
-            } else {
-                msg += `\n\nPor favor, revise los subtotales con diferencias en color rojo.`;
-            }
-            UIUtils.mostrarAlerta(msg, 'error');
+        if (!DistribucionManager.datos || DistribucionManager.datos.length === 0) {
+            UIUtils.mostrarAlerta('No hay datos de distribución cargados para guardar.', 'warning');
             return;
         }
 
@@ -1111,6 +1122,52 @@ class DistribucionManager {
         }
     }
 
+    /**
+     * Eliminar la versión actualmente seleccionada en el combo
+     */
+    static async eliminarVersionSeleccionada() {
+        const selectVersion = document.getElementById('filtro-version-distribucion');
+        if (!selectVersion) return;
+
+        const versionSeleccionada = selectVersion.value;
+        if (!versionSeleccionada || versionSeleccionada === 'Por defecto') {
+            UIUtils.mostrarAlerta('La versión "Por defecto" no se puede eliminar. Seleccione una versión guardada.', 'warning');
+            return;
+        }
+
+        const confirmacion = await UIUtils.confirmarAccion(
+            '¿Eliminar versión?',
+            `¿Está seguro de que desea eliminar la versión guardada <strong>"${versionSeleccionada}"</strong>?<br><small class="text-danger">Esta acción eliminará de forma permanente sus datos de distribución.</small>`,
+            'danger'
+        );
+
+        if (!confirmacion) return;
+
+        try {
+            UIUtils.mostrarLoading(true);
+
+            const temporadaSelect = document.getElementById('filtro-temporada-distribucion');
+            const temporada = temporadaSelect ? temporadaSelect.value : 'VERANO';
+
+            const response = await APIClient.eliminarVersion(versionSeleccionada, temporada);
+
+            if (response.success) {
+                UIUtils.mostrarAlerta(`Versión "${versionSeleccionada}" eliminada correctamente.`, 'success');
+                // Re-inicializar lista de versiones y volver a 'Por defecto'
+                await DistribucionManager.inicializarVersiones(true);
+                selectVersion.value = 'Por defecto';
+                DistribucionManager.ejecutarCargar();
+            } else {
+                throw new Error(response.message || 'No se pudo eliminar la versión');
+            }
+        } catch (error) {
+            console.error('Error al eliminar versión:', error);
+            UIUtils.mostrarAlerta('Error al eliminar la versión: ' + error.message, 'error');
+        } finally {
+            UIUtils.mostrarLoading(false);
+        }
+    }
+
     static irAPaso(paso) {
         DistribucionManager.pasoActivo = paso;
 
@@ -1132,12 +1189,12 @@ class DistribucionManager {
         // 3. Mostrar/ocultar selector de canal y switch de moneda según el paso
         const colCanal = document.getElementById('col-filtro-canal');
         if (colCanal) {
-            colCanal.style.display = (paso === 2) ? 'none' : 'block';
+            colCanal.style.display = (paso === 1) ? 'block' : 'none';
         }
 
         const colMoneda = document.getElementById('col-switch-moneda');
         if (colMoneda) {
-            colMoneda.style.display = (paso === 2) ? 'block' : 'none';
+            colMoneda.style.display = (paso === 2 || paso === 3) ? 'block' : 'none';
         }
 
         const btnParametros = document.getElementById('btn-costos-parametros');
@@ -1145,25 +1202,27 @@ class DistribucionManager {
             btnParametros.style.display = (paso === 2) ? 'inline-block' : 'none';
         }
 
-        // Ocultar botón Guardar en el paso 2 ya que los parámetros son globales (se guardan desde el modal)
+        // Mostrar botón Guardar en el paso 1 y 2 (el paso 3 es solo lectura/análisis de desvíos)
         const btnGuardar = document.querySelector('button[onclick="DistribucionManager.ejecutarGuardar()"]');
         if (btnGuardar) {
-            btnGuardar.style.display = (paso === 2) ? 'none' : 'inline-block';
+            btnGuardar.style.display = (paso === 1 || paso === 2) ? 'inline-block' : 'none';
         }
+
+        // Paso 3 es de lectura y análisis de desvíos, requiere hacer clic en Cargar / Recalcular
     }
 
     static ejecutarCargar() {
         if (DistribucionManager.pasoActivo === 2) {
             DistribucionManager.cargarCostos();
+        } else if (DistribucionManager.pasoActivo === 3) {
+            DistribucionManager.cargarPaso3();
         } else {
             DistribucionManager.cargarDatos();
         }
     }
 
     static ejecutarGuardar() {
-        if (DistribucionManager.pasoActivo === 2) {
-            DistribucionManager.guardarCostos();
-        } else {
+        if (DistribucionManager.pasoActivo === 2 || DistribucionManager.pasoActivo === 1) {
             DistribucionManager.guardarDistribucion();
         }
     }
@@ -1171,6 +1230,8 @@ class DistribucionManager {
     static ejecutarExcel() {
         if (DistribucionManager.pasoActivo === 2) {
             DistribucionManager.exportarExcelCostos();
+        } else if (DistribucionManager.pasoActivo === 3) {
+            UIUtils.mostrarAlerta('La exportación de desvíos debe hacerse desde el Excel de Venta Comercial completo.', 'info');
         } else {
             DistribucionManager.exportarExcel();
         }
@@ -1261,10 +1322,12 @@ class DistribucionManager {
                     ${m}${esARS ? '<br><small style="font-size:0.65rem;opacity:0.8;">TC $' + Math.round(tasaMes) + '</small>' : ''}
                 </th>`;
         });
-        headHtml += `<th class="text-end bg-primary text-white" style="width: 150px;">Costo Total${sufMoneda}</th>`;
         
-        if (headRowCostos) headRowCostos.innerHTML = headHtml;
-        if (headRowMarkup) headRowMarkup.innerHTML = headHtml;
+        let headHtmlCostos = headHtml + `<th class="text-end bg-primary text-white" style="width: 150px;">Costo Total${sufMoneda}</th>`;
+        let headHtmlMarkup = headHtml + `<th class="text-end bg-warning text-dark" style="width: 150px;">Venta Total${sufMoneda}</th>`;
+        
+        if (headRowCostos) headRowCostos.innerHTML = headHtmlCostos;
+        if (headRowMarkup) headRowMarkup.innerHTML = headHtmlMarkup;
 
         // 2. Renderizar filas de datos
         if (datos.length === 0) {
@@ -1330,14 +1393,7 @@ class DistribucionManager {
         };
 
         // Helper para obtener el markup correspondiente al canal de la fila
-        const obtenerMarkupFila = (row) => {
-            const canal = (row.CANAL || '').toUpperCase();
-            if (canal.includes('LOCAL')) return row.MARKUP_LOCALES_PROPIOS || 0.0;
-            if (canal.includes('FRANQ')) return row.MARKUP_FRANQUICIAS || 0.0;
-            if (canal.includes('MAYOR')) return row.MARKUP_MAYORISTAS || 0.0;
-            if (canal.includes('ECOM') || canal.includes('WEB')) return row.MARKUP_ECOMMERCE || 0.0;
-            return 0.0;
-        };
+        const obtenerMarkupFila = (row) => DistribucionManager.obtenerMarkupFila(row);
 
         // Helper para generar fila de subtotal de markup por rubro/categoría
         const generarSubtotalMarkup = (grupo) => {
@@ -1352,7 +1408,7 @@ class DistribucionManager {
 
             grupo.forEach(item => {
                 const vcosto = item.COSTO_PROM * (1 + item.INC_FOB / 100);
-                const markup = obtenerMarkupFila(item);
+                const markup = DistribucionManager.obtenerMarkupFila(item);
                 sumCompraDist += item.COMPRA_DISTRIBUIDA || 0;
 
                 DistribucionManager.mesesCostosClaves.forEach(m => {
@@ -1410,7 +1466,7 @@ class DistribucionManager {
             const vcosto = row.COSTO_PROM * (1 + row.INC_FOB / 100);
             row.VCOSTO = vcosto;
 
-            const markup = obtenerMarkupFila(row);
+            const markup = DistribucionManager.obtenerMarkupFila(row);
 
             let mesesHtmlCostos = '';
             let mesesHtmlMarkup = '';
@@ -1481,8 +1537,156 @@ class DistribucionManager {
             htmlMarkup += generarSubtotalMarkup(grupoActual);
         }
 
+        // --- CÁLCULO DE TOTALES GENERALES Y POR CANAL ---
+        let totalGeneralVentaProyectada = 0;
+        let totalGeneralCostoUSD = 0;
+        let totalGeneralVentaUSD = 0;
+        const totalMensualCostoUSD = {};
+        const totalMensualVentaUSD = {};
+        
+        // Sumas por Canal
+        const costoPorCanal = { 'LOCALES PROPIOS': 0, 'FRANQUICIAS': 0, 'MAYORISTAS': 0, 'ECOMMERCE': 0 };
+        const ventaPorCanal = { 'LOCALES PROPIOS': 0, 'FRANQUICIAS': 0, 'MAYORISTAS': 0, 'ECOMMERCE': 0 };
+
+        DistribucionManager.mesesCostosClaves.forEach(m => {
+            totalMensualCostoUSD[m] = 0;
+            totalMensualVentaUSD[m] = 0;
+        });
+
+        datos.forEach(row => {
+            const vcosto = row.COSTO_PROM * (1 + row.INC_FOB / 100);
+            const markup = DistribucionManager.obtenerMarkupFila(row);
+            const canalNormalizado = (row.CANAL || '').toUpperCase().trim();
+            
+            totalGeneralVentaProyectada += row.COMPRA_DISTRIBUIDA || 0;
+
+            DistribucionManager.mesesCostosClaves.forEach(m => {
+                const unidades = row.MESES_UNIDADES[m] || 0;
+                
+                const costoMes = vcosto * unidades;
+                const ventaMes = vcosto * unidades * markup;
+
+                totalMensualCostoUSD[m] += costoMes;
+                totalMensualVentaUSD[m] += ventaMes;
+
+                totalGeneralCostoUSD += costoMes;
+                totalGeneralVentaUSD += ventaMes;
+
+                // Sumar por canal
+                if (canalNormalizado.includes('LOCAL')) {
+                    costoPorCanal['LOCALES PROPIOS'] += costoMes;
+                    ventaPorCanal['LOCALES PROPIOS'] += ventaMes;
+                } else if (canalNormalizado.includes('FRANQ')) {
+                    costoPorCanal['FRANQUICIAS'] += costoMes;
+                    ventaPorCanal['FRANQUICIAS'] += ventaMes;
+                } else if (canalNormalizado.includes('MAYOR')) {
+                    costoPorCanal['MAYORISTAS'] += costoMes;
+                    ventaPorCanal['MAYORISTAS'] += ventaMes;
+                } else if (canalNormalizado.includes('ECOM') || canalNormalizado.includes('WEB')) {
+                    costoPorCanal['ECOMMERCE'] += costoMes;
+                    ventaPorCanal['ECOMMERCE'] += ventaMes;
+                }
+            });
+        });
+
+        // Generar fila HTML de Total General de Costos
+        let mesesTotalCostosHtml = '';
+        DistribucionManager.mesesCostosClaves.forEach((m, mIdx) => {
+            const labelMes = DistribucionManager.mesesCostos[mIdx];
+            const tasaMes = esARS ? DistribucionManager.tasaParaMes(labelMes) : 1;
+            mesesTotalCostosHtml += `<td class="text-end fw-bold font-monospace bg-dark text-white" style="font-size:0.85rem;">${fmtDinero(totalMensualCostoUSD[m], tasaMes)}</td>`;
+        });
+
+        const totalCostosRowHtml = `
+            <tr style="border-top: 3px double #000; border-bottom: 3px double #000; vertical-align: middle;" class="table-dark">
+                <td colspan="3" class="fw-bold text-uppercase" style="font-size:0.85rem; padding: 8px;">
+                    <i class="fas fa-calculator me-1"></i>TOTAL GENERAL
+                </td>
+                <td class="text-end fw-bold font-monospace bg-secondary text-white" style="font-size:0.85rem;">${FormatoUtils.formatearNumero(totalGeneralVentaProyectada)}</td>
+                <td class="bg-dark"></td>
+                ${mesesTotalCostosHtml}
+                <td class="text-end fw-bold font-monospace bg-primary text-white" style="font-size:0.85rem;">${fmtDinero(totalGeneralCostoUSD)}</td>
+            </tr>
+        `;
+        htmlCostos += totalCostosRowHtml;
+
+        // Generar fila HTML de Total General de Venta (Mark-up)
+        let mesesTotalVentaHtml = '';
+        DistribucionManager.mesesCostosClaves.forEach((m, mIdx) => {
+            const labelMes = DistribucionManager.mesesCostos[mIdx];
+            const tasaMes = esARS ? DistribucionManager.tasaParaMes(labelMes) : 1;
+            mesesTotalVentaHtml += `<td class="text-end fw-bold font-monospace bg-dark text-white" style="font-size:0.85rem;">${fmtDinero(totalMensualVentaUSD[m], tasaMes)}</td>`;
+        });
+
+        const totalVentaRowHtml = `
+            <tr style="border-top: 3px double #000; border-bottom: 3px double #000; vertical-align: middle;" class="table-dark">
+                <td colspan="3" class="fw-bold text-uppercase" style="font-size:0.85rem; padding: 8px;">
+                    <i class="fas fa-calculator me-1"></i>TOTAL GENERAL
+                </td>
+                <td class="text-end fw-bold font-monospace bg-secondary text-white" style="font-size:0.85rem;">${FormatoUtils.formatearNumero(totalGeneralVentaProyectada)}</td>
+                <td class="bg-dark"></td>
+                ${mesesTotalVentaHtml}
+                <td class="text-end fw-bold font-monospace bg-warning text-dark" style="font-size:0.85rem;">${fmtDinero(totalGeneralVentaUSD)}</td>
+            </tr>
+        `;
+        htmlMarkup += totalVentaRowHtml;
+
         if (tbodyCostos) tbodyCostos.innerHTML = htmlCostos;
         if (tbodyMarkup) tbodyMarkup.innerHTML = htmlMarkup;
+
+        // --- RENDERIZAR TABLA DE ANÁLISIS 2B (LOCALES PROPIOS POR SUCURSAL) ---
+        DistribucionManager.renderizarTablaAnalisis2B();
+
+        // --- RENDERIZAR PEQUEÑOS INDICADORES DE TOTAL POR CANAL EN CABECERAS ---
+        const badgeClassCanal = {
+            'LOCALES PROPIOS': 'bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25',
+            'FRANQUICIAS': 'bg-success bg-opacity-10 text-success border border-success border-opacity-25',
+            'MAYORISTAS': 'bg-info bg-opacity-10 text-info border border-info border-opacity-25',
+            'ECOMMERCE': 'bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25'
+        };
+
+        const renderHeaderIndicators = (containerId, totalsMap, totalGeneralVal) => {
+            const container = document.getElementById(containerId);
+            if (!container) return;
+
+            let htmlBadges = '';
+            
+            // Primero, agregar el Total Empresa
+            if (totalGeneralVal > 0) {
+                const formattedG = fmtDinero(totalGeneralVal);
+                const labelSuf = esARS ? '$' : 'U$D';
+                htmlBadges += `
+                    <span class="badge bg-dark border border-secondary px-2 py-1 font-monospace me-1" style="font-size: 0.72rem; font-weight: bold; background-color: #212529 !important;" title="Total Empresa">
+                        Empresa: ${labelSuf} ${formattedG}
+                    </span>
+                `;
+            }
+
+            Object.keys(totalsMap).forEach(canal => {
+                const totalVal = totalsMap[canal];
+                if (totalVal > 0) {
+                    const esUSD = DistribucionManager.modoMoneda === 'USD';
+                    const formatted = fmtDinero(totalVal);
+                    const labelSuf = esARS ? '$' : 'U$D';
+                    
+                    let shortLabel = canal;
+                    if (canal === 'LOCALES PROPIOS') shortLabel = 'LP';
+                    if (canal === 'FRANQUICIAS') shortLabel = 'FR';
+                    if (canal === 'MAYORISTAS') shortLabel = 'MA';
+                    if (canal === 'ECOMMERCE') shortLabel = 'EC';
+
+                    htmlBadges += `
+                        <span class="badge ${badgeClassCanal[canal] || 'bg-secondary'} px-2 py-1 font-monospace" style="font-size: 0.72rem; font-weight: 500;" title="${canal}">
+                            ${shortLabel}: ${labelSuf} ${formatted}
+                        </span>
+                    `;
+                }
+            });
+            container.innerHTML = htmlBadges;
+        };
+
+        renderHeaderIndicators('indicadores-costo-totales-header', costoPorCanal, totalGeneralCostoUSD);
+        renderHeaderIndicators('indicadores-venta-totales-header', ventaPorCanal, totalGeneralVentaUSD);
     }
 
     // Propiedad para guardar parámetros cargados en modal
@@ -1765,54 +1969,334 @@ class DistribucionManager {
         }
     }
 
+    /**
+     * Abrir modal de selección de reporte Excel en Paso 2
+     */
     static exportarExcelCostos() {
         if (DistribucionManager.datosCostos.length === 0) {
-            UIUtils.mostrarAlerta('No hay costos para exportar', 'warning');
+            UIUtils.mostrarAlerta('No hay datos de costos cargados para exportar', 'warning');
             return;
         }
 
-        let csvContent = "\uFEFF"; // BOM para acentos
-        let cabecera = "Rubro;Categoría;Venta Proyectada;Costo Prom;Inc Fob %;Vcosto";
-        
-        DistribucionManager.mesesCostos.forEach(m => {
-            cabecera += `;${m}`;
-        });
-        cabecera += ";Costo Total";
-        csvContent += cabecera + "\n";
+        const modalEl = document.getElementById('modal-reporte-excel-seleccion');
+        if (modalEl) {
+            // Mover al body si no está allí para evitar conflictos de z-index y apilamiento con el backdrop
+            if (modalEl.parentNode !== document.body) {
+                document.body.appendChild(modalEl);
+            }
+            let modal = bootstrap.Modal.getInstance(modalEl);
+            if (!modal) {
+                modal = new bootstrap.Modal(modalEl);
+            }
+            modal.show();
+        }
+    }
 
-        DistribucionManager.datosCostos.forEach(row => {
-            const vcosto = row.COSTO_PROM * (1 + row.INC_FOB / 100);
-            let linea = [
-                row.RUBRO,
-                row.CATEGORIA_PADRE,
-                row.COMPRA_DISTRIBUIDA,
-                row.COSTO_PROM,
-                row.INC_FOB,
-                vcosto.toFixed(2)
-            ];
+    /**
+     * Helper para cerrar de forma limpia el modal de Excel y eliminar backdrops huérfanos
+     */
+    static cerrarModalExcel() {
+        const modalEl = document.getElementById('modal-reporte-excel-seleccion');
+        if (modalEl) {
+            const modal = bootstrap.Modal.getInstance(modalEl);
+            if (modal) {
+                modal.hide();
+            }
+        }
+        // Limpiar cualquier backdrop que pudiera quedar en el DOM
+        document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
+        document.body.classList.remove('modal-open');
+        document.body.style.removeProperty('overflow');
+        document.body.style.removeProperty('padding-right');
+    }
 
-            let costoTotal = 0;
-            DistribucionManager.mesesCostosClaves.forEach(m => {
-                const unidades = row.MESES_UNIDADES[m] || 0;
-                const costoMes = vcosto * unidades;
-                costoTotal += costoMes;
-                linea.push(Math.round(costoMes));
-            });
-            linea.push(Math.round(costoTotal));
+    /**
+     * REPORTE 1: Excel de Venta Comercial
+     * Muestra únicamente la Tabla de Venta comercial por canal proyectado por mes.
+     * Genera 2 hojas:
+     * 1) "Ventas ($)": Venta comercial en ARS con TC por mes.
+     * 2) "Unidades por Canal": Unidades proyectadas mes a mes por canal, aperturando Locales Propios por cada sucursal/local.
+     */
+    static async descargarExcelVentasComercial() {
+        try {
+            DistribucionManager.cerrarModalExcel();
+            UIUtils.mostrarLoading(true);
 
-            const lineaCsv = linea.map(val => `"${String(val).replace(/"/g, '""')}"`).join(';');
-            csvContent += lineaCsv + "\n";
-        });
+            // Si los datos de Paso 1 no fueron cargados aún en esta sesión, cargarlos previamente
+            if (!DistribucionManager.datos || DistribucionManager.datos.length === 0) {
+                await DistribucionManager.cargarDatos();
+            }
 
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        const link = document.createElement("a");
-        const url = URL.createObjectURL(blob);
-        link.setAttribute("href", url);
-        link.setAttribute("download", `Costos_Proyeccion_${new Date().toISOString().slice(0,10)}.csv`);
-        link.style.visibility = 'hidden';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+            const datosPaso1 = DistribucionManager.datos || [];
+            const datosPaso2 = DistribucionManager.datosCostos || [];
+
+            // 1. Pestaña de Ventas en Pesos ($)
+            const obtenerFilasVentaPesos = () => {
+                const filas = [];
+
+                datosPaso2.forEach(row => {
+                    const vcosto = row.COSTO_PROM * (1 + row.INC_FOB / 100);
+                    const markup = DistribucionManager.obtenerMarkupFila(row);
+                    const vventaUnit = vcosto * markup;
+                    const canalNormalizado = (row.CANAL || '').toUpperCase().trim();
+
+                    const itemsPaso1 = datosPaso1.filter(p1 => 
+                        (p1.RUBRO || '').trim().toUpperCase() === (row.RUBRO || '').trim().toUpperCase() && 
+                        (p1.CATEGORIA_PADRE || '').trim().toUpperCase() === (row.CATEGORIA_PADRE || '').trim().toUpperCase() && 
+                        (p1.CANAL || '').trim().toUpperCase() === (row.CANAL || '').trim().toUpperCase()
+                    );
+
+                    let sucursalesConsolidadas = [];
+                    if (canalNormalizado.includes('LOCAL') && itemsPaso1.length > 0) {
+                        itemsPaso1.forEach(p1 => {
+                            if (p1.SUCURSALES_DETALLE && p1.SUCURSALES_DETALLE.length > 0) {
+                                p1.SUCURSALES_DETALLE.forEach(suc => {
+                                    sucursalesConsolidadas.push(suc);
+                                });
+                            }
+                        });
+                    }
+
+                    if (sucursalesConsolidadas.length > 0) {
+                        sucursalesConsolidadas.forEach(suc => {
+                            let unidadesTotalSucursal = 0;
+                            DistribucionManager.mesesCostosClaves.forEach((m, mIdx) => {
+                                const labelMes = DistribucionManager.mesesCostos[mIdx];
+                                const unidadesMesSuc = suc.MESES && suc.MESES[labelMes] ? (suc.MESES[labelMes].unidades || 0) : 0;
+                                unidadesTotalSucursal += unidadesMesSuc;
+                            });
+
+                            const filaObj = {
+                                'Rubro': row.RUBRO,
+                                'Categoría': row.CATEGORIA_PADRE,
+                                'Canal / Sucursal': `${row.CANAL} - ${suc.SUCURSAL}`,
+                                'Venta Proyectada (U.)': unidadesTotalSucursal
+                            };
+
+                            let ventaTotalFilaUSD = 0;
+                            let ventaTotalFilaARS = 0;
+
+                            DistribucionManager.mesesCostosClaves.forEach((m, mIdx) => {
+                                const labelMes = DistribucionManager.mesesCostos[mIdx];
+                                const tasaMes = DistribucionManager.tasaParaMes(labelMes);
+                                const unidadesSuc = suc.MESES && suc.MESES[labelMes] ? (suc.MESES[labelMes].unidades || 0) : 0;
+
+                                const valorVentaMesUSD = vventaUnit * unidadesSuc;
+                                const valorVentaMesARS = valorVentaMesUSD * tasaMes;
+
+                                filaObj[`${labelMes} (TC $${Math.round(tasaMes)})`] = Math.round(valorVentaMesARS);
+                                ventaTotalFilaUSD += valorVentaMesUSD;
+                                ventaTotalFilaARS += valorVentaMesARS;
+                            });
+
+                            const tcPromedioFila = ventaTotalFilaUSD !== 0 ? (ventaTotalFilaARS / ventaTotalFilaUSD) : DistribucionManager.tasaPromedioPeriodo();
+                            filaObj['TC Prom. Fila'] = parseFloat(tcPromedioFila.toFixed(2));
+                            filaObj['Venta Total ($)'] = Math.round(ventaTotalFilaARS);
+
+                            filas.push(filaObj);
+                        });
+                    } else {
+                        const filaObj = {
+                            'Rubro': row.RUBRO,
+                            'Categoría': row.CATEGORIA_PADRE,
+                            'Canal / Sucursal': row.CANAL,
+                            'Venta Proyectada (U.)': row.COMPRA_DISTRIBUIDA || 0
+                        };
+
+                        let ventaTotalFilaUSD = 0;
+                        let ventaTotalFilaARS = 0;
+
+                        DistribucionManager.mesesCostosClaves.forEach((m, mIdx) => {
+                            const labelMes = DistribucionManager.mesesCostos[mIdx];
+                            const tasaMes = DistribucionManager.tasaParaMes(labelMes);
+                            const unidadesMes = row.MESES_UNIDADES[m] || 0;
+
+                            const valorVentaMesUSD = vventaUnit * unidadesMes;
+                            const valorVentaMesARS = valorVentaMesUSD * tasaMes;
+
+                            filaObj[`${labelMes} (TC $${Math.round(tasaMes)})`] = Math.round(valorVentaMesARS);
+                            ventaTotalFilaUSD += valorVentaMesUSD;
+                            ventaTotalFilaARS += valorVentaMesARS;
+                        });
+
+                        const tcPromedioFila = ventaTotalFilaUSD !== 0 ? (ventaTotalFilaARS / ventaTotalFilaUSD) : DistribucionManager.tasaPromedioPeriodo();
+                        filaObj['TC Prom. Fila'] = parseFloat(tcPromedioFila.toFixed(2));
+                        filaObj['Venta Total ($)'] = Math.round(ventaTotalFilaARS);
+
+                        filas.push(filaObj);
+                    }
+                });
+
+                return filas;
+            };
+
+            // 2. Pestaña de Unidades por Canal (con aperturas de Locales Propios por sucursal)
+            const obtenerFilasUnidadesPorCanal = () => {
+                const filas = [];
+
+                datosPaso2.forEach(row => {
+                    const canalNormalizado = (row.CANAL || '').toUpperCase().trim();
+
+                    const itemsPaso1 = datosPaso1.filter(p1 => 
+                        (p1.RUBRO || '').trim().toUpperCase() === (row.RUBRO || '').trim().toUpperCase() && 
+                        (p1.CATEGORIA_PADRE || '').trim().toUpperCase() === (row.CATEGORIA_PADRE || '').trim().toUpperCase() && 
+                        (p1.CANAL || '').trim().toUpperCase() === (row.CANAL || '').trim().toUpperCase()
+                    );
+
+                    let sucursalesConsolidadas = [];
+                    if (canalNormalizado.includes('LOCAL') && itemsPaso1.length > 0) {
+                        itemsPaso1.forEach(p1 => {
+                            if (p1.SUCURSALES_DETALLE && p1.SUCURSALES_DETALLE.length > 0) {
+                                p1.SUCURSALES_DETALLE.forEach(suc => {
+                                    sucursalesConsolidadas.push(suc);
+                                });
+                            }
+                        });
+                    }
+
+                    if (sucursalesConsolidadas.length > 0) {
+                        sucursalesConsolidadas.forEach(suc => {
+                            let sumaUnidadesSucursal = 0;
+
+                            const filaObj = {
+                                'Rubro': row.RUBRO,
+                                'Categoría': row.CATEGORIA_PADRE,
+                                'Canal / Sucursal': `${row.CANAL} - ${suc.SUCURSAL}`
+                            };
+
+                            DistribucionManager.mesesCostosClaves.forEach((m, mIdx) => {
+                                const labelMes = DistribucionManager.mesesCostos[mIdx];
+                                const unidadesSuc = suc.MESES && suc.MESES[labelMes] ? (suc.MESES[labelMes].unidades || 0) : 0;
+                                filaObj[labelMes] = unidadesSuc;
+                                sumaUnidadesSucursal += unidadesSuc;
+                            });
+
+                            filaObj['Total Unidades'] = sumaUnidadesSucursal;
+                            filas.push(filaObj);
+                        });
+                    } else {
+                        let sumaUnidadesCanal = 0;
+
+                        const filaObj = {
+                            'Rubro': row.RUBRO,
+                            'Categoría': row.CATEGORIA_PADRE,
+                            'Canal / Sucursal': row.CANAL
+                        };
+
+                        DistribucionManager.mesesCostosClaves.forEach((m, mIdx) => {
+                            const labelMes = DistribucionManager.mesesCostos[mIdx];
+                            const unidadesMes = row.MESES_UNIDADES[m] || 0;
+                            filaObj[labelMes] = unidadesMes;
+                            sumaUnidadesCanal += unidadesMes;
+                        });
+
+                        filaObj['Total Unidades'] = sumaUnidadesCanal;
+                        filas.push(filaObj);
+                    }
+                });
+
+                return filas;
+            };
+
+            const hojas = {
+                'Ventas ($)': obtenerFilasVentaPesos(),
+                'Unidades por Canal': obtenerFilasUnidadesPorCanal()
+            };
+
+            await ExcelExporter.exportarMultiplesHojas(hojas, `Reporte_Ventas_Comercial_${new Date().toISOString().slice(0,10)}.xlsx`);
+            UIUtils.mostrarAlerta('Excel de Venta Comercial generado correctamente', 'success');
+        } catch (e) {
+            console.error('Error generando Excel de Venta:', e);
+            UIUtils.mostrarAlerta('Error generando Excel de Venta: ' + e.message, 'error');
+        } finally {
+            UIUtils.mostrarLoading(false);
+        }
+    }
+
+    /**
+     * REPORTE 2: Excel Financiero
+     * Apertura completa por Rubro, Categoría y Canal.
+     * Incluye tanto la Tabla de Costos como la Tabla de Ventas.
+     * Genera 4 hojas: "Costos ($)", "Ventas ($)", "Costos (USD)", "Ventas (USD)"
+     */
+    static async descargarExcelFinanciero() {
+        try {
+            DistribucionManager.cerrarModalExcel();
+            UIUtils.mostrarLoading(true);
+
+            const datosPaso2 = DistribucionManager.datosCostos || [];
+
+            const obtenerFilasFinanciero = (tipoReporte, modoMoneda) => {
+                const esARS = modoMoneda === 'ARS';
+                const esVenta = tipoReporte === 'VENTA';
+                const filas = [];
+
+                datosPaso2.forEach(row => {
+                    const vcosto = row.COSTO_PROM * (1 + row.INC_FOB / 100);
+                    const markup = DistribucionManager.obtenerMarkupFila(row);
+                    const multiplicador = esVenta ? (vcosto * markup) : vcosto;
+
+                    const filaObj = {
+                        'Rubro': row.RUBRO,
+                        'Categoría': row.CATEGORIA_PADRE,
+                        'Canal': row.CANAL,
+                        'Venta Proyectada (U.)': row.COMPRA_DISTRIBUIDA,
+                        'Vcosto Base (U$D)': parseFloat(vcosto.toFixed(2))
+                    };
+
+                    if (esVenta) {
+                        filaObj['Mark-Up (x)'] = parseFloat(markup.toFixed(2));
+                    }
+
+                    let acumuladoTotalUSD = 0;
+                    let acumuladoTotalARS = 0;
+
+                    DistribucionManager.mesesCostosClaves.forEach((m, mIdx) => {
+                        const labelMes = DistribucionManager.mesesCostos[mIdx];
+                        const tasaMes = DistribucionManager.tasaParaMes(labelMes);
+                        const unidadesMes = row.MESES_UNIDADES[m] || 0;
+
+                        const valorMesUSD = multiplicador * unidadesMes;
+                        const valorMesARS = valorMesUSD * tasaMes;
+
+                        const colHeader = esARS ? `${labelMes} (TC $${Math.round(tasaMes)})` : labelMes;
+                        filaObj[colHeader] = esARS ? Math.round(valorMesARS) : Math.round(valorMesUSD);
+
+                        acumuladoTotalUSD += valorMesUSD;
+                        acumuladoTotalARS += valorMesARS;
+                    });
+
+                    const tcPromedioFila = acumuladoTotalUSD !== 0 ? (acumuladoTotalARS / acumuladoTotalUSD) : DistribucionManager.tasaPromedioPeriodo();
+                    if (esARS) {
+                        filaObj['TC Prom. Fila'] = parseFloat(tcPromedioFila.toFixed(2));
+                        const labelColTotal = esVenta ? 'Venta Total ($)' : 'Costo Total ($)';
+                        filaObj[labelColTotal] = Math.round(acumuladoTotalARS);
+                    } else {
+                        const labelColTotal = esVenta ? 'Venta Total (U$D)' : 'Costo Total (U$D)';
+                        filaObj[labelColTotal] = Math.round(acumuladoTotalUSD);
+                    }
+
+                    filas.push(filaObj);
+                });
+
+                return filas;
+            };
+
+            const hojas = {
+                'Costos ($)': obtenerFilasFinanciero('COSTO', 'ARS'),
+                'Ventas ($)': obtenerFilasFinanciero('VENTA', 'ARS'),
+                'Costos (USD)': obtenerFilasFinanciero('COSTO', 'USD'),
+                'Ventas (USD)': obtenerFilasFinanciero('VENTA', 'USD')
+            };
+
+            await ExcelExporter.exportarMultiplesHojas(hojas, `Reporte_Presupuesto_Financiero_${new Date().toISOString().slice(0,10)}.xlsx`);
+            UIUtils.mostrarAlerta('Excel Financiero generado correctamente', 'success');
+        } catch (e) {
+            console.error('Error generando Excel Financiero:', e);
+            UIUtils.mostrarAlerta('Error generando Excel Financiero: ' + e.message, 'error');
+        } finally {
+            UIUtils.mostrarLoading(false);
+        }
     }
 
     static exportarExcel() {
@@ -1891,12 +2375,20 @@ class DistribucionManager {
 
     /**
      * Obtener la tasa de cambio para un mes mostrado.
-     * El usuario quiere el tipo de cambio del año ANTERIOR al que se muestra.
-     * Ej: para "Ene 27" (Jan 2027), usar la tasa de Enero 2026.
+     * Busca primero la cotización del contrato futuro directo de ese mes y año (Ej: "8-2026" para "Ago 26").
+     * Si no existe cotización futura para esa fecha, usa como fallback la cotización histórica del mismo mes del año anterior.
      */
     static tasaParaMes(label) {
         const parsed = DistribucionManager.parsearMesAnio(label);
         if (!parsed) return 1;
+
+        // 1. Buscar cotización futura exacta para ese mes y año (Ej: "8-2026" o "1-2027")
+        const claveDirecta = `${parsed.mes}-${parsed.anio}`;
+        if (DistribucionManager.tipoCambio[claveDirecta] && DistribucionManager.tipoCambio[claveDirecta] > 0) {
+            return DistribucionManager.tipoCambio[claveDirecta];
+        }
+
+        // 2. Fallback: buscar cotización histórica del mismo mes del año anterior
         const claveAnterior = `${parsed.mes}-${parsed.anio - 1}`;
         const tasa = DistribucionManager.tipoCambio[claveAnterior];
         return tasa && tasa > 0 ? tasa : 1;
@@ -1914,12 +2406,18 @@ class DistribucionManager {
 
     /**
      * Promedio de tasas del período de meses mostrados
-     * Usa meses de Step 1 si están disponibles, si no usa mesesCostos (Step 2)
+     * Usa meses de Step 1, Step 2 o Step 3 según disponibilidad y paso activo.
      */
     static tasaPromedioPeriodo() {
-        const mesesRef = DistribucionManager.meses.length > 0
-            ? DistribucionManager.meses
-            : DistribucionManager.mesesCostos;
+        let mesesRef = [];
+        if (DistribucionManager.pasoActivo === 3 && DistribucionManager.mesesDesvios.length > 0) {
+            mesesRef = DistribucionManager.mesesDesvios;
+        } else if (DistribucionManager.meses.length > 0) {
+            mesesRef = DistribucionManager.meses;
+        } else {
+            mesesRef = DistribucionManager.mesesCostos;
+        }
+
         if (!mesesRef || mesesRef.length === 0) return 1;
         let sum = 0, count = 0;
         mesesRef.forEach(m => {
@@ -1961,6 +2459,9 @@ class DistribucionManager {
         // Re-renderizar la tabla que corresponda al paso activo
         if (DistribucionManager.pasoActivo === 2) {
             DistribucionManager.filtrarDatosCostos(); // Aplica filtros actuales
+        } else if (DistribucionManager.pasoActivo === 3) {
+            DistribucionManager.renderizarDesviosPaso3();
+            DistribucionManager.inicializarGraficosPaso3();
         } else {
             DistribucionManager.renderizarTabla();
         }
@@ -2009,6 +2510,787 @@ class DistribucionManager {
         } else {
             container.style.display = 'none';
             btn.innerHTML = `<i class="fas fa-chevron-down me-1"></i>Expandir`;
+        }
+    }
+
+    /**
+     * Helper estático para obtener el markup correspondiente al canal de la fila
+     */
+    static obtenerMarkupFila(row) {
+        const canal = (row.CANAL || '').toUpperCase();
+        if (canal.includes('LOCAL')) return row.MARKUP_LOCALES_PROPIOS || 0.0;
+        if (canal.includes('FRANQ')) return row.MARKUP_FRANQUICIAS || 0.0;
+        if (canal.includes('MAYOR')) return row.MARKUP_MAYORISTAS || 0.0;
+        if (canal.includes('ECOM') || canal.includes('WEB')) return row.MARKUP_ECOMMERCE || 0.0;
+        return 0.0;
+    }
+
+    /**
+     * Maneja el cambio entre las sub-pestañas 2A (Gestión) y 2B (Análisis Locales Propios)
+     */
+    static async cambiarSubtabPaso2(subtab) {
+        if (subtab === '2B') {
+            await DistribucionManager.renderizarTablaAnalisis2B();
+        }
+    }
+
+    /**
+     * Renderiza la tabla de Análisis 2B: Presupuesto de Venta de Locales Propios desglosado por Sucursal / Local
+     * Nivel 1 (Principal): Sucursal (Summarizado con total por mes)
+     * Nivel 2 (Desplegable): Rubros y Categorías que pertenecen a dicha sucursal
+     */
+    static async renderizarTablaAnalisis2B() {
+        const theadRow = document.getElementById('thead-analisis-locales-row');
+        const tbody = document.getElementById('tbody-analisis-locales');
+        if (!theadRow || !tbody) return;
+
+        // Si los datos del Paso 2 no están cargados, cargarlos
+        if (!DistribucionManager.datosCostos || DistribucionManager.datosCostos.length === 0) {
+            await DistribucionManager.cargarCostos();
+        }
+
+        const esARS = DistribucionManager.modoMoneda === 'ARS';
+        const tasaPromedio = esARS ? DistribucionManager.tasaPromedioPeriodo() : 1;
+        const sufMoneda = esARS ? ' ($)' : ' (U$D)';
+
+        const fmtDinero = (v, tasa = null) => {
+            const t = tasa !== null ? tasa : tasaPromedio;
+            const valorFinal = esARS ? (v * t) : v;
+            return FormatoUtils.formatearNumero(Math.round(valorFinal));
+        };
+
+        // 1. Reconstruir cabecera con meses (Sucursal | Rubro | Categoría | ...)
+        let headHtml = `
+            <th style="min-width:200px;">Sucursal / Local Propio</th>
+            <th>Rubro</th>
+            <th>Categoría</th>
+            <th class="text-end bg-secondary text-white" style="width: 140px;">Venta Proyectada (U.)</th>
+        `;
+
+        DistribucionManager.mesesCostos.forEach(m => {
+            const tasaMes = esARS ? DistribucionManager.tasaParaMes(m) : 1;
+            headHtml += `
+                <th class="text-end bg-dark text-white" style="min-width: 90px;">
+                    ${m}${esARS ? '<br><small style="font-size:0.65rem;opacity:0.8;">TC $' + Math.round(tasaMes) + '</small>' : ''}
+                </th>`;
+        });
+        headHtml += `<th class="text-end bg-warning text-dark" style="width: 150px;">Venta Total${sufMoneda}</th>`;
+        theadRow.innerHTML = headHtml;
+
+        const datosPaso1 = DistribucionManager.datos || [];
+        const datosPaso2 = DistribucionManager.datosCostos || [];
+
+        // Filtrar datosPaso2 solo para Locales Propios
+        const datosLocalesPropios = datosPaso2.filter(row => (row.CANAL || '').toUpperCase().includes('LOCAL'));
+
+        if (datosLocalesPropios.length === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="${5 + DistribucionManager.mesesCostos.length}" class="text-center text-muted py-4">
+                        <i class="fas fa-store-slash mb-2"></i><br>
+                        No hay datos cargados para el canal Locales Propios
+                    </td>
+                </tr>`;
+            return;
+        }
+
+        // Agrupar por SUCURSAL / LOCAL
+        const mapaSucursales = {}; // { 'ALTO PALERMO': { sucursal: 'ALTO PALERMO', totalUnidades: 0, totalVentaUSD: 0, mesesUSD: {}, items: [] } }
+
+        datosLocalesPropios.forEach(row => {
+            const vcosto = row.COSTO_PROM * (1 + row.INC_FOB / 100);
+            const markup = DistribucionManager.obtenerMarkupFila(row);
+            const vventaUnit = vcosto * markup;
+
+            // Buscar coincidencia en Paso 1 para traer las sucursales
+            const itemPaso1 = datosPaso1.find(p1 =>
+                (p1.RUBRO || '').trim().toUpperCase() === (row.RUBRO || '').trim().toUpperCase() &&
+                (p1.CATEGORIA_PADRE || '').trim().toUpperCase() === (row.CATEGORIA_PADRE || '').trim().toUpperCase() &&
+                (p1.CANAL || '').trim().toUpperCase().includes('LOCAL')
+            );
+
+            const sucursales = (itemPaso1 && itemPaso1.SUCURSALES_DETALLE && itemPaso1.SUCURSALES_DETALLE.length > 0)
+                ? itemPaso1.SUCURSALES_DETALLE
+                : [];
+
+            if (sucursales.length > 0) {
+                // Para garantizar coincidencia exacta con 2A (que multiplica directamente row.MESES_UNIDADES[m] * vventaUnit),
+                // calculamos primero la venta mensual exacta de esta categoría para Locales Propios
+                const ventaCategoriaMesUSD = {};
+                DistribucionManager.mesesCostosClaves.forEach((m, mIdx) => {
+                    const unidadesTotalCatMes = row.MESES_UNIDADES[m] || 0;
+                    ventaCategoriaMesUSD[m] = vventaUnit * unidadesTotalCatMes;
+                });
+
+                sucursales.forEach(suc => {
+                    const nombreSuc = suc.SUCURSAL || 'LOCAL SIN NOMBRE';
+                    const partSucDecimal = (parseFloat(suc.PARTICIPACION) || 0) / 100;
+
+                    if (!mapaSucursales[nombreSuc]) {
+                        mapaSucursales[nombreSuc] = {
+                            sucursal: nombreSuc,
+                            participacionPromedio: suc.PARTICIPACION || 0,
+                            totalUnidades: 0,
+                            totalVentaUSD: 0,
+                            mesesUSD: {},
+                            items: []
+                        };
+                        DistribucionManager.mesesCostosClaves.forEach(m => mapaSucursales[nombreSuc].mesesUSD[m] = 0);
+                    }
+
+                    let itemUnidadesTotal = 0;
+                    let itemVentaTotalUSD = 0;
+                    const itemMesesUSD = {};
+
+                    DistribucionManager.mesesCostosClaves.forEach((m, mIdx) => {
+                        const labelMes = DistribucionManager.mesesCostos[mIdx];
+                        
+                        // Si la sucursal tiene unidades explícitas guardadas, usarlas; de lo contrario prorratear de row.MESES_UNIDADES[m]
+                        const unidadesSucMes = (suc.MESES && suc.MESES[labelMes] && suc.MESES[labelMes].unidades !== undefined)
+                            ? (suc.MESES[labelMes].unidades || 0)
+                            : (row.MESES_UNIDADES[m] || 0) * partSucDecimal;
+
+                        // La venta en USD se prorratea del total exacto de la categoría en 2A para prevenir descalces por redondeo
+                        const ventaSucMesUSD = (suc.MESES && suc.MESES[labelMes] && suc.MESES[labelMes].unidades !== undefined)
+                            ? vventaUnit * unidadesSucMes
+                            : ventaCategoriaMesUSD[m] * partSucDecimal;
+
+                        itemUnidadesTotal += unidadesSucMes;
+                        itemVentaTotalUSD += ventaSucMesUSD;
+                        itemMesesUSD[m] = ventaSucMesUSD;
+
+                        mapaSucursales[nombreSuc].mesesUSD[m] += ventaSucMesUSD;
+                    });
+
+                    mapaSucursales[nombreSuc].totalUnidades += itemUnidadesTotal;
+                    mapaSucursales[nombreSuc].totalVentaUSD += itemVentaTotalUSD;
+
+                    mapaSucursales[nombreSuc].items.push({
+                        rubro: row.RUBRO,
+                        categoria: row.CATEGORIA_PADRE,
+                        vcosto: vcosto,
+                        unidadesTotal: itemUnidadesTotal,
+                        ventaTotalUSD: itemVentaTotalUSD,
+                        mesesUSD: itemMesesUSD
+                    });
+                });
+            }
+        });
+
+        const listaSucursales = Object.values(mapaSucursales);
+        // Ordenar sucursales por mayor venta total acumulada
+        listaSucursales.sort((a, b) => b.totalVentaUSD - a.totalVentaUSD);
+
+        if (listaSucursales.length === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="${5 + DistribucionManager.mesesCostos.length}" class="text-center text-muted py-4">
+                        <i class="fas fa-info-circle mb-2"></i><br>
+                        No se encontraron sucursales desglosadas para Locales Propios
+                    </td>
+                </tr>`;
+            return;
+        }
+
+        // Si hay sucursales agrupadas, ajustar el gran total mensual sumando directamente desde los totales exactos de cada categoría en 2A
+        const totalExactoLocalesPropiosMesUSD = {};
+        let totalExactoLocalesPropiosVentaUSD = 0;
+        let totalExactoLocalesPropiosUnidades = 0;
+
+        DistribucionManager.mesesCostosClaves.forEach(m => totalExactoLocalesPropiosMesUSD[m] = 0);
+
+        datosLocalesPropios.forEach(row => {
+            const vcosto = row.COSTO_PROM * (1 + row.INC_FOB / 100);
+            const markup = DistribucionManager.obtenerMarkupFila(row);
+            const vventaUnit = vcosto * markup;
+            totalExactoLocalesPropiosUnidades += (row.COMPRA_DISTRIBUIDA || 0);
+
+            DistribucionManager.mesesCostosClaves.forEach(m => {
+                const unidadesCatMes = row.MESES_UNIDADES[m] || 0;
+                const vUSD = vventaUnit * unidadesCatMes;
+                totalExactoLocalesPropiosMesUSD[m] += vUSD;
+                totalExactoLocalesPropiosVentaUSD += vUSD;
+            });
+        });
+
+        let htmlBody = '';
+        let totalEmpresaUnidades = 0;
+        let totalEmpresaVentaUSD = 0;
+        const totalEmpresaMesesUSD = {};
+        DistribucionManager.mesesCostosClaves.forEach(m => totalEmpresaMesesUSD[m] = 0);
+
+        listaSucursales.forEach((sucData, sucIdx) => {
+            totalEmpresaUnidades += sucData.totalUnidades;
+            totalEmpresaVentaUSD += sucData.totalVentaUSD;
+
+            let mesesSucRowHtml = '';
+            DistribucionManager.mesesCostosClaves.forEach((m, mIdx) => {
+                const labelMes = DistribucionManager.mesesCostos[mIdx];
+                const tasaMes = esARS ? DistribucionManager.tasaParaMes(labelMes) : 1;
+                const mUSD = sucData.mesesUSD[m] || 0;
+                totalEmpresaMesesUSD[m] += mUSD;
+
+                mesesSucRowHtml += `<td class="text-end font-monospace fw-bold">${fmtDinero(mUSD, tasaMes)}</td>`;
+            });
+
+            // Fila Nivel 1: SUCURSAL / LOCAL PROPIO (Consolidadora)
+            htmlBody += `
+                <tr id="row-suc-2b-${sucIdx}" class="table-group-header align-middle" style="background:#eef2f7; border-top: 2px solid #90caf9;">
+                    <td class="fw-bold text-primary fs-6">
+                        <button class="btn btn-xs btn-primary me-2 py-0 px-2 rounded-circle" onclick="DistribucionManager.toggleSucursales2B(${sucIdx}, this)">
+                            <i class="fas fa-chevron-right" style="font-size:0.75rem;"></i>
+                        </button>
+                        <i class="fas fa-store me-1 text-warning"></i>${sucData.sucursal}
+                        <small class="text-muted font-monospace fw-normal ms-1">(${sucData.items.length} categorías)</small>
+                    </td>
+                    <td class="text-muted font-monospace fs-7">Venta Sucursal</td>
+                    <td class="text-muted font-monospace fs-7">Consolidado</td>
+                    <td class="text-end font-monospace fw-bold bg-secondary bg-opacity-10 fs-6">${FormatoUtils.formatearNumero(sucData.totalUnidades)}</td>
+                    ${mesesSucRowHtml}
+                    <td class="text-end font-monospace fw-bold text-success bg-success bg-opacity-10 fs-6">${fmtDinero(sucData.totalVentaUSD)}</td>
+                </tr>`;
+
+            // Filas Nivel 2: Rubros y Categorías pertenecientes a la Sucursal
+            sucData.items.forEach(item => {
+                let mesesItemHtml = '';
+                DistribucionManager.mesesCostosClaves.forEach((m, mIdx) => {
+                    const labelMes = DistribucionManager.mesesCostos[mIdx];
+                    const tasaMes = esARS ? DistribucionManager.tasaParaMes(labelMes) : 1;
+                    const itemMUSD = item.mesesUSD[m] || 0;
+                    mesesItemHtml += `<td class="text-end font-monospace text-muted" style="font-size:0.85rem;">${fmtDinero(itemMUSD, tasaMes)}</td>`;
+                });
+
+                htmlBody += `
+                    <tr class="table-light child-2b-row-${sucIdx} bg-light-subtle" style="display: none; font-size: 0.85rem; border-left: 4px solid #ffc107; vertical-align: middle;">
+                        <td class="ps-4 text-muted font-monospace"><i class="fas fa-level-up-alt fa-rotate-90 me-2 text-warning"></i>${sucData.sucursal}</td>
+                        <td class="fw-bold text-dark">${item.rubro}</td>
+                        <td class="text-secondary fw-semibold">${item.categoria}</td>
+                        <td class="text-end font-monospace text-muted">${FormatoUtils.formatearNumero(item.unidadesTotal)}</td>
+                        ${mesesItemHtml}
+                        <td class="text-end font-monospace text-success fw-bold" style="background:#e8f5e9;">${fmtDinero(item.ventaTotalUSD)}</td>
+                    </tr>`;
+            });
+        });
+
+        // Fila Total General para 2B (coincidente al 100% con 2A)
+        let mesesTotalEmpresaHtml = '';
+        DistribucionManager.mesesCostosClaves.forEach((m, mIdx) => {
+            const labelMes = DistribucionManager.mesesCostos[mIdx];
+            const tasaMes = esARS ? DistribucionManager.tasaParaMes(labelMes) : 1;
+            mesesTotalEmpresaHtml += `<td class="text-end fw-bold font-monospace bg-dark text-white" style="font-size:0.85rem;">${fmtDinero(totalExactoLocalesPropiosMesUSD[m], tasaMes)}</td>`;
+        });
+
+        const totalAnalisisRowHtml = `
+            <tr style="border-top: 3px double #000; border-bottom: 3px double #000; vertical-align: middle;" class="table-dark">
+                <td colspan="3" class="fw-bold text-uppercase" style="font-size:0.85rem; padding: 8px;">
+                    <i class="fas fa-calculator me-1"></i>TOTAL LOCALES PROPIOS (${listaSucursales.length} LOCALES)
+                </td>
+                <td class="text-end fw-bold font-monospace bg-secondary text-white" style="font-size:0.85rem;">${FormatoUtils.formatearNumero(totalExactoLocalesPropiosUnidades)}</td>
+                ${mesesTotalEmpresaHtml}
+                <td class="text-end fw-bold font-monospace bg-warning text-dark" style="font-size:0.85rem;">${fmtDinero(totalExactoLocalesPropiosVentaUSD)}</td>
+            </tr>
+        `;
+        htmlBody += totalAnalisisRowHtml;
+
+        tbody.innerHTML = htmlBody;
+
+        // Actualizar badge total en header
+        const headerIndicator = document.getElementById('indicador-locales-propios-totales-header');
+        if (headerIndicator) {
+            headerIndicator.innerHTML = `
+                <span class="badge bg-warning text-dark fs-6 font-monospace shadow-sm">
+                    Total Locales: ${fmtDinero(totalExactoLocalesPropiosVentaUSD)}
+                </span>
+            `;
+        }
+    }
+
+    /**
+     * Alterna la expansión de sucursales para una fila específica en la tabla de Análisis 2B
+     */
+    static toggleSucursales2B(index, btn) {
+        const icon = btn.querySelector('i');
+        const childRows = document.querySelectorAll(`.child-2b-row-${index}`);
+        const isCollapsed = icon.classList.contains('fa-chevron-right');
+
+        if (isCollapsed) {
+            icon.classList.remove('fa-chevron-right');
+            icon.classList.add('fa-chevron-down');
+            childRows.forEach(row => row.style.display = '');
+        } else {
+            icon.classList.remove('fa-chevron-down');
+            icon.classList.add('fa-chevron-right');
+            childRows.forEach(row => row.style.display = 'none');
+        }
+    }
+
+    /**
+     * Expande o colapsa todas las sucursales en la pestaña de Análisis 2B
+     */
+    static toggleExpandirTodasSucursales2B(btn) {
+        const isExpanding = btn.innerHTML.includes('Expandir');
+        const allChildRows = document.querySelectorAll('#tbody-analisis-locales tr[class*="child-2b-row-"]');
+        const allIcons = document.querySelectorAll('#tbody-analisis-locales button i.fa-chevron-right, #tbody-analisis-locales button i.fa-chevron-down');
+
+        if (isExpanding) {
+            btn.innerHTML = `<i class="fas fa-compress-alt me-1"></i>Colapsar Todo`;
+            allChildRows.forEach(r => r.style.display = '');
+            allIcons.forEach(i => { i.classList.remove('fa-chevron-right'); i.classList.add('fa-chevron-down'); });
+        } else {
+            btn.innerHTML = `<i class="fas fa-expand-alt me-1"></i>Expandir Todo`;
+            allChildRows.forEach(r => r.style.display = 'none');
+            allIcons.forEach(i => { i.classList.remove('fa-chevron-down'); i.classList.add('fa-chevron-right'); });
+        }
+    }
+
+    // --- PROPIEDADES Y MÉTODOS PARA PASO 3 (DESVÍOS) ---
+    static datosDesvios = [];
+    static mesesDesvios = [];
+    static filtroCanalActivoPaso3 = null;
+    static chartCanalesInstancia = null;
+    static chartMensualInstancia = null;
+
+    static async cargarPaso3() {
+        try {
+            UIUtils.mostrarLoading(true);
+            const tbody = document.getElementById('tbody-desvios-paso3');
+            if (tbody) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="8" class="text-center text-muted py-4">
+                            <div class="spinner-border spinner-border-sm text-secondary me-2" role="status"></div>
+                            Cargando y comparando desvíos contra venta real...
+                        </td>
+                    </tr>`;
+            }
+
+            const temporadaSelect = document.getElementById('filtro-temporada-distribucion');
+            const temporada = temporadaSelect ? temporadaSelect.value : 'VERANO';
+            const versionSelect = document.getElementById('filtro-version-distribucion');
+            const version = versionSelect ? versionSelect.value : 'Por defecto';
+
+            // Asegurar tipo de cambio
+            if (Object.keys(DistribucionManager.tipoCambio).length === 0) {
+                const tcResponse = await APIClient.obtenerTipoCambio();
+                if (tcResponse.success) {
+                    DistribucionManager.tipoCambio = tcResponse.tasas || {};
+                }
+            }
+
+            const response = await APIClient.obtenerDesvios(temporada, version);
+
+            if (response.success && response.desvios) {
+                DistribucionManager.datosDesvios = response.desvios;
+                DistribucionManager.mesesDesvios = response.meses || [];
+                DistribucionManager.renderizarDesviosPaso3();
+                DistribucionManager.inicializarGraficosPaso3();
+                DistribucionManager.actualizarVisualizacionMoneda();
+                UIUtils.mostrarAlerta('Desvíos y ventas reales cargados con éxito.', 'success');
+            } else {
+                throw new Error(response.message || 'No se pudieron recuperar datos de desvíos.');
+            }
+        } catch (error) {
+            console.error('Error cargando Paso 3:', error);
+            UIUtils.mostrarAlerta('Error al obtener desvíos: ' + error.message, 'error');
+            const tbody = document.getElementById('tbody-desvios-paso3');
+            if (tbody) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="8" class="text-center text-danger py-4">
+                            <i class="fas fa-exclamation-triangle me-2"></i> Error: ${error.message}
+                        </td>
+                    </tr>`;
+            }
+        } finally {
+            UIUtils.mostrarLoading(false);
+        }
+    }
+
+    static renderizarDesviosPaso3() {
+        const tbody = document.getElementById('tbody-desvios-paso3');
+        if (!tbody) return;
+
+        const esARS = DistribucionManager.modoMoneda === 'ARS';
+        const tasaPromedio = esARS ? DistribucionManager.tasaPromedioPeriodo() : 1.0;
+        const sufMoneda = esARS ? 'ARS' : 'USD';
+
+        // Si no hay datos cargados, mostrar aviso en el tbody
+        if (!DistribucionManager.datosDesvios || DistribucionManager.datosDesvios.length === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="8" class="text-center text-muted py-4">
+                        <i class="fas fa-exclamation-circle mb-2" style="font-size: 1.5rem;"></i><br>
+                        Primero debe guardar una versión en el <strong>Paso 1</strong> para poder comparar sus desvíos.
+                    </td>
+                </tr>`;
+            return;
+        }
+
+        // Actualizar labels en th de la tabla
+        const thFactPres = document.getElementById('th-fact-pres');
+        const thFactReal = document.getElementById('th-fact-real');
+        const thFactDesv = document.getElementById('th-th-fact-desv');
+        if (thFactPres) thFactPres.textContent = `Fact. Presupuesto (${esARS ? '$' : 'U$D'})`;
+        if (thFactReal) thFactReal.textContent = `Fact. Real (${esARS ? '$' : 'U$D'})`;
+
+        // Actualizar etiquetas KPI
+        document.querySelectorAll('.moneda-label').forEach(el => el.textContent = esARS ? '($)' : '(U$D)');
+
+        let totalUnidadesP = 0;
+        let totalUnidadesR = 0;
+        let totalFactP = 0.0;
+        let totalFactR = 0.0;
+
+        // Calcular totales de cabecera generales de la Empresa
+        DistribucionManager.datosDesvios.forEach(d => {
+            totalUnidadesP += d.unidades_presupuesto || 0;
+            totalUnidadesR += d.unidades_real || 0;
+            totalFactP += d.facturacion_usd_presupuesto || 0.0;
+            totalFactR += d.facturacion_usd_real || 0.0;
+        });
+
+        const totalUnidadesDesvio = totalUnidadesR - totalUnidadesP;
+        const totalUnidadesDesvioPct = totalUnidadesP > 0 ? (totalUnidadesDesvio / totalUnidadesP) * 100 : 0;
+
+        const totalFactDesvio = totalFactR - totalFactP;
+        const totalFactDesvioPct = totalFactP > 0 ? (totalFactDesvio / totalFactP) * 100 : 0;
+
+        // Escribir KPIs
+        const kpiUP = document.getElementById('kpi-unidades-presupuesto');
+        const kpiUR = document.getElementById('kpi-unidades-real');
+        const kpiUD = document.getElementById('kpi-unidades-desvio');
+        const kpiUDP = document.getElementById('kpi-unidades-desvio-pct');
+        const kpiFD = document.getElementById('kpi-facturacion-desvio');
+        const kpiFDP = document.getElementById('kpi-facturacion-desvio-pct');
+
+        if (kpiUP) kpiUP.textContent = FormatoUtils.formatearNumero(totalUnidadesP);
+        if (kpiUR) kpiUR.textContent = FormatoUtils.formatearNumero(totalUnidadesR);
+        
+        if (kpiUD) {
+            kpiUD.textContent = (totalUnidadesDesvio > 0 ? '+' : '') + FormatoUtils.formatearNumero(totalUnidadesDesvio);
+            kpiUDP.textContent = (totalUnidadesDesvio > 0 ? '+' : '') + totalUnidadesDesvioPct.toFixed(1) + '%';
+
+            const card = document.getElementById('card-kpi-desvio-unidades');
+            const icon = document.getElementById('icon-kpi-desvio-unidades');
+            if (card && icon) {
+                if (totalUnidadesDesvio >= 0) {
+                    card.style.background = 'linear-gradient(135deg, #d4fc79 0%, #96e6a1 100%)';
+                    card.className = 'card border-0 shadow-sm p-3 h-100 text-dark';
+                    icon.className = 'fas fa-arrow-up text-success';
+                } else {
+                    card.style.background = 'linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%)';
+                    card.className = 'card border-0 shadow-sm p-3 h-100 text-dark';
+                    icon.className = 'fas fa-arrow-down text-danger';
+                }
+            }
+        }
+
+        if (kpiFD) {
+            const valFactDesv = esARS ? (totalFactDesvio * tasaPromedio) : totalFactDesvio;
+            kpiFD.textContent = (valFactDesv > 0 ? '+' : '') + FormatoUtils.formatearNumero(Math.round(valFactDesv));
+            kpiFDP.textContent = (valFactDesv > 0 ? '+' : '') + totalFactDesvioPct.toFixed(1) + '%';
+
+            const card = document.getElementById('card-kpi-desvio-facturacion');
+            const icon = document.getElementById('icon-kpi-desvio-facturacion');
+            if (card && icon) {
+                if (totalFactDesvio >= 0) {
+                    card.style.background = 'linear-gradient(135deg, #d4fc79 0%, #96e6a1 100%)';
+                    card.className = 'card border-0 shadow-sm p-3 h-100 text-dark';
+                    icon.className = 'fas fa-arrow-up text-success';
+                } else {
+                    card.style.background = 'linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%)';
+                    card.className = 'card border-0 shadow-sm p-3 h-100 text-dark';
+                    icon.className = 'fas fa-arrow-down text-danger';
+                }
+            }
+        }
+
+        // Renderizar Filas
+        let html = '';
+        DistribucionManager.datosDesvios.forEach((d, idx) => {
+            const uP = d.unidades_presupuesto || 0;
+            const uR = d.unidades_real || 0;
+            const uDesv = uR - uP;
+            const uDesvPct = uP > 0 ? (uDesv / uP) * 100 : 0;
+
+            const fP = esARS ? (d.facturacion_usd_presupuesto * tasaPromedio) : d.facturacion_usd_presupuesto;
+            const fR = esARS ? (d.facturacion_usd_real * tasaPromedio) : d.facturacion_usd_real;
+            const fDesv = fR - fP;
+            const fDesvPct = fP > 0 ? (fDesv / fP) * 100 : 0;
+
+            const colorU = uDesv >= 0 ? 'text-success fw-bold' : 'text-danger fw-bold';
+            const colorF = fDesv >= 0 ? 'text-success fw-bold' : 'text-danger fw-bold';
+
+            const representsLocalesPropios = d.canal === 'LOCALES PROPIOS';
+            const collapseBtn = representsLocalesPropios
+                ? `<button class="btn btn-link btn-xs p-0 me-2 text-dark" onclick="DistribucionManager.toggleDesgloseSucursalesPaso3(this)">
+                       <i class="fas fa-chevron-right"></i>
+                   </button>`
+                : '';
+
+            const activeRowStyle = DistribucionManager.filtroCanalActivoPaso3 === d.canal ? 'table-primary font-weight-bold' : '';
+
+            html += `
+                <tr class="main-canal-row ${activeRowStyle}" style="cursor: pointer;" onclick="DistribucionManager.filtrarCanalPaso3('${d.canal}', event)">
+                    <td>
+                        <div class="d-flex align-items-center">
+                            ${collapseBtn}
+                            <span class="fw-bold">${d.canal}</span>
+                        </div>
+                    </td>
+                    <td class="text-end">${FormatoUtils.formatearNumero(uP)}</td>
+                    <td class="text-end">${FormatoUtils.formatearNumero(uR)}</td>
+                    <td class="text-end ${colorU}">${uDesv >= 0 ? '+' : ''}${FormatoUtils.formatearNumero(uDesv)}</td>
+                    <td class="text-end ${colorU}">${uDesv >= 0 ? '+' : ''}${uDesvPct.toFixed(1)}%</td>
+                    <td class="text-end">${FormatoUtils.formatearNumero(Math.round(fP))}</td>
+                    <td class="text-end">${FormatoUtils.formatearNumero(Math.round(fR))}</td>
+                    <td class="text-end ${colorF}">${fDesv >= 0 ? '+' : ''}${FormatoUtils.formatearNumero(Math.round(fDesv))}</td>
+                </tr>
+            `;
+
+            // Agregar filas del desglose de sucursales si es Locales Propios
+            if (representsLocalesPropios && d.sucursales && d.sucursales.length > 0) {
+                d.sucursales.forEach(suc => {
+                    const sUP = suc.unidades_presupuesto || 0;
+                    const sUR = suc.unidades_real || 0;
+                    const sUDesv = sUR - sUP;
+                    const sUDesvPct = sUP > 0 ? (sUDesv / sUP) * 100 : 0;
+
+                    const sFP = esARS ? (suc.facturacion_usd_presupuesto * tasaPromedio) : suc.facturacion_usd_presupuesto;
+                    const sFR = esARS ? (suc.facturacion_usd_real * tasaPromedio) : suc.facturacion_usd_real;
+                    const sFDesv = sFR - sFP;
+
+                    const sColorU = sUDesv >= 0 ? 'text-success' : 'text-danger';
+                    const sColorF = sFDesv >= 0 ? 'text-success' : 'text-danger';
+
+                    html += `
+                        <tr class="child-sucursal-row d-none bg-light text-muted" style="font-size:0.82rem;">
+                            <td class="ps-5">
+                                <i class="fas fa-store me-2 text-secondary"></i>${suc.sucursal}
+                            </td>
+                            <td class="text-end">${FormatoUtils.formatearNumero(sUP)}</td>
+                            <td class="text-end">${FormatoUtils.formatearNumero(sUR)}</td>
+                            <td class="text-end ${sColorU}">${sUDesv >= 0 ? '+' : ''}${FormatoUtils.formatearNumero(sUDesv)}</td>
+                            <td class="text-end ${sColorU}">${sUDesv >= 0 ? '+' : ''}${sUDesvPct.toFixed(1)}%</td>
+                            <td class="text-end">${FormatoUtils.formatearNumero(Math.round(sFP))}</td>
+                            <td class="text-end">${FormatoUtils.formatearNumero(Math.round(sFR))}</td>
+                            <td class="text-end ${sColorF}">${sFDesv >= 0 ? '+' : ''}${FormatoUtils.formatearNumero(Math.round(sFDesv))}</td>
+                        </tr>
+                    `;
+                });
+            }
+        });
+
+        tbody.innerHTML = html;
+    }
+
+    static toggleDesgloseSucursalesPaso3(btn) {
+        // Prevenir filtrado de canal al colapsar/expandir sucursales
+        if (event) event.stopPropagation();
+
+        const icon = btn.querySelector('i');
+        const mainRow = btn.closest('tr');
+        
+        // Buscar todas las filas hijas consecutivas hasta encontrar la siguiente main row
+        let sibling = mainRow.nextElementSibling;
+        const isCollapsed = icon.classList.contains('fa-chevron-right');
+
+        if (isCollapsed) {
+            icon.className = 'fas fa-chevron-down';
+            while (sibling && sibling.classList.contains('child-sucursal-row')) {
+                sibling.classList.remove('d-none');
+                sibling = sibling.nextElementSibling;
+            }
+        } else {
+            icon.className = 'fas fa-chevron-right';
+            while (sibling && sibling.classList.contains('child-sucursal-row')) {
+                sibling.classList.add('d-none');
+                sibling = sibling.nextElementSibling;
+            }
+        }
+    }
+
+    static filtrarCanalPaso3(canal, event) {
+        if (event) event.stopPropagation();
+
+        const btnLimpiar = document.getElementById('btn-limpiar-filtro-canal-paso3');
+
+        if (DistribucionManager.filtroCanalActivoPaso3 === canal) {
+            DistribucionManager.filtroCanalActivoPaso3 = null;
+            if (btnLimpiar) btnLimpiar.style.display = 'none';
+        } else {
+            DistribucionManager.filtroCanalActivoPaso3 = canal;
+            if (btnLimpiar) btnLimpiar.style.display = 'inline-block';
+        }
+
+        DistribucionManager.renderizarDesviosPaso3();
+        DistribucionManager.inicializarGraficosPaso3();
+    }
+
+    static limpiarFiltroCanalPaso3() {
+        DistribucionManager.filtroCanalActivoPaso3 = null;
+        const btnLimpiar = document.getElementById('btn-limpiar-filtro-canal-paso3');
+        if (btnLimpiar) btnLimpiar.style.display = 'none';
+        
+        DistribucionManager.renderizarDesviosPaso3();
+        DistribucionManager.inicializarGraficosPaso3();
+    }
+
+    static inicializarGraficosPaso3() {
+        const esARS = DistribucionManager.modoMoneda === 'ARS';
+        const tasaProm = esARS ? DistribucionManager.tasaPromedioPeriodo() : 1.0;
+        const labelMoneda = esARS ? 'ARS' : 'USD';
+
+        // 1. Gráfico de Barras: Presupuesto vs Real por Canal
+        const ctxCanales = document.getElementById('chart-desvio-canales');
+        if (ctxCanales) {
+            if (DistribucionManager.chartCanalesInstancia) {
+                DistribucionManager.chartCanalesInstancia.destroy();
+            }
+
+            const labels = [];
+            const dataP = [];
+            const dataR = [];
+
+            DistribucionManager.datosDesvios.forEach(d => {
+                labels.push(d.canal);
+                const valP = esARS ? (d.facturacion_usd_presupuesto * tasaProm) : d.facturacion_usd_presupuesto;
+                const valR = esARS ? (d.facturacion_usd_real * tasaProm) : d.facturacion_usd_real;
+                dataP.push(Math.round(valP));
+                dataR.push(Math.round(valR));
+            });
+
+            DistribucionManager.chartCanalesInstancia = new Chart(ctxCanales, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: `Presupuestado (${labelMoneda})`,
+                            data: dataP,
+                            backgroundColor: '#2a5298',
+                            borderRadius: 4
+                        },
+                        {
+                            label: `Realidad (${labelMoneda})`,
+                            data: dataR,
+                            backgroundColor: '#96e6a1',
+                            borderRadius: 4
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return FormatoUtils.formatearNumero(value);
+                                }
+                            }
+                        }
+                    },
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return context.dataset.label + ': ' + FormatoUtils.formatearNumero(context.raw);
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // 2. Gráfico Mensual Comparativo (Evolución)
+        const ctxMensual = document.getElementById('chart-desvio-mensual');
+        const badgeEvol = document.getElementById('chart-evolucion-badge');
+        if (ctxMensual) {
+            if (DistribucionManager.chartMensualInstancia) {
+                DistribucionManager.chartMensualInstancia.destroy();
+            }
+
+            const dataP = DistribucionManager.mesesDesvios.map(() => 0.0);
+            const dataR = DistribucionManager.mesesDesvios.map(() => 0.0);
+
+            if (DistribucionManager.filtroCanalActivoPaso3) {
+                if (badgeEvol) badgeEvol.textContent = DistribucionManager.filtroCanalActivoPaso3;
+                const canalData = DistribucionManager.datosDesvios.find(d => d.canal === DistribucionManager.filtroCanalActivoPaso3);
+                if (canalData && canalData.meses) {
+                    DistribucionManager.mesesDesvios.forEach((mLabel, mIdx) => {
+                        const mInfo = canalData.meses[mLabel] || { facturacion_usd_presupuesto: 0.0, facturacion_usd_real: 0.0 };
+                        dataP[mIdx] = Math.round(esARS ? (mInfo.facturacion_usd_presupuesto * tasaProm) : mInfo.facturacion_usd_presupuesto);
+                        dataR[mIdx] = Math.round(esARS ? (mInfo.facturacion_usd_real * tasaProm) : mInfo.facturacion_usd_real);
+                    });
+                }
+            } else {
+                if (badgeEvol) badgeEvol.textContent = 'Empresa';
+                // Sumar todos los canales para cada mes
+                DistribucionManager.mesesDesvios.forEach((mLabel, mIdx) => {
+                    let sumP = 0.0;
+                    let sumR = 0.0;
+                    DistribucionManager.datosDesvios.forEach(d => {
+                        const mInfo = d.meses ? d.meses[mLabel] : null;
+                        if (mInfo) {
+                            sumP += mInfo.facturacion_usd_presupuesto || 0.0;
+                            sumR += mInfo.facturacion_usd_real || 0.0;
+                        }
+                    });
+                    dataP[mIdx] = Math.round(esARS ? (sumP * tasaProm) : sumP);
+                    dataR[mIdx] = Math.round(esARS ? (sumR * tasaProm) : sumR);
+                });
+            }
+
+            DistribucionManager.chartMensualInstancia = new Chart(ctxMensual, {
+                type: 'line',
+                data: {
+                    labels: DistribucionManager.mesesDesvios,
+                    datasets: [
+                        {
+                            label: `Presupuestado (${labelMoneda})`,
+                            data: dataP,
+                            borderColor: '#2a5298',
+                            backgroundColor: 'rgba(42, 82, 152, 0.1)',
+                            fill: true,
+                            tension: 0.3
+                        },
+                        {
+                            label: `Realidad (${labelMoneda})`,
+                            data: dataR,
+                            borderColor: '#2ecc71',
+                            backgroundColor: 'rgba(46, 204, 113, 0.1)',
+                            fill: true,
+                            tension: 0.3
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return FormatoUtils.formatearNumero(value);
+                                }
+                            }
+                        }
+                    },
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return context.dataset.label + ': ' + FormatoUtils.formatearNumero(context.raw);
+                                }
+                            }
+                        }
+                    }
+                }
+            });
         }
     }
 }

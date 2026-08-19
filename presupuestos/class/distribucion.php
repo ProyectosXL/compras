@@ -63,7 +63,7 @@ class Distribucion {
             }
             
             $params = [$fechaDesde, $fechaHasta];
-            $sqlDate = "WHERE v.FECHA_VENTA >= ? AND v.FECHA_VENTA <= ?";
+            $sqlDate = "WHERE v.FECHA_VENTA >= ? AND v.FECHA_VENTA <= ? AND v.CANAL IN ('CENTRAL', 'LOCALES PROPIOS')";
 
             $sql = "SELECT 
                         v.RUBRO,
@@ -173,26 +173,20 @@ class Distribucion {
                             distribucion_mensual_json
                           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
+            $primerFila = reset($filas);
+            $paisLimpio = $primerFila['pais'] ?? 'argentina';
+            $temporadaLimpia = $primerFila['temporada'] ?? 'VERANO';
+            $nombreDistLimpio = !empty($primerFila['nombre_distribucion']) ? trim($primerFila['nombre_distribucion']) : 'Por defecto';
+
+            // Limpiar la versión completa anterior de una sola vez
+            $sqlDelete = "DELETE FROM dbo.FP_T_DISTRIBUCION_COMPRAS_CANAL WHERE pais = ? AND temporada = ? AND nombre_distribucion = ?";
+            $deleteStmt = sqlsrv_query($this->cid_sistemas, $sqlDelete, [$paisLimpio, $temporadaLimpia, $nombreDistLimpio]);
+            if ($deleteStmt !== false) {
+                sqlsrv_free_stmt($deleteStmt);
+            }
+
             foreach ($filas as $fila) {
                 $nombreDist = !empty($fila['nombre_distribucion']) ? trim($fila['nombre_distribucion']) : 'Por defecto';
-                
-                // Primero borrar registros anteriores idénticos para sobreescribir la misma versión
-                $sqlDelete = "DELETE FROM dbo.FP_T_DISTRIBUCION_COMPRAS_CANAL 
-                              WHERE pais = ? AND temporada = ? AND rubro = ? AND categoria_padre = ? AND canal = ? AND nombre_distribucion = ?";
-                $deleteParams = [
-                    $fila['pais'],
-                    $fila['temporada'],
-                    $fila['rubro'],
-                    $fila['categoria_padre'],
-                    $fila['canal'],
-                    $nombreDist
-                ];
-                $deleteStmt = sqlsrv_query($this->cid_sistemas, $sqlDelete, $deleteParams);
-                if ($deleteStmt === false) {
-                    sqlsrv_rollback($this->cid_sistemas);
-                    throw new Exception("Error al limpiar distribución anterior: " . print_r(sqlsrv_errors(), true));
-                }
-                sqlsrv_free_stmt($deleteStmt);
 
                 // Insertar el nuevo
                 $insertParams = [
@@ -219,6 +213,85 @@ class Distribucion {
                     throw new Exception("Error al insertar distribución: " . print_r(sqlsrv_errors(), true));
                 }
                 sqlsrv_free_stmt($insertStmt);
+            }
+
+            // B. Consolidar y poblar la tabla consolidada FP_T_PRESUPUESTO_VERSION_CONSOLIDADA
+            require_once __DIR__ . '/CostoProyeccion.php';
+            $costosModel = new CostoProyeccion();
+            $costosGlobales = $costosModel->obtenerParametrosGlobales();
+
+            $primerFila = reset($filas);
+            $paisCons = $primerFila['pais'] ?? 'argentina';
+            $temporadaCons = $primerFila['temporada'] ?? 'VERANO';
+            $nombreCons = !empty($primerFila['nombre_distribucion']) ? trim($primerFila['nombre_distribucion']) : 'Por defecto';
+
+            // Limpiar la versión consolidada anterior
+            $sqlDeleteCons = "DELETE FROM dbo.FP_T_PRESUPUESTO_VERSION_CONSOLIDADA WHERE pais = ? AND temporada = ? AND nombre_version = ?";
+            $delConsStmt = sqlsrv_query($this->cid_sistemas, $sqlDeleteCons, [$paisCons, $temporadaCons, $nombreCons]);
+            if ($delConsStmt !== false) {
+                sqlsrv_free_stmt($delConsStmt);
+            }
+
+            $sqlInsertCons = "INSERT INTO dbo.FP_T_PRESUPUESTO_VERSION_CONSOLIDADA (
+                                fecha_guardado, pais, temporada, nombre_version, periodo_analisis,
+                                rubro, categoria_padre, canal, sucursal, unidades_presupuestadas,
+                                costo_prom, inc_fob, vcosto, markup, vventa_unit_usd,
+                                facturacion_presupuestada_usd, distribucion_mensual_json
+                              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+
+            foreach ($filas as $fila) {
+                $rubro = trim($fila['rubro']);
+                $categoria = trim($fila['categoria_padre']);
+                $canal = trim($fila['canal']);
+                $canalUpper = strtoupper($canal);
+                $periodo = $fila['periodo_analisis'] ?? '';
+                $unidadesP = (int)($fila['distribucion_final'] ?? $fila['compra_distribuida']);
+                $distMensualJson = $fila['distribucion_mensual_json'] ?? null;
+
+                $paramClave = "$rubro|$categoria";
+                $costoInfo = $costosGlobales[$paramClave] ?? ['costo_prom' => 0.0, 'inc_fob' => 0.0, 'vcosto' => 0.0];
+                $costoProm = (float)($costoInfo['costo_prom'] ?? 0.0);
+                $incFob = (float)($costoInfo['inc_fob'] ?? 0.0);
+                $vcosto = (float)($costoInfo['vcosto'] ?? 0.0);
+                if ($vcosto <= 0 && $costoProm > 0) {
+                    $vcosto = $costoProm * (1 + $incFob / 100);
+                }
+
+                $markup = 0.0;
+                if (strpos($canalUpper, 'LOCAL') !== false) $markup = (float)($costoInfo['markup_locales_propios'] ?? 0.0);
+                elseif (strpos($canalUpper, 'FRANQ') !== false) $markup = (float)($costoInfo['markup_franquicias'] ?? 0.0);
+                elseif (strpos($canalUpper, 'MAYOR') !== false) $markup = (float)($costoInfo['markup_mayoristas'] ?? 0.0);
+                elseif (strpos($canalUpper, 'ECOM') !== false || strpos($canalUpper, 'WEB') !== false) $markup = (float)($costoInfo['markup_ecommerce'] ?? 0.0);
+
+                $vventaUnitUsd = $vcosto * $markup;
+                $facturacionUsd = $unidadesP * $vventaUnitUsd;
+
+                $paramsCons = [
+                    $fechaGuardado,
+                    $paisCons,
+                    $temporadaCons,
+                    $nombreCons,
+                    $periodo,
+                    $rubro,
+                    $categoria,
+                    $canalUpper,
+                    null, // sucursal null para canal principal
+                    $unidadesP,
+                    $costoProm,
+                    $incFob,
+                    $vcosto,
+                    $markup,
+                    $vventaUnitUsd,
+                    $facturacionUsd,
+                    $distMensualJson
+                ];
+
+                $insStmt = sqlsrv_query($this->cid_sistemas, $sqlInsertCons, $paramsCons);
+                if ($insStmt === false) {
+                    sqlsrv_rollback($this->cid_sistemas);
+                    throw new Exception("Error al insertar consolidado de distribución: " . print_r(sqlsrv_errors(), true));
+                }
+                sqlsrv_free_stmt($insStmt);
             }
 
             sqlsrv_commit($this->cid_sistemas);
@@ -271,6 +344,38 @@ class Distribucion {
     }
 
     /**
+     * Obtener versión consolidada de la tabla FP_T_PRESUPUESTO_VERSION_CONSOLIDADA
+     */
+    public function obtenerVersionConsolidada($pais, $temporada, $nombreVersion = 'Por defecto') {
+        try {
+            if (!$this->cid_sistemas) {
+                return [];
+            }
+            if (empty($nombreVersion)) {
+                $nombreVersion = 'Por defecto';
+            }
+            $pais = strtolower(trim($pais));
+            $sql = "SELECT * FROM dbo.FP_T_PRESUPUESTO_VERSION_CONSOLIDADA 
+                    WHERE pais = ? AND temporada = ? AND nombre_version = ?
+                    ORDER BY rubro, categoria_padre, canal";
+            $params = [$pais, $temporada, $nombreVersion];
+            $stmt = sqlsrv_query($this->cid_sistemas, $sql, $params);
+            if ($stmt === false) {
+                return [];
+            }
+            $rows = [];
+            while ($row = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC)) {
+                $rows[] = $row;
+            }
+            sqlsrv_free_stmt($stmt);
+            return $rows;
+        } catch (Exception $e) {
+            error_log("Error en Distribucion::obtenerVersionConsolidada: " . $e->getMessage());
+            return [];
+        }
+    }
+
+    /**
      * Obtener nombres de las distribuciones guardadas
      */
     public function obtenerNombresDistribuciones($pais, $temporada) {
@@ -311,6 +416,47 @@ class Distribucion {
         } catch (Exception $e) {
             error_log("Error en Distribucion::obtenerNombresDistribuciones: " . $e->getMessage());
             return [['nombre' => 'Por defecto', 'periodo' => '']];
+        }
+    }
+
+    /**
+     * Eliminar una versión de distribución guardada por nombre, país y temporada
+     */
+    public function eliminarDistribucion($pais, $temporada, $nombreDistribucion) {
+        try {
+            if (!$this->cid_sistemas) {
+                throw new Exception("Error de conexión a la base de datos.");
+            }
+
+            $nombre = trim($nombreDistribucion);
+            if (empty($nombre) || strtolower($nombre) === 'por defecto') {
+                throw new Exception("La versión 'Por defecto' no se puede eliminar.");
+            }
+
+            $pais = strtolower(trim($pais));
+            $sql = "DELETE FROM dbo.FP_T_DISTRIBUCION_COMPRAS_CANAL 
+                    WHERE pais = ? AND temporada = ? AND nombre_distribucion = ?";
+            
+            $params = [$pais, $temporada, $nombre];
+            $stmt = sqlsrv_query($this->cid_sistemas, $sql, $params);
+
+            if ($stmt === false) {
+                throw new Exception("Error SQL al eliminar la versión: " . print_r(sqlsrv_errors(), true));
+            }
+
+            $filasAfectadas = sqlsrv_rows_affected($stmt);
+            sqlsrv_free_stmt($stmt);
+
+            return [
+                'success' => true,
+                'message' => "Versión '$nombre' eliminada correctamente ($filasAfectadas registros eliminados)."
+            ];
+        } catch (Exception $e) {
+            error_log("Error en Distribucion::eliminarDistribucion: " . $e->getMessage());
+            return [
+                'success' => false,
+                'message' => $e->getMessage()
+            ];
         }
     }
 

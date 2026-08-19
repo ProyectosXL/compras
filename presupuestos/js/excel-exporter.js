@@ -58,6 +58,7 @@ class ExcelExporter {
             Object.entries(hojas).forEach(([nombreHoja, datos]) => {
                 if (datos && datos.length > 0) {
                     const ws = XLSX.utils.json_to_sheet(datos);
+                    ExcelExporter.aplicarFormatosHoja(ws, datos, nombreHoja);
                     ExcelExporter.ajustarAnchoColumnas(ws, datos);
                     XLSX.utils.book_append_sheet(wb, ws, nombreHoja);
                 } else {
@@ -90,6 +91,43 @@ class ExcelExporter {
             script.onerror = () => { reject(new Error('Error cargando SheetJS')); };
             document.head.appendChild(script);
         });
+    }
+
+    static aplicarFormatosHoja(worksheet, datos, nombreHoja) {
+        if (!datos || datos.length === 0 || !worksheet) return;
+
+        const columnas = Object.keys(datos[0]);
+        const esUSD = nombreHoja.toUpperCase().includes('USD');
+        const formatoMoneda = esUSD ? '"U$D "#,##0' : '"$ "#,##0';
+        const formatoEntero = '#,##0';
+
+        const range = XLSX.utils.decode_range(worksheet['!ref']);
+
+        for (let R = range.s.r + 1; R <= range.e.r; ++R) {
+            columnas.forEach((colNombre, C) => {
+                const cellRef = XLSX.utils.encode_cell({ r: R, c: C });
+                const cell = worksheet[cellRef];
+                if (!cell || typeof cell.v !== 'number') return;
+
+                const colUpper = colNombre.toUpperCase();
+                if (colUpper.includes('MARK-UP') || colUpper.includes('MARKUP')) {
+                    cell.z = '0.00';
+                } else if (colUpper.includes('VCOSTO') || colUpper.includes('COSTO BASE')) {
+                    cell.z = esUSD ? '"U$D "#,##0.00' : '"$ "#,##0.00';
+                } else if (colUpper.includes('UNIDADES') || colUpper.includes('(U.)')) {
+                    cell.z = formatoEntero;
+                } else if (
+                    colUpper.includes('TOTAL') || 
+                    colUpper.includes('$') || 
+                    colUpper.includes('USD') || 
+                    colUpper.includes('VENTA') || 
+                    colUpper.includes('COSTO') ||
+                    /^[A-Za-z]{3}\s\d{2}/.test(colNombre) // Columnas tipo "Ago 26", "Sep 26"
+                ) {
+                    cell.z = formatoMoneda;
+                }
+            });
+        }
     }
 
     static ajustarAnchoColumnas(worksheet, datos) {

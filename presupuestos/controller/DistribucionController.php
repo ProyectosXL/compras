@@ -715,55 +715,95 @@ class DistribucionController {
     }
 
     /**
-     * Obtener tasas de cierre del dólar oficial BCRA por mes
-     * Para convertir valores de ARS a USD en la vista
+     * Obtener tasas de tipo de cambio:
+     * 1. Dólar Futuro ROFEX (dbo.FP_DOLAR_FUTURO_ROFEX) para proyecciones.
+     * 2. Dólar oficial BCRA histórico como fallback.
      */
     public function obtenerTipoCambio() {
         try {
-            // Conexion ya disponible (se cargó desde distribucion.php en el constructor)
-            // Determinar los años a consultar (el año del período mostrado y el anterior)
-            // El usuario quiere el tipo de cambio del año ANTERIOR al mostrado
+            require_once __DIR__ . '/../class/DolarFuturoService.php';
+            $rofexService = new DolarFuturoService();
+            
+            // 1. Intentar actualizar desde API y obtener cotizaciones guardadas en dbo.FP_DOLAR_FUTURO_ROFEX
+            $rofexService->actualizarDesdeAPI();
+            $tasasFuturo = $rofexService->obtenerCotizacionesGuardadas();
+
+            // 2. Cargar histórico del BCRA para meses no cubiertos por futuros
             $anioActual = (int)date('Y');
-            // Buscar tasas para los últimos 3 años para cubrir cualquier período mostrado
             $anioDesde = $anioActual - 2;
-            $anioHasta = $anioActual;
+            $anioHasta = $anioActual + 2;
             
             $conn = new Conexion();
             $cid = $conn->conectar('apps');
             
-            // Obtener el valor de cierre (último del mes) de cada mes para los años requeridos
-            $sql = "
-                SELECT d.Año, d.Mes, d.Vendedor as Valor
-                FROM dolar_oficial_bcra d
-                INNER JOIN (
-                    SELECT Año, Mes, MAX(Fecha) as FechaMax
-                    FROM dolar_oficial_bcra
-                    WHERE Año BETWEEN ? AND ?
-                    GROUP BY Año, Mes
-                ) cierre ON d.Año = cierre.Año AND d.Mes = cierre.Mes AND d.Fecha = cierre.FechaMax
-                ORDER BY d.Año, d.Mes
-            ";
-            
-            $params = [$anioDesde, $anioHasta];
-            $stmt = sqlsrv_query($cid, $sql, $params);
-            
-            if ($stmt === false) {
-                throw new Exception('Error al consultar tipo de cambio: ' . json_encode(sqlsrv_errors()));
+            $tasasBcra = [];
+            if ($cid) {
+                $sql = "
+                    SELECT d.Año, d.Mes, d.Vendedor as Valor
+                    FROM dolar_oficial_bcra d
+                    INNER JOIN (
+                        SELECT Año, Mes, MAX(Fecha) as FechaMax
+                        FROM dolar_oficial_bcra
+                        WHERE Año BETWEEN ? AND ?
+                        GROUP BY Año, Mes
+                    ) cierre ON d.Año = cierre.Año AND d.Mes = cierre.Mes AND d.Fecha = cierre.FechaMax
+                    ORDER BY d.Año, d.Mes
+                ";
+                
+                $params = [$anioDesde, $anioHasta];
+                $stmt = sqlsrv_query($cid, $sql, $params);
+                
+                if ($stmt !== false) {
+                    while ($row = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC)) {
+                        $clave = $row['Mes'] . '-' . $row['Año'];
+                        $tasasBcra[$clave] = (float)$row['Valor'];
+                    }
+                    sqlsrv_free_stmt($stmt);
+                }
             }
             
-            $tasas = [];
-            while ($row = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC)) {
-                $clave = $row['Mes'] . '-' . $row['Año']; // e.g. "1-2025"
-                $tasas[$clave] = (float)$row['Valor'];
-            }
-            
+            // Mezclar: prioridad Dólar Futuro ROFEX, fallback BCRA histórico
+            $tasasCombinadas = array_merge($tasasBcra, $tasasFuturo);
+
             $this->jsonResponse([
                 'success' => true,
-                'tasas' => $tasas,
-                'anio_desde' => $anioDesde,
-                'anio_hasta' => $anioHasta
+                'tasas' => $tasasCombinadas,
+                'tasas_futuro' => $tasasFuturo,
+                'tasas_bcra' => $tasasBcra
             ]);
+        } catch (Exception $e) {
+            $this->jsonResponse(['success' => false, 'message' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Eliminar una versión guardada
+     */
+    public function eliminarVersion() {
+        try {
+            if (session_status() === PHP_SESSION_NONE) {
+                session_start();
+            }
+
+            $rawInput = file_get_contents('php://input');
+            $data = json_decode($rawInput, true);
+
+            $pais = $data['pais'] ?? $_SESSION['pais_seleccionado'] ?? 'argentina';
+            $temporada = $data['temporada'] ?? 'VERANO';
+            $nombreVersion = $data['nombre_version'] ?? '';
+
+            if (empty($nombreVersion)) {
+                $this->jsonResponse(['success' => false, 'message' => 'Debe especificar el nombre de la versión.'], 400);
+                return;
+            }
+
+            $res = $this->distribucion->eliminarDistribucion($pais, $temporada, $nombreVersion);
             
+            if ($res['success']) {
+                $this->jsonResponse($res);
+            } else {
+                $this->jsonResponse($res, 400);
+            }
         } catch (Exception $e) {
             $this->jsonResponse(['success' => false, 'message' => $e->getMessage()], 500);
         }

@@ -335,6 +335,7 @@ class MainController {
             case 'costos-proyeccion':
             case 'obtener-tipo-cambio':
             case 'obtener-parametros-costos':
+            case 'obtener-desvios':
                 $this->delegarDistribucion($accion);
                 break;
                 
@@ -371,6 +372,7 @@ class MainController {
             case 'guardar-distribucion':
             case 'guardar-costos':
             case 'guardar-parametros-costos':
+            case 'eliminar-version':
                 $this->delegarDistribucion($accion);
                 break;
             default:
@@ -584,6 +586,14 @@ class MainController {
                 break;
             case 'guardar-parametros-costos':
                 $distribucionController->guardarParametrosGlobales();
+                break;
+            case 'eliminar-version':
+                $distribucionController->eliminarVersion();
+                break;
+            case 'obtener-desvios':
+                require_once __DIR__ . '/AnalisisDesviosController.php';
+                $desviosController = new AnalisisDesviosController();
+                $desviosController->obtenerDesvios();
                 break;
         }
     }

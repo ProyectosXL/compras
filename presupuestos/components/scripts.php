@@ -1,10 +1,12 @@
 
 <!-- Scripts del sistema -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
+<!-- Chart.js para Solapa de Desvíos (Paso 3) -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <!-- Scripts modulares del sistema - ORDEN CORRECTO -->
 <script src="js/utils.js"></script>
-<script src="js/api-client.js?v=1.5"></script>
+<script src="js/api-client.js?v=13.0"></script>
 <script src="js/tabla-renderer.js"></script>
 <script src="js/busqueda-manager.js"></script>
 
@@ -24,12 +26,12 @@
 <script src="js/contenedores-manager.js"></script>
 <script src="js/totales-compra.js"></script>
 <script src="js/totales-stock.js"></script>
-<script src="js/excel-exporter.js"></script>
+<script src="js/excel-exporter.js?v=13.0"></script>
 <script src="js/ventas-manager.js"></script>
-<script src="js/distribucion-manager.js?v=1.5"></script>
+<script src="js/distribucion-manager.js?v=21.0"></script>
 
 <!-- Script principal (SIEMPRE AL FINAL) -->
-<script src="js/main.js"></script>
+<script src="js/main.js?v=13.0"></script>
 
 <script>
     // Variables globales para compatibilidad
