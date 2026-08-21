@@ -366,6 +366,12 @@ class CalculadoraInvierno {
             }
         }
         
+        // Mantener celda de Índice Var. Original
+        if (celdas[3] && typeof TablaRendererUtils !== 'undefined') {
+            const orig = TablaRendererUtils.obtenerIndiceOriginal(registro);
+            celdas[3].textContent = orig.toFixed(2);
+        }
+
         // Actualizar ventas proyectadas y compra (nuevas posiciones)
         if (celdas[6]) { // Venta Proy. Verano
             celdas[6].textContent = FormatoUtils.formatearNumero(registro.VENTA_PROY_VERANO || 0);

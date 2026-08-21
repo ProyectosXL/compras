@@ -1,14 +1,32 @@
-/* Estilos para el Stepper del Proceso para Presupuesto */
+/* ==========================================================================
+   Estilos para la Solapa "Proceso para Presupuesto" (Paso 1, 2 y 3)
+   Optimizado para compatibilidad total en Apple (Safari/macOS/iOS) y Windows
+   ========================================================================== */
+
+/* Forzar esquema de color claro en todo el módulo de distribución */
+#distribucion,
+#distribucion *,
+#modalParametrosCostos,
+#modalParametrosCostos * {
+    color-scheme: light !important;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* ==========================================
+   1. STEPPER
+   ========================================== */
 .stepper-container {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    background: #ffffff;
+    background: #ffffff !important;
     padding: 15px 25px;
     border-radius: 12px;
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
     margin-bottom: 20px;
     position: relative;
+    border: 1px solid #e9ecef;
 }
 
 .stepper-container::before {
@@ -28,7 +46,7 @@
     align-items: center;
     z-index: 2;
     cursor: pointer;
-    background: #ffffff;
+    background: #ffffff !important;
     padding: 0 10px;
     transition: all 0.3s ease;
     border: none;
@@ -91,16 +109,296 @@
 
 .step-pane.active {
     display: block !important;
-    animation: fadeInStep 0.4s ease-in-out;
+    animation: fadeInStep 0.3s ease-in-out;
 }
 
 @keyframes fadeInStep {
     from {
         opacity: 0;
-        transform: translateY(10px);
+        transform: translateY(8px);
     }
     to {
         opacity: 1;
         transform: translateY(0);
     }
+}
+
+/* ==========================================
+   2. BARRA DE BÚSQUEDA Y FILTROS
+   ========================================== */
+#distribucion .search-container {
+    background: #ffffff !important;
+    border: 1px solid #dee2e6 !important;
+    border-radius: 10px !important;
+    padding: 12px 16px !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04) !important;
+    color: #212529 !important;
+}
+
+#distribucion .form-select,
+#distribucion .form-control {
+    background-color: #ffffff !important;
+    color: #212529 !important;
+    -webkit-text-fill-color: #212529 !important;
+    border: 1px solid #ced4da !important;
+    border-radius: 6px !important;
+    font-size: 0.875rem !important;
+}
+
+#distribucion .form-select:focus,
+#distribucion .form-control:focus {
+    background-color: #ffffff !important;
+    color: #212529 !important;
+    -webkit-text-fill-color: #212529 !important;
+    border-color: #86b7fe !important;
+    box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25) !important;
+}
+
+#distribucion .input-group-text {
+    background-color: #f8f9fa !important;
+    color: #495057 !important;
+    -webkit-text-fill-color: #495057 !important;
+    border: 1px solid #ced4da !important;
+    font-size: 0.875rem !important;
+}
+
+#distribucion input[type="date"] {
+    background-color: #ffffff !important;
+    color: #212529 !important;
+    -webkit-text-fill-color: #212529 !important;
+}
+
+/* ==========================================
+   3. PASO 1: RESUMEN E INDICADORES
+   ========================================== */
+#distribucion #paso-1 .border-end {
+    border-color: #e9ecef !important;
+}
+
+#distribucion #card-compra-total {
+    background-color: #ffc107 !important;
+    color: #212529 !important;
+    -webkit-text-fill-color: #212529 !important;
+    border-radius: 20px !important;
+    padding: 6px 14px !important;
+}
+
+#distribucion #card-total-distribuido {
+    background-color: #0d6efd !important;
+    color: #ffffff !important;
+    -webkit-text-fill-color: #ffffff !important;
+    border-radius: 20px !important;
+    padding: 6px 14px !important;
+}
+
+#distribucion #indicadores-canales-paso1 .badge {
+    border-radius: 12px !important;
+}
+
+/* ==========================================
+   4. TABLA PASO 1 Y CELDAS DE ENTRADA
+   ========================================== */
+#distribucion .table {
+    background-color: #ffffff !important;
+    color: #212529 !important;
+    border-color: #dee2e6 !important;
+}
+
+#distribucion .table td,
+#distribucion .table th {
+    vertical-align: middle !important;
+    color: #212529;
+}
+
+#distribucion .sticky-header th {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+/* Input de Venta Proyectada - Legible al 100% en Apple y Windows */
+#distribucion .input-compra-proyectada {
+    background-color: #fffde7 !important;
+    color: #212529 !important;
+    -webkit-text-fill-color: #212529 !important;
+    border: 1px solid #ffe082 !important;
+    font-weight: 700 !important;
+    text-align: right !important;
+    border-radius: 5px !important;
+    padding: 2px 8px !important;
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.05) !important;
+    -webkit-appearance: none;
+    -moz-appearance: textfield;
+}
+
+#distribucion .input-compra-proyectada:focus {
+    background-color: #ffffff !important;
+    border-color: #ffc107 !important;
+    box-shadow: 0 0 0 0.2rem rgba(255, 193, 7, 0.3) !important;
+    color: #212529 !important;
+    -webkit-text-fill-color: #212529 !important;
+}
+
+/* Input de Participación % */
+#distribucion .input-participacion {
+    background-color: #ffffff !important;
+    color: #212529 !important;
+    -webkit-text-fill-color: #212529 !important;
+    border: 1px solid #ced4da !important;
+    font-weight: 600 !important;
+    text-align: right !important;
+    border-radius: 5px !important;
+    padding: 2px 6px !important;
+    -webkit-appearance: none;
+    -moz-appearance: textfield;
+}
+
+#distribucion .input-participacion:focus {
+    border-color: #ffc107 !important;
+    box-shadow: 0 0 0 0.2rem rgba(255, 193, 7, 0.25) !important;
+    background-color: #ffffff !important;
+    color: #212529 !important;
+    -webkit-text-fill-color: #212529 !important;
+}
+
+/* Input de porcentajes mensuales */
+#distribucion .input-mes-porc {
+    color: #333333 !important;
+    -webkit-text-fill-color: #333333 !important;
+    font-weight: 500 !important;
+    border-radius: 0 !important;
+    -webkit-appearance: none;
+    -moz-appearance: textfield;
+}
+
+#distribucion .input-mes-porc:focus {
+    background: #ffffff !important;
+    border-bottom: 2px solid #0d6efd !important;
+    color: #212529 !important;
+    -webkit-text-fill-color: #212529 !important;
+    outline: none !important;
+}
+
+/* Colores de celdas especiales */
+#distribucion .bg-light-yellow {
+    background-color: #fffde7 !important;
+    color: #212529 !important;
+}
+
+#distribucion .bg-light-blue {
+    background-color: #e3f2fd !important;
+    color: #0d6efd !important;
+}
+
+#distribucion .bg-light-green {
+    background-color: #e8f5e9 !important;
+    color: #1b5e20 !important;
+}
+
+/* Filas de sucursales desplegables (Locales Propios) */
+#distribucion .locales-propios-child-row td {
+    background-color: #f8f9fc !important;
+    color: #333333 !important;
+    font-size: 0.85rem !important;
+}
+
+/* ==========================================
+   5. PASO 2: GESTIÓN Y ANÁLISIS
+   ========================================== */
+#distribucion #subtabs-paso-2 {
+    background: #ffffff !important;
+    border: 1px solid #dee2e6 !important;
+}
+
+#distribucion #subtabs-paso-2 .nav-link {
+    color: #495057 !important;
+    background-color: #f8f9fa !important;
+    border: 1px solid #e9ecef !important;
+    margin: 0 4px !important;
+    border-radius: 8px !important;
+    transition: all 0.2s ease !important;
+}
+
+#distribucion #subtabs-paso-2 #tab-2a-btn.active {
+    background: linear-gradient(135deg, #0d6efd 0%, #0b5ed7 100%) !important;
+    color: #ffffff !important;
+    -webkit-text-fill-color: #ffffff !important;
+    border-color: #0d6efd !important;
+    box-shadow: 0 2px 6px rgba(13, 110, 253, 0.3) !important;
+}
+
+#distribucion #subtabs-paso-2 #tab-2b-btn.active {
+    background: linear-gradient(135deg, #198754 0%, #157347 100%) !important;
+    color: #ffffff !important;
+    -webkit-text-fill-color: #ffffff !important;
+    border-color: #198754 !important;
+    box-shadow: 0 2px 6px rgba(25, 135, 84, 0.3) !important;
+}
+
+#distribucion #subtabs-paso-2 .nav-link.active i {
+    color: #ffffff !important;
+}
+
+#distribucion #paso-2 .card {
+    background: #ffffff !important;
+    border: 1px solid #dee2e6 !important;
+}
+
+#distribucion #paso-2 .card-header {
+    background-color: #f8f9fa !important;
+    border-bottom: 1px solid #dee2e6 !important;
+}
+
+/* ==========================================
+   6. PASO 3: ANÁLISIS DE DESVÍOS
+   ========================================== */
+#distribucion #paso-3 .card {
+    background: #ffffff !important;
+    color: #212529 !important;
+    border: 1px solid #dee2e6 !important;
+}
+
+#distribucion #card-kpi-desvio-unidades,
+#distribucion #card-kpi-desvio-facturacion {
+    background: #ffffff !important;
+    border: 1px solid #dee2e6 !important;
+}
+
+#distribucion #table-desvios-paso3 {
+    background: #ffffff !important;
+    color: #212529 !important;
+}
+
+#distribucion #table-desvios-paso3 thead th {
+    background-color: #f8f9fa !important;
+    color: #495057 !important;
+    border-bottom: 2px solid #dee2e6 !important;
+}
+
+/* ==========================================
+   7. MODAL DE PARÁMETROS GLOBALES
+   ========================================== */
+#modalParametrosCostos .modal-content {
+    background-color: #ffffff !important;
+    color: #212529 !important;
+    border-radius: 12px !important;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15) !important;
+}
+
+#modalParametrosCostos .modal-header {
+    background-color: #f8f9fa !important;
+    border-bottom: 1px solid #dee2e6 !important;
+    color: #212529 !important;
+}
+
+#modalParametrosCostos .form-control {
+    background-color: #ffffff !important;
+    color: #212529 !important;
+    -webkit-text-fill-color: #212529 !important;
+    border: 1px solid #ced4da !important;
+}
+
+#modalParametrosCostos .table {
+    background-color: #ffffff !important;
+    color: #212529 !important;
 }

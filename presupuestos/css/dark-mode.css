@@ -2,9 +2,8 @@
 /* Estilos para Modo Oscuro - Sistema de Presupuesto de Compras */
 /* Archivo: presupuestos/css/dark-mode.css */
 
-/* Dark mode automático basado en preferencias del sistema */
-@media (prefers-color-scheme: dark) {
-    :root {
+/* Dark mode activable mediante clase explícita en body */
+body.dark-mode {
         /* Colores principales adaptados para dark mode */
         --primary-color: #4dabf7;
         --primary-dark: #339af0;

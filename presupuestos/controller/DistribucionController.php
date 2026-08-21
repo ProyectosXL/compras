@@ -128,17 +128,31 @@ class DistribucionController {
             foreach ($comprasProcesadas as $registro) {
                 $rubro = $registro['RUBRO'];
                 $categoria = $registro['CATEGORIA_PADRE'];
+                $rubroClave = trim($rubro);
+                $categoriaClave = trim($categoria);
+
                 // Se utiliza el valor correspondiente de la Venta Proyectada según temporada
                 $compraProyectada = (strtoupper($temporadaFiltro) === 'VERANO') ? (int)$registro['VENTA_PROY_VERANO'] : (int)$registro['VENTA_PROY_INVIERNO'];
 
-                // Requisito: La categoria que sea VENTA PROYECTADA = 0 no debe mostrarse
-                if ($compraProyectada <= 0) {
-                    continue;
+                // Si existe un valor guardado previamente en la versión para este grupo (rubro / categoría), respetarlo
+                $compraProyectadaGuardada = null;
+                foreach ($canales as $canal) {
+                    $claveGuardado = $rubroClave . '|' . $categoriaClave . '|' . trim($canal);
+                    if (isset($mapeoGuardados[$claveGuardado]) && isset($mapeoGuardados[$claveGuardado]['compra_proyectada'])) {
+                        $compraProyectadaGuardada = (int)$mapeoGuardados[$claveGuardado]['compra_proyectada'];
+                        break;
+                    }
+                }
+
+                if ($compraProyectadaGuardada !== null) {
+                    $compraProyectada = $compraProyectadaGuardada;
+                }
+
+                if ($compraProyectada < 0) {
+                    $compraProyectada = 0;
                 }
 
                 // Buscar ventas por canal en nuestro mapa en memoria
-                $rubroClave = trim($rubro);
-                $categoriaClave = trim($categoria);
                 $ventasCanal = isset($ventasHistoricasTodas[$rubroClave][$categoriaClave]) 
                     ? $ventasHistoricasTodas[$rubroClave][$categoriaClave] 
                     : [];
@@ -207,7 +221,7 @@ class DistribucionController {
                 $sumaParticipacion = 0;
                 
                 foreach ($canales as $canal) {
-                    $claveGuardado = trim($rubro) . '|' . trim($categoria) . '|' . trim($canal);
+                    $claveGuardado = $rubroClave . '|' . $categoriaClave . '|' . trim($canal);
                     $partOriginal = $distribucionPorCanal[$canal]['participacion_original'];
                     $partActual = $partOriginal;
                     
@@ -226,17 +240,29 @@ class DistribucionController {
                     ];
                 }
 
-                // Calcular las unidades distribuidas por canal en base a su participación (%)
+                // Calcular las unidades distribuidas por canal en base a su participación (%) o valor guardado
                 $sumaUnidadesDistribuidas = 0;
+                $tieneDistribucionGuardada = false;
                 foreach ($canales as $canal) {
+                    $claveGuardado = $rubroClave . '|' . $categoriaClave . '|' . trim($canal);
                     $part = $filasCanal[$canal]['participacion'];
-                    $unidadesDist = (int)round($compraProyectada * ($part / 100));
+                    
+                    if (isset($mapeoGuardados[$claveGuardado]) && isset($mapeoGuardados[$claveGuardado]['distribucion_final'])) {
+                        $unidadesDist = (int)$mapeoGuardados[$claveGuardado]['distribucion_final'];
+                        $tieneDistribucionGuardada = true;
+                    } elseif (isset($mapeoGuardados[$claveGuardado]) && isset($mapeoGuardados[$claveGuardado]['compra_distribuida'])) {
+                        $unidadesDist = (int)$mapeoGuardados[$claveGuardado]['compra_distribuida'];
+                        $tieneDistribucionGuardada = true;
+                    } else {
+                        $unidadesDist = (int)round($compraProyectada * ($part / 100));
+                    }
+
                     $filasCanal[$canal]['venta_distribuida'] = $unidadesDist;
                     $sumaUnidadesDistribuidas += $unidadesDist;
                 }
 
-                // Si las participaciones suman 100% (o muy cerca), ajustar diferencia de redondeo en el canal más fuerte
-                if (abs($sumaParticipacion - 100.0) < 0.1 && $canalMasFuerte !== null) {
+                // Si no hay distribución guardada previamente y las participaciones suman 100% (o muy cerca), ajustar diferencia de redondeo en el canal más fuerte
+                if (!$tieneDistribucionGuardada && abs($sumaParticipacion - 100.0) < 0.1 && $canalMasFuerte !== null) {
                     $diferencia = $compraProyectada - $sumaUnidadesDistribuidas;
                     $filasCanal[$canalMasFuerte]['venta_distribuida'] += $diferencia;
                 }

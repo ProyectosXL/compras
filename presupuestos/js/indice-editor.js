@@ -93,9 +93,13 @@ class IndiceEditor {
             registro._indicesOriginales = {};
         }
         if (registro._indicesOriginales[temporada] === undefined) {
-            // Prioridad 1: Columna de Base de Datos (INDICE_VAR_ORIGINAL)
-            if (registro.INDICE_VAR_ORIGINAL) {
+            // Prioridad 1: Columna de Base de Datos / Procesador (INDICE_VAR_ORIGINAL / INDICE_ORIGINAL)
+            if (registro.INDICE_VAR_ORIGINAL !== undefined && registro.INDICE_VAR_ORIGINAL !== null) {
                 registro._indicesOriginales[temporada] = parseFloat(registro.INDICE_VAR_ORIGINAL);
+            } else if (registro.INDICE_ORIGINAL !== undefined && registro.INDICE_ORIGINAL !== null) {
+                registro._indicesOriginales[temporada] = parseFloat(registro.INDICE_ORIGINAL);
+            } else if (registro._indiceOriginal !== undefined && registro._indiceOriginal !== null) {
+                registro._indicesOriginales[temporada] = parseFloat(registro._indiceOriginal);
             } else {
                 // Prioridad 2: Valor actual antes de la primera edición
                 registro._indicesOriginales[temporada] = temporada === 'invierno' 
@@ -105,9 +109,23 @@ class IndiceEditor {
             console.log(`💾 Original guardado permanentemente para ${temporada}: ${registro._indicesOriginales[temporada]}`);
         }
 
+        const valorOriginal = registro._indicesOriginales[temporada];
+        if (registro.INDICE_VAR_ORIGINAL === undefined) registro.INDICE_VAR_ORIGINAL = valorOriginal;
+        if (registro.INDICE_ORIGINAL === undefined) registro.INDICE_ORIGINAL = valorOriginal;
+        if (registro._indiceOriginal === undefined) registro._indiceOriginal = valorOriginal;
+
         // 3. Calcular nuevos valores
         const registroActualizado = IndiceEditor.actualizarDatosMemoria(nuevoIndice, registro, temporada, solapa);
         
+        // Preservar valores originales y metadatos en el registro actualizado
+        registroActualizado.INDICE_VAR_ORIGINAL = registro.INDICE_VAR_ORIGINAL;
+        registroActualizado.INDICE_ORIGINAL = registro.INDICE_ORIGINAL;
+        registroActualizado._indiceOriginal = registro._indiceOriginal;
+        registroActualizado._indicesOriginales = { ...registro._indicesOriginales };
+        if (registro._indicesEditados) {
+            registroActualizado._indicesEditados = { ...registro._indicesEditados };
+        }
+
         // 4. Actualizar datos en memoria
         datos[indiceReal] = registroActualizado;
 

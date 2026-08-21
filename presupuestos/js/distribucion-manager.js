@@ -366,7 +366,9 @@ class DistribucionManager {
                 rowClass = 'locales-propios-row';
             }
 
-            const inputStyle = item.MODIFICADO ? 'background-color: #fff9c4; font-weight: bold; border: 1px solid #ffc107;' : '';
+            const inputStyle = item.MODIFICADO 
+                ? 'background-color: #fff9c4; font-weight: bold; border: 1px solid #ffc107; color: #212529;' 
+                : 'background-color: #ffffff; color: #212529; border: 1px solid #ced4da;';
             const indicatorHtml = item.MODIFICADO 
                 ? `<br><span class="badge bg-warning text-dark fs-8 mt-1" title="Valor original: ${Math.round(item.PARTICIPACION_ORIGINAL)}%"><i class="fas fa-history me-1"></i>Orig: ${Math.round(item.PARTICIPACION_ORIGINAL)}%</span>` 
                 : '';
@@ -375,7 +377,7 @@ class DistribucionManager {
                 ? `<div class="d-flex align-items-center justify-content-end gap-1">
                     <input type="number" step="1" class="form-control form-control-sm text-end input-compra-proyectada fw-bold" 
                            value="${item.COMPRA_PROYECTADA}" 
-                           style="max-width: 100px; display: inline-block; background-color: #fffde7; border: 1px solid #ffe082;"
+                           style="max-width: 100px; display: inline-block; background-color: #fffde7; color: #212529; border: 1px solid #ffe082;"
                            oninput="DistribucionManager.actualizarCompraProyectada('${item.RUBRO.replace(/'/g, "\\'")}', '${item.CATEGORIA_PADRE.replace(/'/g, "\\'")}', this.value)">
                    </div>`
                 : '';
@@ -1120,6 +1122,8 @@ class DistribucionManager {
                 hastaInput.value = partes[1].trim();
             }
         }
+        // Cargar los datos de la versión seleccionada
+        DistribucionManager.cargarDatos();
     }
 
     /**

@@ -169,15 +169,26 @@ const TablaRendererUtils = {
 
     // NUEVO: Obtener índice original del registro
     obtenerIndiceOriginal(item) {
-        // Buscar el índice original en diferentes propiedades
-        if (item._indiceOriginal !== undefined) {
-            return parseFloat(item._indiceOriginal);
+        // Prioridad 1: Objeto de respaldo en memoria
+        if (item._indicesOriginales && item._indicesOriginales.verano !== undefined) {
+            return parseFloat(item._indicesOriginales.verano);
         }
-        if (item.INDICE_ORIGINAL !== undefined) {
+        // Prioridad 2: Propiedad de BD o procesador
+        if (item.INDICE_VAR_ORIGINAL !== undefined && item.INDICE_VAR_ORIGINAL !== null) {
+            return parseFloat(item.INDICE_VAR_ORIGINAL);
+        }
+        if (item.INDICE_ORIGINAL !== undefined && item.INDICE_ORIGINAL !== null) {
             return parseFloat(item.INDICE_ORIGINAL);
         }
-        // Si no hay índice original guardado, usar el actual como original
-        return parseFloat(item.INDICE_VARIACION || 1.0);
+        if (item._indiceOriginal !== undefined && item._indiceOriginal !== null) {
+            return parseFloat(item._indiceOriginal);
+        }
+        // Fallback: Si no hay índice original guardado, registrarlo ahora y usar el actual
+        const orig = parseFloat(item.INDICE_VARIACION || 1.0);
+        item.INDICE_VAR_ORIGINAL = orig;
+        item.INDICE_ORIGINAL = orig;
+        item._indiceOriginal = orig;
+        return orig;
     }
 };
 

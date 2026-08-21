@@ -18,8 +18,8 @@
 /* Componentes UI */
 @import url('components.css');
 
-/* Modo oscuro (opcional) */
-@import url('dark-mode.css');
+/* Modo oscuro (desactivado para mantener consistencia visual en todas las plataformas) */
+/* @import url('dark-mode.css'); */
 
 /* ========================================
    ESTILOS ESPECÍFICOS Y OVERRIDES

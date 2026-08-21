@@ -243,6 +243,19 @@ class PresupuestoApp {
             try {
                 const verano = await APIClient.obtenerCompraVerano();
                 if (verano.success) {
+                    (verano.data || []).forEach(item => {
+                        const origVerano = parseFloat(item.INDICE_VAR_ORIGINAL ?? item.INDICE_ORIGINAL ?? item.INDICE_VARIACION ?? 1.0);
+                        const origInvierno = parseFloat(item.INDICE_VARIACION_INVIERNO ?? item.INDICE_VARIACION ?? 1.0);
+                        item.INDICE_VAR_ORIGINAL = origVerano;
+                        item.INDICE_ORIGINAL = origVerano;
+                        item._indiceOriginal = origVerano;
+                        if (!item._indicesOriginales) {
+                            item._indicesOriginales = {
+                                verano: origVerano,
+                                invierno: origInvierno
+                            };
+                        }
+                    });
                     this.datos.verano = verano.data;
                     this.renderizarSolapaSegura('verano', verano.data, verano.etiquetas);
                     this.cargarFiltrosPresupuesto('verano', verano.data);
@@ -264,6 +277,19 @@ class PresupuestoApp {
             try {
                 const invierno = await APIClient.obtenerCompraInvierno();
                 if (invierno.success) {
+                    (invierno.data || []).forEach(item => {
+                        const origVerano = parseFloat(item.INDICE_VAR_ORIGINAL ?? item.INDICE_ORIGINAL ?? item.INDICE_VARIACION ?? 1.0);
+                        const origInvierno = parseFloat(item.INDICE_VARIACION_INVIERNO ?? item.INDICE_VARIACION ?? 1.0);
+                        item.INDICE_VAR_ORIGINAL = origVerano;
+                        item.INDICE_ORIGINAL = origVerano;
+                        item._indiceOriginal = origVerano;
+                        if (!item._indicesOriginales) {
+                            item._indicesOriginales = {
+                                verano: origVerano,
+                                invierno: origInvierno
+                            };
+                        }
+                    });
                     this.datos.invierno = invierno.data;
                     this.renderizarSolapaSegura('invierno', invierno.data, invierno.etiquetas);
                     this.cargarFiltrosPresupuesto('invierno', invierno.data);
@@ -360,6 +386,19 @@ class PresupuestoApp {
                 case 'verano':
                     response = await APIClient.obtenerCompraVerano();
                     if (response.success) {
+                        (response.data || []).forEach(item => {
+                            const origVerano = parseFloat(item.INDICE_VAR_ORIGINAL ?? item.INDICE_ORIGINAL ?? item.INDICE_VARIACION ?? 1.0);
+                            const origInvierno = parseFloat(item.INDICE_VARIACION_INVIERNO ?? item.INDICE_VARIACION ?? 1.0);
+                            item.INDICE_VAR_ORIGINAL = origVerano;
+                            item.INDICE_ORIGINAL = origVerano;
+                            item._indiceOriginal = origVerano;
+                            if (!item._indicesOriginales) {
+                                item._indicesOriginales = {
+                                    verano: origVerano,
+                                    invierno: origInvierno
+                                };
+                            }
+                        });
                         this.datos.verano = response.data;
                         this.renderizarSolapaSegura('verano', response.data, response.etiquetas);
                         UIUtils.actualizarContador('count-verano', response.data.length);
@@ -369,6 +408,19 @@ class PresupuestoApp {
                 case 'invierno':
                     response = await APIClient.obtenerCompraInvierno();
                     if (response.success) {
+                        (response.data || []).forEach(item => {
+                            const origVerano = parseFloat(item.INDICE_VAR_ORIGINAL ?? item.INDICE_ORIGINAL ?? item.INDICE_VARIACION ?? 1.0);
+                            const origInvierno = parseFloat(item.INDICE_VARIACION_INVIERNO ?? item.INDICE_VARIACION ?? 1.0);
+                            item.INDICE_VAR_ORIGINAL = origVerano;
+                            item.INDICE_ORIGINAL = origVerano;
+                            item._indiceOriginal = origVerano;
+                            if (!item._indicesOriginales) {
+                                item._indicesOriginales = {
+                                    verano: origVerano,
+                                    invierno: origInvierno
+                                };
+                            }
+                        });
                         this.datos.invierno = response.data;
                         this.renderizarSolapaSegura('invierno', response.data, response.etiquetas);
                         UIUtils.actualizarContador('count-invierno', response.data.length);
