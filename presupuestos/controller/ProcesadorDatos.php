@@ -41,19 +41,23 @@ class ProcesadorDatos {
                     'INDICE_ORIGINAL' => round((float)($registro['INDICE_ORIGINAL'] ?? $registro['INDICE_VAR_ORIGINAL'] ?? $registro['INDICE_VARIACION'] ?? 1.0), 2),
                     'INDICE_VARIACION' => round((float)($registro['INDICE_VARIACION'] ?? 1.0), 2),
                     'INDICE_VARIACION_INVIERNO' => round((float)($registro['INDICE_VARIACION_INVIERNO'] ?? $registro['INDICE_VARIACION'] ?? 1.0), 2),
+                    // Bases efectivas del cálculo: la pantalla muestra estas, no las que
+                    // el front buscaba por su cuenta (ver presupuestoCalculos).
+                    'VENTA_VERANO_ANTERIOR' => round($calculosCompra['venta_verano_anterior'], 0),
+                    'VENTA_INVIERNO_ANTERIOR' => round($calculosCompra['venta_invierno_anterior'], 0),
                     'VENTA_PROY_VERANO' => round($calculosCompra['venta_proy_verano'], 0),
                     'VENTA_PROY_INVIERNO' => round($calculosCompra['venta_proy_invierno'], 0),
                     'COMPRA_PROYECTADA' => round($calculosCompra['compra_proyectada'], 0)
                 ];
-                
+
                 // Agregar columnas de ventas históricas de forma controlada
                 $columnasVenta = $this->obtenerColumnasVentasSeguras($registro);
                 foreach ($columnasVenta as $columna) {
                     $registroProcesado[$columna] = round((float)($registro[$columna] ?? 0), 0);
                 }
-                
+
                 $resultado[] = $registroProcesado;
-                
+
             } catch (Exception $e) {
                 error_log("Error procesando registro de verano (índice $index): " . $e->getMessage());
                 continue;
@@ -98,19 +102,21 @@ class ProcesadorDatos {
                     'INDICE_ORIGINAL' => round((float)($registro['INDICE_ORIGINAL'] ?? $registro['INDICE_VAR_ORIGINAL'] ?? $registro['INDICE_VARIACION'] ?? 1.0), 2),
                     'INDICE_VARIACION' => round((float)($registro['INDICE_VARIACION'] ?? 1.0), 2),
                     'INDICE_VARIACION_INVIERNO' => round((float)($registro['INDICE_VARIACION_INVIERNO'] ?? $registro['INDICE_VARIACION'] ?? 1.0), 2),
+                    'VENTA_VERANO_ANTERIOR' => round($calculosCompra['venta_verano_anterior'], 0),
+                    'VENTA_INVIERNO_ANTERIOR' => round($calculosCompra['venta_invierno_anterior'], 0),
                     'VENTA_PROY_VERANO' => round($calculosCompra['venta_proy_verano'], 0),
                     'VENTA_PROY_INVIERNO' => round($calculosCompra['venta_proy_invierno'], 0),
                     'COMPRA_PROYECTADA' => round($calculosCompra['compra_proyectada'], 0)
                 ];
-                
+
                 // Agregar columnas de ventas históricas de forma controlada
                 $columnasVenta = $this->obtenerColumnasVentasSeguras($registro);
                 foreach ($columnasVenta as $columna) {
                     $registroProcesado[$columna] = round((float)($registro[$columna] ?? 0), 0);
                 }
-                
+
                 $resultado[] = $registroProcesado;
-                
+
             } catch (Exception $e) {
                 error_log("Error procesando registro de invierno (índice $index): " . $e->getMessage());
                 continue;
@@ -202,25 +208,30 @@ class ProcesadorDatos {
         $columnasExcluidas = [
             'RUBRO', 'CATEGORIA_PADRE', 'CANT_STOCK', 'CANT_STOCK_GUARDAR',
             'CANT_PEND_OC_VERANO', 'CANT_PEND_OC_INVIERNO', 'CANT_PEND_OC_ATEMPORAL',
-            'INDICE_VARIACION', 'STOCK_COBERTURA', 'VENTA_PROY_VERANO', 
-            'VENTA_PROY_INVIERNO', 'COMPRA_PROYECTADA', 'STOCK_PROYECTADO'
+            'INDICE_VARIACION', 'STOCK_COBERTURA', 'VENTA_PROY_VERANO',
+            'VENTA_PROY_INVIERNO', 'COMPRA_PROYECTADA', 'STOCK_PROYECTADO',
+            // Bases del cálculo: llevan VERANO/INVIERNO en el nombre pero no son
+            // columnas históricas, son el valor elegido para proyectar.
+            'VENTA_VERANO_ANTERIOR', 'VENTA_INVIERNO_ANTERIOR'
         ];
-        
+
         foreach (array_keys($registro) as $columna) {
-            // Verificar si es columna de venta histórica
-            if (!in_array($columna, $columnasExcluidas) && 
-                (stripos($columna, 'VERANO') !== false || 
-                 stripos($columna, 'INVIERNO') !== false ||
-                 stripos($columna, 'VTA_') !== false)) {
-                $columnasVenta[] = $columna;
+            if (in_array($columna, $columnasExcluidas)) {
+                continue;
+            }
+
+            // Solo entran las que corresponden a una temporada identificable: así se
+            // descartan de una las que apenas contienen la palabra VERANO/INVIERNO.
+            if (PresupuestoCalculos::temporadaDeColumna($columna)) {
+                $columnasVenta[$columna] = PresupuestoCalculos::temporadaDeColumna($columna)['desde'];
             }
         }
-        
-        // Eliminar duplicados y ordenar
-        $columnasVenta = array_unique($columnasVenta);
-        sort($columnasVenta);
-        
-        return $columnasVenta;
+
+        // Orden cronológico, no alfabético: un sort() de texto agrupaba todos los
+        // inviernos y después todos los veranos, en vez de intercalarlos por fecha.
+        asort($columnasVenta);
+
+        return array_keys($columnasVenta);
     }
     
     /**
@@ -247,12 +258,14 @@ class ProcesadorDatos {
         
         return array_merge($registro, [
             'STOCK_PROYECTADO' => round($stockProyectado, 2),
+            'VENTA_VERANO_ANTERIOR' => round($calculosCompra['venta_verano_anterior'], 0),
+            'VENTA_INVIERNO_ANTERIOR' => round($calculosCompra['venta_invierno_anterior'], 0),
             'VENTA_PROY_VERANO' => round($calculosCompra['venta_proy_verano'], 0),
             'VENTA_PROY_INVIERNO' => round($calculosCompra['venta_proy_invierno'], 0),
             'COMPRA_PROYECTADA' => round($calculosCompra['compra_proyectada'], 0)
         ]);
     }
-    
+
     /**
      * CORREGIDO: Procesar registro individual para compra invierno CON CONTEXTO
      */
@@ -270,12 +283,14 @@ class ProcesadorDatos {
         
         return array_merge($registro, [
             'STOCK_PROYECTADO' => round($stockProyectado, 2),
+            'VENTA_VERANO_ANTERIOR' => round($calculosCompra['venta_verano_anterior'], 0),
+            'VENTA_INVIERNO_ANTERIOR' => round($calculosCompra['venta_invierno_anterior'], 0),
             'VENTA_PROY_VERANO' => round($calculosCompra['venta_proy_verano'], 0),
             'VENTA_PROY_INVIERNO' => round($calculosCompra['venta_proy_invierno'], 0),
             'COMPRA_PROYECTADA' => round($calculosCompra['compra_proyectada'], 0)
         ]);
     }
-    
+
     /**
      * Calcular stock proyectado para un registro individual
      */

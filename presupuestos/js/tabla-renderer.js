@@ -59,10 +59,25 @@ const TablaRendererUtils = {
     },
 
 
+    /**
+     * Venta anterior que se usó como base de la proyección.
+     *
+     * La elige el servidor y viaja en VENTA_*_ANTERIOR. Antes se buscaba acá con una
+     * lista fija de las últimas dos temporadas y el reloj del navegador: cuando la
+     * última venta con movimiento era más vieja (por ejemplo BILLETERAS DE CUERO,
+     * con ventas solo en INV 24), la pantalla mostraba 0 mientras la proyección se
+     * había calculado sobre 335. La búsqueda vieja queda como respaldo por si algún
+     * camino de datos no pasa por ProcesadorDatos.
+     */
     buscarVentaHistoricaCorrecta(item, temporada) {
+        const campoServidor = temporada === 'VERANO' ? 'VENTA_VERANO_ANTERIOR' : 'VENTA_INVIERNO_ANTERIOR';
+        if (item[campoServidor] !== undefined && item[campoServidor] !== null) {
+            return parseFloat(item[campoServidor]) || 0;
+        }
+
         const anoActual = new Date().getFullYear() % 100; // 2025 -> 25
         const mesActual = new Date().getMonth() + 1; // 1-12
-        
+
         if (temporada === 'VERANO') {
             // Para verano, buscar el año actual o anterior
             const posiblesColumnas = [
@@ -131,40 +146,59 @@ const TablaRendererUtils = {
             'RUBRO', 'CATEGORIA_PADRE', 'CANT_STOCK', 'CANT_STOCK_GUARDAR',
             'CANT_PEND_OC_VERANO', 'CANT_PEND_OC_INVIERNO', 'CANT_PEND_OC_ATEMPORAL',
             'INDICE_VARIACION', 'INDICE_VARIACION_INVIERNO', 'INDICE_ORIGINAL',
-            'STOCK_COBERTURA', 'VENTA_PROY_VERANO', 'VENTA_PROY_INVIERNO', 
-            'COMPRA_PROYECTADA', 'STOCK_PROYECTADO'
+            'STOCK_COBERTURA', 'VENTA_PROY_VERANO', 'VENTA_PROY_INVIERNO',
+            'COMPRA_PROYECTADA', 'STOCK_PROYECTADO',
+            // Bases del cálculo, no columnas históricas: llevan VERANO/INVIERNO en el
+            // nombre y si no se excluyen aparecen como una temporada más en la tabla.
+            'VENTA_VERANO_ANTERIOR', 'VENTA_INVIERNO_ANTERIOR'
         ];
         
         const columnasVenta = [];
-        
+
         for (const columna of Object.keys(primeraFila)) {
-            if (!columnasExcluidas.includes(columna) && 
+            if (!columnasExcluidas.includes(columna) &&
                 (columna.includes('VERANO') || columna.includes('INVIERNO') || columna.includes('VTA_'))) {
                 columnasVenta.push(columna);
             }
         }
-        
-        return columnasVenta.sort();
+
+        // Orden cronológico real, no alfabético. Un sort() de texto agrupaba todos los
+        // inviernos y después todos los veranos, así que las columnas no se leían como
+        // una línea de tiempo. Se ordena por fecha de inicio de cada temporada, que es
+        // lo único comparable entre verano e invierno.
+        return columnasVenta.sort((a, b) =>
+            TablaRendererUtils.inicioTemporadaColumna(a) - TablaRendererUtils.inicioTemporadaColumna(b)
+        );
     },
 
+    /**
+     * Fecha de inicio (como número ordenable) de la temporada de una columna.
+     * El SP numera el verano por el año en que termina: VTA_VERANO_26 empieza en
+     * agosto de 2025. Las que no son de temporada van al final.
+     */
+    inicioTemporadaColumna(columna) {
+        const m = String(columna).match(/(VERANO|INVIERNO)[\s_]*(\d{2})(?:\s*-\s*(\d{2}))?/i);
+        if (!m) return Number.MAX_SAFE_INTEGER;
+
+        const tipo = m[1].toUpperCase();
+        const anoFin = 2000 + parseInt(m[3] !== undefined ? m[3] : m[2], 10);
+
+        return tipo === 'VERANO'
+            ? (anoFin - 1) * 100 + 8   // 1 de agosto del año anterior
+            : anoFin * 100 + 2;        // 1 de febrero del mismo año
+    },
+
+    /**
+     * Etiqueta de una columna histórica en la convención única de la app.
+     *
+     * Antes acá vivía un parche que a "VERANO 26" le restaba 1 y mostraba "VERANO 25":
+     * acertaba el año de inicio pero dejaba el verano nombrado con un año suelto
+     * —ambiguo, porque la temporada cruza dos— y no tocaba el invierno. Ahora la
+     * traducción la hace el servidor (etiquetas_historicas) y acá solo se consulta,
+     * para que las columnas, el encabezado, el Excel y la ayuda digan lo mismo.
+     */
     formatearNombreColumna(columna) {
-        // Limpieza básica inicial
-        let nombre = columna.replace('VTA_', '').replace(/_/g, ' ').trim();
-
-        // --- CORRECCIÓN VISUAL DE AÑOS PARA VERANO ---
-        // Si el título es "VERANO XX" o "VERANO XXXX", le restamos 1 al año
-        const match = nombre.match(/^(VERANO)\s+(\d{2,4})$/i);
-        
-        if (match) {
-            const texto = match[1];      // "VERANO"
-            const anio = parseInt(match[2]); // 24, 25, 2026, etc.
-            
-            // Restamos 1 año para corregir la visualización
-            return `${texto} ${anio - 1}`.toUpperCase();
-        }
-        // ----------------------------------------------
-
-        return nombre;
+        return TemporadaServidor.etiquetaHistorica(columna);
     },
 
     // NUEVO: Obtener índice original del registro
@@ -505,7 +539,7 @@ class TablaRenderer {
         }
 
         if (!datos || datos.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="13" class="text-center text-muted py-4">No se encontraron resultados para los filtros aplicados.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="14" class="text-center text-muted py-4">No se encontraron resultados para los filtros aplicados.</td></tr>`;
             return;
         }
 
@@ -522,7 +556,8 @@ class TablaRenderer {
                 <tr>
                     <td>${fechaFormateada}</td>
                     <td>${item.nombre_presupuesto || ''}</td>
-                    <td><span class="badge bg-info text-dark">${item.temporada || ''}</span></td>
+                    <td><span class="badge bg-secondary">${item.temporada || ''}</span></td>
+                    <td><span class="badge bg-info text-dark" title="${item.temporada_objetivo_desde ? `${UIUtils.formatearFechaCorta(item.temporada_objetivo_desde)} a ${UIUtils.formatearFechaCorta(item.temporada_objetivo_hasta)}` : ''}">${item.temporada_objetivo || 's/d'}</span></td>
                     <td>${item.rubro || ''}</td>
                     <td>${item.categoria_padre || ''}</td>
                     <td class="text-end">${FormatoUtils.formatearNumero(item.stock_proyectado)}</td>

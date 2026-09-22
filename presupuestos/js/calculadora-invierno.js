@@ -1,6 +1,10 @@
 
-// Calculadora específica para COMPRA PROYECTADA INVIERNO - CORREGIDA
+// Calculadora para COMPRA PROYECTADA INVIERNO
 // Archivo: presupuestos/js/calculadora-invierno.js
+//
+// Igual que CalculadoraVerano: el calendario de temporadas lo calcula el servidor
+// y llega por TemporadaServidor. Acá quedó solo la fórmula. Ver el comentario de
+// temporada-servidor.js para el porqué.
 
 class CalculadoraInvierno {
     
@@ -19,13 +23,15 @@ class CalculadoraInvierno {
             // • Venta Proy. Invierno: FÓRMULA CORREGIDA
             
             ventaProyVerano = Math.round(ventaVeranoAnterior * indiceVerano); // Próximo verano completo
-            
-            const diasRestantesInvierno = CalculadoraInvierno.calcularDiasRestantesInvierno(new Date());
-            const diasTotalesInvierno = CalculadoraInvierno.calcularDiasTotalesInvierno();
-            
-            // TU FÓRMULA: VENTA_ANTERIOR / DIAS_TOTAL * DIAS_FALTANTES * INDICE
+
+            // Días del servidor: son los mismos que usó PHP para el render inicial.
+            const diasRestantesInvierno = TemporadaServidor.diasRestantes();
+            const diasTotalesInvierno = TemporadaServidor.diasTotales();
+
+            // Mismo orden de operaciones que PHP (venta * indice * proporcion) para que
+            // el redondeo caiga igual y reeditar el mismo índice no mueva el número.
             const inviernoActualProporcional = Math.round(
-                (ventaInviernoAnterior / diasTotalesInvierno) * diasRestantesInvierno * indiceInvierno
+                ventaInviernoAnterior * indiceInvierno * (diasRestantesInvierno / diasTotalesInvierno)
             );
             const proximoInviernoCompleto = Math.round(ventaInviernoAnterior * indiceInvierno);
             
@@ -39,12 +45,11 @@ class CalculadoraInvierno {
             // • Venta Proy. Verano: FÓRMULA CORREGIDA
             // • Venta Proy. Invierno: Próximo Invierno Completo
             
-            const diasRestantesVerano = CalculadoraInvierno.calcularDiasRestantesVerano(new Date());
-            const diasTotalesVerano = CalculadoraInvierno.calcularDiasTotalesVerano();
-            
-            // TU FÓRMULA: VENTA_ANTERIOR / DIAS_TOTAL * DIAS_FALTANTES * INDICE
+            const diasRestantesVerano = TemporadaServidor.diasRestantes();
+            const diasTotalesVerano = TemporadaServidor.diasTotales();
+
             ventaProyVerano = Math.round(
-                (ventaVeranoAnterior / diasTotalesVerano) * diasRestantesVerano * indiceVerano
+                ventaVeranoAnterior * indiceVerano * (diasRestantesVerano / diasTotalesVerano)
             );
             
             ventaProyInvierno = Math.round(ventaInviernoAnterior * indiceInvierno); // Próximo invierno completo
@@ -88,9 +93,14 @@ class CalculadoraInvierno {
         
         console.log(`❄️ INVIERNO - Índices a usar para cálculo: V=${indiceVerano}, I=${indiceInvierno}`);
         
-        // Determinar temporada actual
+        // Temporada del servidor. Si no llegó, no se recalcula: devolver el registro
+        // intacto es preferible a producir un número que no coincida con el del render.
         const temporadaActual = CalculadoraInvierno.determinarTemporadaActual();
-        
+        if (!temporadaActual) {
+            TemporadaServidor.advertirNoDisponible('CalculadoraInvierno');
+            return registro;
+        }
+
         // Calcular ventas proyectadas específicas para INVIERNO
         const { ventaProyVerano, ventaProyInvierno } = CalculadoraInvierno.calcularVentasProyectadas(
             ventaVeranoAnterior, 
@@ -390,175 +400,38 @@ class CalculadoraInvierno {
     }
     
     /**
-     * CORREGIDO: Calcular días restantes sin doble conteo
+     * Temporada en curso, según el servidor (ver CalculadoraVerano).
      */
-    static calcularDiasRestantesVerano(fecha) {
-        const mes = fecha.getMonth() + 1;
-        const ano = fecha.getFullYear();
-        
-        let finVerano;
-        if (mes >= 8) {
-            finVerano = new Date(ano + 1, 1, 1);
-        } else if (mes === 1) {
-            finVerano = new Date(ano, 1, 1);
-        } else {
-            return 0;
-        }
-        
-        if (fecha >= finVerano) return 0;
-        
-        const diferenciaMilisegundos = finVerano.getTime() - fecha.getTime();
-        const diasRestantes = Math.round(diferenciaMilisegundos / (1000 * 60 * 60 * 24));
-        
-        console.log(`📅 VERANO - Fecha actual: ${fecha.toLocaleDateString()}`);
-        console.log(`📅 VERANO - Fin temporada: ${new Date(finVerano.getTime() - 24*60*60*1000).toLocaleDateString()}`);
-        console.log(`📅 VERANO - Días restantes: ${diasRestantes}`);
-        
-        return Math.max(0, diasRestantes);
+    static determinarTemporadaActual() {
+        return TemporadaServidor.temporadaActual();
     }
 
-    /**
-     * CORREGIDO: Calcular días restantes invierno sin doble conteo
-     */
-    static calcularDiasRestantesInvierno(fecha) {
-        const mes = fecha.getMonth() + 1;
-        const ano = fecha.getFullYear();
-        
-        if (mes < 2 || mes > 7) return 0;
-        
-        const finInvierno = new Date(ano, 7, 1); // 1 de agosto (exclusivo)
-        if (fecha >= finInvierno) return 0;
-        
-        const diferenciaMilisegundos = finInvierno.getTime() - fecha.getTime();
-        const diasRestantes = Math.round(diferenciaMilisegundos / (1000 * 60 * 60 * 24));
-        
-        console.log(`📅 INVIERNO - Fecha actual: ${fecha.toLocaleDateString()}`);
-        console.log(`📅 INVIERNO - Fin temporada: ${new Date(finInvierno.getTime() - 24*60*60*1000).toLocaleDateString()}`);
-        console.log(`📅 INVIERNO - Días restantes: ${diasRestantes}`);
-        
-        return Math.max(0, diasRestantes);
-    }
-        
-    /**
-     * CORREGIDO: Calcular días totales de verano ACTUAL (sin doble conteo)
-     */
-    static calcularDiasTotalesVerano(ano = null) {
-        if (!ano) ano = new Date().getFullYear();
-        
-        const inicioVerano = new Date(ano, 7, 1); // 1 de agosto del año actual
-        const finVerano = new Date(ano + 1, 1, 1); // 1 de febrero del año siguiente (exclusivo)
-        
-        const diferenciaMilisegundos = finVerano.getTime() - inicioVerano.getTime();
-        const diasTotales = Math.round(diferenciaMilisegundos / (1000 * 60 * 60 * 24));
-        
-        console.log(`📅 VERANO TOTAL - Inicio: ${inicioVerano.toLocaleDateString()}, Fin: ${new Date(ano + 1, 0, 31).toLocaleDateString()}, Días: ${diasTotales}`);
-        
-        return diasTotales;
-    }
-
-    /**
-     * CORREGIDO: Calcular días totales de invierno ACTUAL (sin doble conteo)
-     */
-    static calcularDiasTotalesInvierno(ano = null) {
-        if (!ano) ano = new Date().getFullYear();
-        
-        const inicioInvierno = new Date(ano, 1, 1); // 1 de febrero
-        const finInvierno = new Date(ano, 7, 1); // 1 de agosto (exclusivo)
-        
-        const diferenciaMilisegundos = finInvierno.getTime() - inicioInvierno.getTime();
-        const diasTotales = Math.round(diferenciaMilisegundos / (1000 * 60 * 60 * 24));
-        
-        console.log(`📅 INVIERNO TOTAL - Inicio: ${inicioInvierno.toLocaleDateString()}, Fin: ${new Date(ano, 6, 31).toLocaleDateString()}, Días: ${diasTotales}`);
-        
-        return diasTotales;
-    }
-    
-    static determinarTemporadaActual(fecha = null) {
-        if (!fecha) fecha = new Date();
-        const mes = fecha.getMonth() + 1;
-        
-        if (mes >= 8 || mes === 1) {
-            return {
-                tipo: 'VERANO',
-                enCurso: true,
-                descripcion: mes >= 8 ? 'Verano inicio' : 'Verano final'
-            };
-        } else if (mes >= 2 && mes <= 7) {
-            return {
-                tipo: 'INVIERNO',
-                enCurso: true,
-                descripcion: mes <= 4 ? 'Invierno inicio' : 'Invierno final'
-            };
-        } else {
-            return {
-                tipo: 'TRANSICION',
-                enCurso: false,
-                descripcion: 'Período de transición'
-            };
-        }
-    }
-    
     // Función de diagnóstico
     static diagnosticar() {
         const temporada = CalculadoraInvierno.determinarTemporadaActual();
-        const diasVerano = temporada.tipo === 'VERANO' ? CalculadoraInvierno.calcularDiasRestantesVerano(new Date()) : 0;
-        const diasInvierno = temporada.tipo === 'INVIERNO' ? CalculadoraInvierno.calcularDiasRestantesInvierno(new Date()) : 0;
-        
+
         console.group('❄️ DIAGNÓSTICO CALCULADORA INVIERNO');
-        console.log('Temporada actual:', temporada);
-        console.log('Días restantes verano:', diasVerano);
-        console.log('Días restantes invierno:', diasInvierno);
-        console.log('Lógica aplicada:', 
-            temporada.tipo === 'INVIERNO' ? 'Verano: Próximo, Invierno: Proporcional + Próximo' :
-            temporada.tipo === 'VERANO' ? 'Verano: Proporcional, Invierno: Próximo' :
-            'Ambos: Próximo completo'
+        if (!temporada) {
+            console.warn('Sin info_temporada del servidor. Cargá los datos primero.');
+            console.groupEnd();
+            return null;
+        }
+
+        const diasRestantes = TemporadaServidor.diasRestantes();
+        const diasTotales = TemporadaServidor.diasTotales();
+
+        console.log('Temporada actual:', temporada.codigo, `(${temporada.desde} a ${temporada.hasta})`);
+        console.log('Días restantes / totales:', diasRestantes, '/', diasTotales);
+        console.log('Períodos de la solapa invierno:', TemporadaServidor.periodos('invierno'));
+        console.log('Lógica aplicada:',
+            temporada.tipo === 'INVIERNO'
+                ? 'Verano: Próximo completo, Invierno: Resto + Próximo completo'
+                : 'Verano: Resto, Invierno: Próximo completo'
         );
         console.groupEnd();
-        
-        return { temporada, diasVerano, diasInvierno };
-    }
 
-    /**
- * NUEVO: Función de debugging para verificar cálculos de días
- */
-static debugDiasTemporada(fecha = null) {
-    if (!fecha) fecha = new Date();
-    
-    const temporada = CalculadoraInvierno.determinarTemporadaActual(fecha);
-    const diasRestantesVerano = CalculadoraInvierno.calcularDiasRestantesVerano(fecha);
-    const diasRestantesInvierno = CalculadoraInvierno.calcularDiasRestantesInvierno(fecha);
-    const diasTotalesVerano = CalculadoraInvierno.calcularDiasTotalesVerano();
-    const diasTotalesInvierno = CalculadoraInvierno.calcularDiasTotalesInvierno();
-    
-    console.group('📅 DEBUG DÍAS TEMPORADA - INVIERNO');
-    console.log('Fecha actual:', fecha.toLocaleDateString());
-    console.log('Temporada detectada:', temporada);
-    console.log('Días restantes verano:', diasRestantesVerano);
-    console.log('Días restantes invierno:', diasRestantesInvierno);
-    console.log('Días totales verano:', diasTotalesVerano);
-    console.log('Días totales invierno:', diasTotalesInvierno);
-    
-    if (diasRestantesVerano > 0) {
-        const proporcionVerano = diasRestantesVerano / diasTotalesVerano;
-        console.log('Proporción verano:', proporcionVerano.toFixed(4), `(${(proporcionVerano * 100).toFixed(2)}%)`);
+        return { temporada, diasRestantes, diasTotales };
     }
-    
-    if (diasRestantesInvierno > 0) {
-        const proporcionInvierno = diasRestantesInvierno / diasTotalesInvierno;
-        console.log('Proporción invierno:', proporcionInvierno.toFixed(4), `(${(proporcionInvierno * 100).toFixed(2)}%)`);
-    }
-    
-    console.groupEnd();
-    
-    return {
-        fecha: fecha.toLocaleDateString(),
-        temporada,
-        diasRestantesVerano,
-        diasRestantesInvierno,
-        diasTotalesVerano,
-        diasTotalesInvierno
-    };
-}
 }
 
 // Hacer disponible globalmente
@@ -567,7 +440,4 @@ window.CalculadoraInvierno = CalculadoraInvierno;
 // Función de diagnóstico global
 window.diagnosticarInvierno = () => CalculadoraInvierno.diagnosticar();
 
-// Función global para debugging
-window.debugDiasInvierno = (fecha) => CalculadoraInvierno.debugDiasTemporada(fecha);
-
-console.log('✅ CalculadoraInvierno CORREGIDA cargada (con parseo separador miles)');
+console.log('✅ CalculadoraInvierno cargada (temporada calculada en el servidor)');

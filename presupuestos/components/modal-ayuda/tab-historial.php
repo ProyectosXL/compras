@@ -40,6 +40,14 @@
                     <p>
                         Para ver los presupuestos que ha guardado, diríjase a la nueva solapa <strong>Historial Compras Proyectadas</strong>.
                     </p>
+                    <div class="alert alert-info">
+                        <i class="fas fa-tags me-2"></i>
+                        <strong>Solapa y Temporada objetivo:</strong> la columna <em>Solapa</em> indica desde
+                        dónde se guardó (verano o invierno) y <em>Temporada objetivo</em> la temporada que esa
+                        compra tenía que cubrir, en la convención <code>VER AA-AA</code> / <code>INV AA</code>
+                        (por ejemplo <code>VER 27-28</code>). Se deduce de la fecha de guardado y de la solapa,
+                        porque las versiones guardadas hasta ahora no la registran.
+                    </div>
                     <div class="alert alert-warning">
                         <i class="fas fa-info-circle me-2"></i>
                         <strong>Nota Importante:</strong> La tabla de historial no carga datos automáticamente. Debe utilizar los filtros y hacer clic en "Buscar" para ver los resultados.

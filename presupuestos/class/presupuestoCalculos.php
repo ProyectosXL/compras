@@ -2,83 +2,135 @@
 <?php
 
 /**
- * Clase para manejar todos los cálculos del presupuesto de compras - CORREGIDA
- * Separa la lógica de cálculo del resto del sistema
+ * Clase para manejar todos los cálculos del presupuesto de compras
+ *
+ * Es la ÚNICA fuente de verdad del calendario de temporadas: qué temporada está
+ * en curso, desde y hasta cuándo va, cuántos días tiene y cómo se llama. El
+ * navegador no vuelve a calcular nada de esto: lo recibe en `info_temporada` y
+ * lo usa tal cual. Antes cada calculadora JS repetía las mismas cuentas con su
+ * propio reloj, y el resultado dependía de la hora del cliente (ver
+ * calcularDiasRestantesTemporada).
+ *
+ * CONVENCIÓN DE NOMBRES (única en toda la app):
+ *   - Verano  "VER AA-AA": VER 26-27 = 01/08/2026 a 31/01/2027 (cruza el año)
+ *   - Invierno "INV AA"   : INV 27   = 01/02/2027 a 31/07/2027
+ * Coincide con los códigos de oleada de Comercio Exterior (VER01-26, INV01-27),
+ * que numeran el verano por el año en que arranca. Se descartó mantener el
+ * "VERANO 27" de las columnas del SP —que numera por el año en que termina—
+ * porque para el mismo período convivían dos números distintos según dónde se
+ * leyera. Los nombres de columna del SP NO se tocan: el renombre es de
+ * presentación y la traducción vive en etiquetaColumnaHistorica().
  */
 class PresupuestoCalculos {
-    
+
     /**
-     * Determina la temporada actual basada en la fecha
-     * Verano: 01/08 al 31/01 del año siguiente (VERANO 24-25, VERANO 25-26, etc.)
-     * Invierno: 01/02 al 31/07 (INVIERNO 25, INVIERNO 26, etc.)
+     * Construye una temporada concreta a partir de su tipo y del año en que TERMINA.
+     *
+     * El año de referencia sigue siendo el año de cierre porque es el que ya usaban
+     * obtenerTemporadaActual() y el encabezado; cambiarlo habría obligado a tocar
+     * todos los consumidores sin ganar nada. La convención nueva se expresa en
+     * 'codigo', que es lo único que se muestra.
+     *
+     * @param string $tipo   'VERANO' o 'INVIERNO'
+     * @param int    $anoFin Año calendario en que termina la temporada
+     */
+    public static function construirTemporada($tipo, $anoFin) {
+        if ($tipo === 'VERANO') {
+            $desde = new DateTime(($anoFin - 1) . '-08-01');
+            $hasta = new DateTime($anoFin . '-01-31');
+            $codigo = 'VER ' . str_pad(($anoFin - 1) % 100, 2, '0', STR_PAD_LEFT)
+                    . '-' . str_pad($anoFin % 100, 2, '0', STR_PAD_LEFT);
+        } else {
+            $desde = new DateTime($anoFin . '-02-01');
+            $hasta = new DateTime($anoFin . '-07-31');
+            $codigo = 'INV ' . str_pad($anoFin % 100, 2, '0', STR_PAD_LEFT);
+        }
+
+        return [
+            'temporada' => $tipo,
+            'ano'       => $anoFin,
+            'codigo'    => $codigo,
+            'desde'     => $desde->format('Y-m-d'),
+            'hasta'     => $hasta->format('Y-m-d'),
+            // +1 porque desde y hasta son ambos inclusive (01/08 y 31/01 son días de venta).
+            'dias'      => (int)$desde->diff($hasta)->days + 1
+        ];
+    }
+
+    /**
+     * Devuelve la temporada SIGUIENTE a la recibida (verano -> invierno -> verano).
+     * La usan las proyecciones para nombrar "la próxima temporada completa".
+     */
+    public static function temporadaSiguiente($temporada) {
+        // El invierno AA termina en julio AA y el verano que sigue cierra en enero AA+1;
+        // el verano que cierra en enero AA es seguido por el invierno del mismo año AA.
+        return $temporada['temporada'] === 'VERANO'
+            ? self::construirTemporada('INVIERNO', $temporada['ano'])
+            : self::construirTemporada('VERANO', $temporada['ano'] + 1);
+    }
+
+    /**
+     * Determina la temporada actual basada en la fecha.
+     * Verano: 01/08 al 31/01 del año siguiente. Invierno: 01/02 al 31/07.
      */
     public static function obtenerTemporadaActual($fecha = null) {
-        if (!$fecha) {  // CORREGIDO: era !fecha
-            $fecha = new DateTime();
-        } elseif (is_string($fecha)) {
-            $fecha = new DateTime($fecha);
-        }
-        
+        $fecha = self::normalizarFecha($fecha);
+
         $mes = (int)$fecha->format('n');
         $ano = (int)$fecha->format('Y');
-        
-        if ($mes >= 8 && $mes <= 12) {
-            // Agosto a Diciembre = Verano del año siguiente (ej: ago 2024 = VERANO 24-25)
-            $anoInicial = $ano % 100;
-            $anoFinal = ($ano + 1) % 100;
-            return [
-                'temporada' => 'VERANO',
-                'ano' => $ano + 1,
-                'codigo' => 'VERANO ' . str_pad($anoInicial, 2, '0', STR_PAD_LEFT) . '-' . str_pad($anoFinal, 2, '0', STR_PAD_LEFT)
-            ];
-        } elseif ($mes >= 1 && $mes <= 1) {
-            // Enero = Verano del año actual (ej: ene 2025 = VERANO 24-25)
-            $anoInicial = ($ano - 1) % 100;
-            $anoFinal = $ano % 100;
-            return [
-                'temporada' => 'VERANO',
-                'ano' => $ano,
-                'codigo' => 'VERANO ' . str_pad($anoInicial, 2, '0', STR_PAD_LEFT) . '-' . str_pad($anoFinal, 2, '0', STR_PAD_LEFT)
-            ];
-        } else {
-            // Febrero a Julio = Invierno del año actual (ej: mar 2025 = INVIERNO 25)
-            return [
-                'temporada' => 'INVIERNO',
-                'ano' => $ano,
-                'codigo' => 'INVIERNO ' . str_pad($ano % 100, 2, '0', STR_PAD_LEFT)
-            ];
+
+        if ($mes >= 8) {
+            // Agosto a diciembre: el verano en curso cierra en enero del año siguiente.
+            return self::construirTemporada('VERANO', $ano + 1);
+        } elseif ($mes === 1) {
+            // Enero: seguimos dentro del verano que cierra este mismo año.
+            return self::construirTemporada('VERANO', $ano);
         }
+
+        // Febrero a julio: invierno del año en curso.
+        return self::construirTemporada('INVIERNO', $ano);
     }
-    
+
     /**
-     * Calcula los días restantes para completar la temporada actual
+     * Normaliza cualquier entrada de fecha a un DateTime a medianoche.
+     *
+     * Truncar la hora es lo que vuelve determinista todo el cálculo de días: antes
+     * el resto de temporada se medía en milisegundos contra el 31/01 23:59:59, así
+     * que el mismo día daba 132 días a la mañana y 131 a la tarde. PHP lo disimulaba
+     * con diff()->days (que trunca), pero el JS usaba Math.round() y sí cambiaba de
+     * valor al mediodía. Se descartó "arreglar solo el JS" porque el bug estaba en
+     * medir un intervalo de días con precisión de milisegundos, no en el redondeo.
      */
-    public static function calcularDiasRestantesTemporada($fecha = null) {
+    private static function normalizarFecha($fecha = null) {
         if (!$fecha) {
             $fecha = new DateTime();
         } elseif (is_string($fecha)) {
             $fecha = new DateTime($fecha);
-        }
-        
-        $temporadaActual = self::obtenerTemporadaActual($fecha);
-        $mes = (int)$fecha->format('n');
-        $ano = (int)$fecha->format('Y');
-        
-        if ($temporadaActual['temporada'] === 'VERANO') {
-            if ($mes >= 8) {
-                // Estamos en verano, calcular hasta el 31 de enero del año siguiente
-                $finTemporada = new DateTime(($ano + 1) . '-01-31 23:59:59');
-            } else {
-                // Enero, calcular hasta el 31 de enero
-                $finTemporada = new DateTime($ano . '-01-31 23:59:59');
-            }
         } else {
-            // Invierno: calcular hasta el 31 de julio
-            $finTemporada = new DateTime($ano . '-07-31 23:59:59');
+            // Clonar: los consumidores pasan su propio DateTime y no esperan que se les modifique.
+            $fecha = clone $fecha;
         }
-        
-        $diferencia = $fecha->diff($finTemporada);
-        return $diferencia->days + 1; // +1 para incluir el día actual
+
+        $fecha->setTime(0, 0, 0);
+        return $fecha;
+    }
+
+    /**
+     * Calcula los días restantes de la temporada en curso, incluido el día de hoy.
+     *
+     * Devuelve el mismo número a cualquier hora del día (ver normalizarFecha).
+     */
+    public static function calcularDiasRestantesTemporada($fecha = null) {
+        $fecha = self::normalizarFecha($fecha);
+        $temporadaActual = self::obtenerTemporadaActual($fecha);
+
+        $fin = new DateTime($temporadaActual['hasta']);
+        if ($fecha > $fin) {
+            return 0;
+        }
+
+        // +1 para incluir el día actual: si hoy es el último día, queda 1 día de venta.
+        return (int)$fecha->diff($fin)->days + 1;
     }
     
     /**
@@ -106,7 +158,11 @@ class PresupuestoCalculos {
                 // Contexto: Transitando invierno
                 // Proporcional Invierno Actual + Próximo Invierno Completo
                 $diasRestantes = self::calcularDiasRestantesTemporada($fecha);
-                $diasTotales = self::calcularDiasTotalesInvierno();
+                // Los días totales salen de la temporada en curso, que es la que se prorratea.
+                // Antes se calculaban sobre el año calendario actual, que para el verano apuntaba
+                // a la temporada anterior; daba el mismo número por casualidad (agosto-enero son
+                // siempre 184 días) pero describía otro período.
+                $diasTotales = $temporadaActual['dias'];
                 $proporcion = $diasRestantes / $diasTotales;
                 
                 $inviernoActualProporcional = round($ventaInviernoAnterior * $indiceVariacion * $proporcion);
@@ -124,7 +180,7 @@ class PresupuestoCalculos {
             if ($temporadaActual['temporada'] === 'INVIERNO') {
                 // Contexto: Transitando invierno - Proporcional Invierno Actual
                 $diasRestantes = self::calcularDiasRestantesTemporada($fecha);
-                $diasTotales = self::calcularDiasTotalesInvierno();
+                $diasTotales = $temporadaActual['dias'];
                 $proporcion = $diasRestantes / $diasTotales;
                 
                 $ventaProyectada = round($ventaInviernoAnterior * $indiceVariacion * $proporcion);
@@ -164,7 +220,7 @@ class PresupuestoCalculos {
                 // Contexto: Transitando verano
                 // Proporcional Verano Actual + Próximo Verano Completo
                 $diasRestantes = self::calcularDiasRestantesTemporada($fecha);
-                $diasTotales = self::calcularDiasTotalesVerano();
+                $diasTotales = $temporadaActual['dias'];
                 $proporcion = $diasRestantes / $diasTotales;
                 
                 $veranoActualProporcional = round($ventaVeranoAnterior * $indiceVariacion * $proporcion);
@@ -182,7 +238,7 @@ class PresupuestoCalculos {
             if ($temporadaActual['temporada'] === 'VERANO') {
                 // Contexto: Transitando verano - Proporcional Verano Actual
                 $diasRestantes = self::calcularDiasRestantesTemporada($fecha);
-                $diasTotales = self::calcularDiasTotalesVerano();
+                $diasTotales = $temporadaActual['dias'];
                 $proporcion = $diasRestantes / $diasTotales;
                 
                 $ventaProyectada = round($ventaVeranoAnterior * $indiceVariacion * $proporcion);
@@ -219,44 +275,29 @@ class PresupuestoCalculos {
         
         $primeraFila = $datos[0];
         $columnasVenta = [];
-        
-        // Buscar todas las columnas que contienen temporadas
+
+        // Buscar todas las columnas de venta histórica y quedarse con su fecha de inicio.
+        //
+        // Se ordena por la fecha real de comienzo de la temporada y no por el número que
+        // aparece en el nombre. Comparar números no funciona porque cada formato numera
+        // distinto: "VERANO 26" usa el año en que termina y "VER 25-26" el año en que
+        // empieza, así que verano e invierno dejaban de estar en la misma escala y
+        // "VERANO 24-25" se colaba antes que "INVIERNO 24". Además el regex anterior
+        // esperaba un espacio ("VERANO 26") y las columnas reales traen guión bajo
+        // ("VTA_VERANO_26"), por lo que nunca matcheaba y el orden caía a un strcmp que
+        // agrupaba por temporada en vez de intercalar cronológicamente.
         foreach (array_keys($primeraFila) as $columna) {
-            if (preg_match('/(VERANO|INVIERNO)\s*\d{2}(-\d{2})?/', $columna) || 
-                preg_match('/VTA_.*(VERANO|INVIERNO)/', $columna)) {
-                $columnasVenta[] = $columna;
+            $temporada = self::temporadaDeColumna($columna);
+            if ($temporada) {
+                $columnasVenta[] = ['columna' => $columna, 'desde' => $temporada['desde']];
             }
         }
-        
-        // Ordenar las columnas de manera lógica
+
         usort($columnasVenta, function($a, $b) {
-            // Extraer año y temporada (ahora soporta formato XX-XX)
-            preg_match('/(VERANO|INVIERNO)\s*(\d{2})(-\d{2})?/', $a, $matchesA);
-            preg_match('/(VERANO|INVIERNO)\s*(\d{2})(-\d{2})?/', $b, $matchesB);
-            
-            if (empty($matchesA) || empty($matchesB)) {
-                return strcmp($a, $b);
-            }
-            
-            $anoA = (int)$matchesA[2];
-            $anoB = (int)$matchesB[2];
-            $temporadaA = $matchesA[1];
-            $temporadaB = $matchesB[1];
-            
-            // Primero ordenar por año
-            if ($anoA !== $anoB) {
-                return $anoA <=> $anoB;
-            }
-            
-            // Si el año es igual, verano va antes que invierno
-            if ($temporadaA !== $temporadaB) {
-                return $temporadaA === 'VERANO' ? -1 : 1;
-            }
-            
-            return 0;
+            return strcmp($a['desde'], $b['desde']);
         });
-        
-        return $columnasVenta;
+
+        return array_column($columnasVenta, 'columna');
     }
     
     /**
@@ -293,6 +334,12 @@ class PresupuestoCalculos {
         $compraProyectada = self::calcularCompraProyectada($stockProyectado, $ventaProyVerano, $ventaProyInvierno);
         
         return [
+            // Las bases se devuelven junto con el resultado para que la pantalla muestre
+            // exactamente el número desde el que se proyectó. El JS tenía su propia
+            // búsqueda de la columna base, con una lista fija de solo dos años, y cuando
+            // la última venta era más vieja mostraba 0 mientras el cálculo usaba otro valor.
+            'venta_verano_anterior' => $ventaVeranoAnterior,
+            'venta_invierno_anterior' => $ventaInviernoAnterior,
             'venta_proy_verano' => $ventaProyVerano,
             'venta_proy_invierno' => $ventaProyInvierno,
             'compra_proyectada' => $compraProyectada,
@@ -377,34 +424,161 @@ class PresupuestoCalculos {
     }
     
     /**
-     * CORREGIDO: Genera las etiquetas dinámicas para las columnas de venta proyectada
+     * Devuelve la próxima temporada del tipo pedido, a partir de la temporada en curso.
      */
-    public static function generarEtiquetasVentaProyectada($fecha = null) {
-        $temporadaActual = self::obtenerTemporadaActual($fecha);
-        
-        if ($temporadaActual['temporada'] === 'VERANO') {
-            // Si estamos en verano, proyectamos para el próximo verano e invierno
-            $anoVerano = $temporadaActual['ano'] % 100;
-            $anoInvierno = $temporadaActual['ano'] % 100;
-            
-            $proximoVeranoInicial = $anoVerano;
-            $proximoVeranoFinal = ($anoVerano + 1) > 99 ? 0 : ($anoVerano + 1);
-            
-            return [
-                'verano' => 'PROY. VER ' . str_pad($proximoVeranoInicial, 2, '0', STR_PAD_LEFT) . '-' . str_pad($proximoVeranoFinal, 2, '0', STR_PAD_LEFT),
-                'invierno' => 'PROY. INV ' . str_pad($anoInvierno, 2, '0', STR_PAD_LEFT)
-            ];
-        } else {
-            // Si estamos en invierno, proyectamos para el próximo invierno y el verano siguiente
-            $anoInvierno = $temporadaActual['ano'] % 100;
-            $anoVeranoInicial = $anoInvierno;
-            $anoVeranoFinal = ($anoInvierno + 1) > 99 ? 0 : ($anoInvierno + 1);
-            
-            return [
-                'verano' => 'PROY. VER ' . str_pad($anoVeranoInicial, 2, '0', STR_PAD_LEFT) . '-' . str_pad($anoVeranoFinal, 2, '0', STR_PAD_LEFT),
-                'invierno' => 'PROY. INV ' . str_pad($anoInvierno, 2, '0', STR_PAD_LEFT)
-            ];
+    public static function proximaTemporadaDeTipo($temporadaActual, $tipo) {
+        // Si pedimos el mismo tipo que está en curso, la próxima es la del año siguiente:
+        // la actual ya está empezada y su resto se proyecta aparte.
+        if ($temporadaActual['temporada'] === $tipo) {
+            return self::construirTemporada($tipo, $temporadaActual['ano'] + 1);
         }
+
+        return self::temporadaSiguiente($temporadaActual);
+    }
+
+    /**
+     * Describe qué período cubre realmente cada columna de venta proyectada.
+     *
+     * Es la traducción literal de lo que calculan calcularVentaProyectadaVerano() y
+     * calcularVentaProyectadaInvierno(): mismo if/else, mismos contextos. Existe
+     * porque las etiquetas viejas nombraban una sola temporada cuando la columna
+     * podía contener dos (el resto de la que está en curso MÁS la próxima completa),
+     * y en la solapa invierno llegaban a nombrar una temporada que no era la que
+     * estaba sumada. Se descartó poner solo la temporada "principal" y aclarar el
+     * resto en el tooltip: el número de la celda es la suma de los dos tramos, así
+     * que la etiqueta tiene que mostrarlos a los dos.
+     *
+     * @param string $contextoSolapa 'verano' o 'invierno'
+     * @return array columnas 'verano' e 'invierno' + 'objetivo' (temporada que la compra debe cubrir)
+     */
+    public static function obtenerPeriodosProyeccion($fecha = null, $contextoSolapa = 'verano') {
+        $fecha = self::normalizarFecha($fecha);
+        $actual = self::obtenerTemporadaActual($fecha);
+
+        $proximoVerano   = self::proximaTemporadaDeTipo($actual, 'VERANO');
+        $proximoInvierno = self::proximaTemporadaDeTipo($actual, 'INVIERNO');
+
+        // El resto de la temporada en curso arranca hoy, no el día en que empezó la temporada.
+        $resto = array_merge($actual, ['resto' => true, 'desde' => $fecha->format('Y-m-d')]);
+
+        $transitandoVerano = ($actual['temporada'] === 'VERANO');
+        $solapaVerano      = ($contextoSolapa === 'verano');
+
+        if ($transitandoVerano) {
+            // La columna de verano lleva el resto del verano en curso; se le suma el próximo
+            // verano completo solo en la solapa verano, que es la que compra para esa temporada.
+            $tramosVerano   = $solapaVerano ? [$resto, $proximoVerano] : [$resto];
+            $tramosInvierno = [$proximoInvierno];
+        } else {
+            // Transitando invierno: espejo exacto del caso anterior.
+            $tramosVerano   = [$proximoVerano];
+            $tramosInvierno = $solapaVerano ? [$resto] : [$resto, $proximoInvierno];
+        }
+
+        $columnaVerano   = self::describirColumnaProyectada($tramosVerano);
+        $columnaInvierno = self::describirColumnaProyectada($tramosInvierno);
+
+        // La compra tiene que alcanzar hasta el final del horizonte cubierto: la temporada
+        // objetivo es el último tramo completo, porque es la que los contenedores deben llegar a cubrir.
+        $objetivo = ($columnaVerano['hasta'] >= $columnaInvierno['hasta'])
+            ? end($tramosVerano)
+            : end($tramosInvierno);
+
+        return [
+            'verano'   => $columnaVerano,
+            'invierno' => $columnaInvierno,
+            'objetivo' => [
+                'codigo' => $objetivo['codigo'],
+                'desde'  => $objetivo['desde'],
+                'hasta'  => $objetivo['hasta'],
+                'parcial' => !empty($objetivo['resto'])
+            ]
+        ];
+    }
+
+    /**
+     * Arma la etiqueta y el rango de una columna proyectada a partir de sus tramos.
+     * Un tramo marcado como resto se rotula "Resto X": sin eso, una columna que cubre
+     * cuatro meses de temporada se leería como si cubriera la temporada entera.
+     */
+    private static function describirColumnaProyectada($tramos) {
+        $partes = [];
+        $detalle = [];
+
+        foreach ($tramos as $t) {
+            $partes[] = (!empty($t['resto']) ? 'Resto ' : '') . $t['codigo'];
+            $detalle[] = (!empty($t['resto']) ? 'Resto ' : '')
+                . $t['codigo'] . ': '
+                . date('d/m/Y', strtotime($t['desde'])) . ' a ' . date('d/m/Y', strtotime($t['hasta']));
+        }
+
+        return [
+            'etiqueta' => implode(' + ', $partes),
+            'detalle'  => implode(' · ', $detalle),
+            'desde'    => $tramos[0]['desde'],
+            'hasta'    => $tramos[count($tramos) - 1]['hasta'],
+            'tramos'   => $tramos
+        ];
+    }
+
+    /**
+     * Etiquetas de las columnas de venta proyectada.
+     * Se mantiene el nombre y la forma (claves 'verano'/'invierno' con strings) porque
+     * MainController y actualizarHeadersDinamicos() ya las consumían así.
+     */
+    public static function generarEtiquetasVentaProyectada($fecha = null, $contextoSolapa = 'verano') {
+        $periodos = self::obtenerPeriodosProyeccion($fecha, $contextoSolapa);
+
+        return [
+            'verano'           => $periodos['verano']['etiqueta'],
+            'invierno'         => $periodos['invierno']['etiqueta'],
+            'verano_detalle'   => $periodos['verano']['detalle'],
+            'invierno_detalle' => $periodos['invierno']['detalle'],
+            'objetivo'         => $periodos['objetivo']
+        ];
+    }
+
+    /**
+     * Traduce el nombre de una columna histórica del SP a la convención de la app.
+     * VTA_VERANO_26 (01/08/2025 a 31/01/2026) -> "VER 25-26"
+     * VTA_INVIERNO_26 (01/02/2026 a 31/07/2026) -> "INV 26"
+     *
+     * El SP numera el verano por el año en que termina, así que hay que restarle uno
+     * para obtener el año de inicio. Se descartó renombrar las columnas en el SP:
+     * son la clave con la que viajan los datos y romperían a cualquier otro consumidor.
+     */
+    public static function etiquetaColumnaHistorica($columna) {
+        $temporada = self::temporadaDeColumna($columna);
+        return $temporada ? $temporada['codigo'] : $columna;
+    }
+
+    /**
+     * Identifica a qué temporada corresponde el nombre de una columna de venta histórica.
+     * Devuelve null si el nombre no es de una columna de temporada.
+     *
+     * Reconoce los dos formatos que puede traer el SP:
+     *   VTA_VERANO_26 / "VERANO 26"  -> el número es el año en que TERMINA
+     *   "VERANO 25-26"               -> el par es inicio-fin (TEMPORADA_ORIGINAL)
+     * Interpretar el par como si fuera un año suelto era lo que rompía el orden:
+     * tomaba el 25 y lo comparaba contra el 26 de un invierno, que está en otra escala.
+     */
+    public static function temporadaDeColumna($columna) {
+        // Las cantidades pendientes de OC también llevan VERANO/INVIERNO en el nombre
+        // pero no son ventas históricas.
+        if (stripos($columna, 'CANT_PEND_OC') !== false) {
+            return null;
+        }
+
+        // Par inicio-fin: el año de cierre es el segundo.
+        if (preg_match('/(VERANO|INVIERNO)[\s_]*(\d{2})\s*-\s*(\d{2})/i', $columna, $m)) {
+            return self::construirTemporada(strtoupper($m[1]), 2000 + (int)$m[3]);
+        }
+
+        if (preg_match('/(VERANO|INVIERNO)[\s_]*(\d{2})/i', $columna, $m)) {
+            return self::construirTemporada(strtoupper($m[1]), 2000 + (int)$m[2]);
+        }
+
+        return null;
     }
     
     /**
@@ -421,50 +595,27 @@ class PresupuestoCalculos {
     }
 
     /**
-     * CORREGIDA: Función para calcular días totales de verano
-     */
-    private static function calcularDiasTotalesVerano($ano = null) {
-        if (!$ano) {
-            $ano = (int)date('Y');
-        }
-        
-        // Verano: del 1 de agosto del año anterior al 31 de enero del año actual
-        $inicioVerano = new DateTime(($ano - 1) . '-08-01');
-        $finVerano = new DateTime($ano . '-01-31');
-        $diferencia = $finVerano->diff($inicioVerano);
-        return $diferencia->days + 1;
-    }
-
-    /**
-     * CORREGIDA: Función para calcular días totales de invierno
-     */
-    private static function calcularDiasTotalesInvierno($ano = null) {
-        if (!$ano) {
-            $ano = (int)date('Y');
-        }
-        
-        // Invierno: del 1 de febrero al 31 de julio del mismo año
-        $inicioInvierno = new DateTime($ano . '-02-01');
-        $finInvierno = new DateTime($ano . '-07-31');
-        $diferencia = $finInvierno->diff($inicioInvierno);
-        return $diferencia->days + 1;
-    }
-    
-    /**
      * Obtiene información completa de la temporada actual para debugging - MODIFICADA
      */
     public static function obtenerInfoTemporada($fecha = null) {
+        $fecha = self::normalizarFecha($fecha);
         $temporada = self::obtenerTemporadaActual($fecha);
         $diasRestantes = self::calcularDiasRestantesTemporada($fecha);
-        $diasTotales = self::calcularDiasTotalesTemporadaActual($fecha); // NUEVO
-        $etiquetas = self::generarEtiquetasVentaProyectada($fecha);
-        
+        $diasTotales = self::calcularDiasTotalesTemporadaActual($fecha);
+
         return [
             'temporada_actual' => $temporada,
-            'dias_totales' => $diasTotales, // NUEVO
+            'dias_totales' => $diasTotales,
             'dias_restantes' => $diasRestantes,
-            'etiquetas_proyeccion' => $etiquetas,
-            'fecha_calculo' => $fecha ? $fecha->format('Y-m-d') : date('Y-m-d')
+            'etiquetas_proyeccion' => self::generarEtiquetasVentaProyectada($fecha, 'verano'),
+            // Los períodos van por solapa: la misma columna cubre distinto período en cada una.
+            // El JS los usa para rotular los encabezados y para recalcular al editar un índice,
+            // en vez de volver a deducir la temporada con el reloj del navegador.
+            'periodos' => [
+                'verano'   => self::obtenerPeriodosProyeccion($fecha, 'verano'),
+                'invierno' => self::obtenerPeriodosProyeccion($fecha, 'invierno')
+            ],
+            'fecha_calculo' => $fecha->format('Y-m-d')
         ];
     }
 
@@ -490,16 +641,13 @@ class PresupuestoCalculos {
     }
 
     /**
-     * Calcular días totales de la temporada actual
+     * Calcular días totales de la temporada actual.
+     * Los días ya vienen calculados en la temporada; se mantiene el método porque
+     * lo consumen obtenerInfoTemporada() y el encabezado.
      */
     public static function calcularDiasTotalesTemporadaActual($fecha = null) {
         $temporadaActual = self::obtenerTemporadaActual($fecha);
-        
-        if ($temporadaActual['temporada'] === 'VERANO') {
-            return self::calcularDiasTotalesVerano($temporadaActual['ano']);
-        } else {
-            return self::calcularDiasTotalesInvierno($temporadaActual['ano']);
-        }
+        return $temporadaActual['dias'];
     }
 }
 ?>

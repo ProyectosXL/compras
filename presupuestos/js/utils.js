@@ -182,7 +182,12 @@ class UIUtils {
             const ultActElement = document.getElementById('ultima-actualizacion');
 
             if (temporadaElement) {
-                temporadaElement.textContent = `${info.temporada_actual.temporada} ${info.temporada_actual.ano}`;
+                // Código en la convención única de la app ("VER 26-27", "INV 27").
+                // Antes se armaba con temporada + año ("VERANO 2027"), que nombraba el
+                // verano por el año en que termina y no coincidía ni con las columnas
+                // históricas ni con los códigos de oleada de Comercio Exterior.
+                temporadaElement.textContent = info.temporada_actual.codigo;
+                temporadaElement.title = `${UIUtils.formatearFechaCorta(info.temporada_actual.desde)} a ${UIUtils.formatearFechaCorta(info.temporada_actual.hasta)}`;
             }
 
             if (diasTotalesElement && info.dias_totales) {
@@ -215,17 +220,64 @@ class UIUtils {
      * Actualizar headers dinámicos con etiquetas de temporada
      */
     static actualizarHeadersDinamicos(info) {
-        if (info.etiquetas_proyeccion) {
-            const headerVerano = document.getElementById('header-venta-verano');
-            const headerInvierno = document.getElementById('header-venta-invierno');
-            const headerVeranoInv = document.getElementById('header-venta-verano-inv');
-            const headerInviernoInv = document.getElementById('header-venta-invierno-inv');
-            
-            if (headerVerano) headerVerano.textContent = info.etiquetas_proyeccion.verano;
-            if (headerInvierno) headerInvierno.textContent = info.etiquetas_proyeccion.invierno;
-            if (headerVeranoInv) headerVeranoInv.textContent = info.etiquetas_proyeccion.verano;
-            if (headerInviernoInv) headerInviernoInv.textContent = info.etiquetas_proyeccion.invierno;
-        }
+        if (!info || !info.periodos) return;
+
+        // Cada solapa recibe sus propios períodos: la columna "Venta Proy. Verano" cubre
+        // distinto rango en verano que en invierno, así que no se puede usar una sola
+        // etiqueta para las dos. Antes se aplicaba la misma a ambas y, encima, los IDs
+        // estaban duplicados, así que la solapa invierno se quedaba con el texto fijo.
+        UIUtils.aplicarHeadersSolapa('', info.periodos.verano);
+        UIUtils.aplicarHeadersSolapa('-inv', info.periodos.invierno);
+    }
+
+    /**
+     * Rotula los encabezados de una solapa con el período que cubre cada columna.
+     * @param {string} sufijo '' para la solapa verano, '-inv' para la de invierno
+     */
+    static aplicarHeadersSolapa(sufijo, periodos) {
+        if (!periodos) return;
+
+        const proyectadas = [
+            ['header-venta-verano' + sufijo, 'Venta Proy. Verano', periodos.verano],
+            ['header-venta-invierno' + sufijo, 'Venta Proy. Invierno', periodos.invierno]
+        ];
+
+        proyectadas.forEach(([id, titulo, periodo]) => {
+            const th = document.getElementById(id);
+            if (!th || !periodo) return;
+
+            // La etiqueta lleva los dos tramos cuando la columna suma dos (por ejemplo
+            // "Resto VER 26-27 + VER 27-28"): la celda es la suma, así que mostrar una
+            // sola temporada haría leer mal el número.
+            th.innerHTML = `${titulo}<br><span class="fw-normal">${periodo.etiqueta}</span>`;
+            th.title = periodo.detalle;
+        });
+
+        // Las columnas "anterior" nombran la temporada histórica que sirve de base.
+        UIUtils.rotularVentaAnterior('header-venta-verano-ant' + sufijo, 'Venta Ver. Anterior', 'VERANO');
+        UIUtils.rotularVentaAnterior('header-venta-invierno-ant' + sufijo, 'Venta Inv. Anterior', 'INVIERNO');
+    }
+
+    /**
+     * Rotula una columna de venta anterior con la última temporada completa de su tipo,
+     * que es la base desde la que se proyecta.
+     */
+    static rotularVentaAnterior(id, titulo, tipo) {
+        const th = document.getElementById(id);
+        if (!th) return;
+
+        const columnas = (window.presupuestoApp && window.presupuestoApp.columnasHistoricas) || [];
+        const ultima = columnas.filter(c => c.toUpperCase().includes(tipo)).pop();
+        if (!ultima) return;
+
+        th.innerHTML = `${titulo}<br><span class="fw-normal">${TemporadaServidor.etiquetaHistorica(ultima)}</span>`;
+    }
+
+    /** Fecha YYYY-MM-DD a DD/MM/YYYY, para los tooltips. */
+    static formatearFechaCorta(fecha) {
+        if (!fecha) return '';
+        const p = String(fecha).split('-');
+        return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : fecha;
     }
 
     /**

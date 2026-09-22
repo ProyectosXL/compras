@@ -203,12 +203,16 @@ class ExcelExporter {
                 resultado['Índice Ver. Variación'] = parseFloat(item.INDICE_VARIACION || 1).toFixed(2);
                 
                 // Ventas anteriores (lógica robusta)
+                // Los encabezados llevan el período que cubre cada columna, igual que la
+                // pantalla: exportado sin eso, el Excel perdía de qué temporada hablaba.
+                const periodos = ExcelExporter.periodosDeSolapa(solapa);
+
                 resultado['Venta Ver. Anterior'] = ExcelExporter.buscarVentaHistorica(item, 'VERANO');
-                resultado['Proy. Verano'] = item.VENTA_PROY_VERANO || 0;
-                
+                resultado[`Proy. Verano (${periodos.verano})`] = item.VENTA_PROY_VERANO || 0;
+
                 resultado['Índice Inv. Variación'] = parseFloat(item.INDICE_VARIACION_INVIERNO || item.INDICE_VARIACION || 1).toFixed(2);
                 resultado['Venta Inv. Anterior'] = ExcelExporter.buscarVentaHistorica(item, 'INVIERNO');
-                resultado['Proy. Invierno'] = item.VENTA_PROY_INVIERNO || 0;
+                resultado[`Proy. Invierno (${periodos.invierno})`] = item.VENTA_PROY_INVIERNO || 0;
                 
                 resultado['Compra Proyectada'] = item.COMPRA_PROYECTADA || 0;
                 
@@ -218,7 +222,9 @@ class ExcelExporter {
                     'ID', 'RUBRO', 'CATEGORIA', 'CATEGORIA_PADRE', 'DESCRIPCION',
                     'STOCK_PROYECTADO', 'STOCK_ACTUAL', 'INDICE_VAR_ORIGINAL', 'INDICE_VARIACION',
                     'INDICE_VARIACION_INVIERNO', 'COMPRA_PROYECTADA', 'VENTA_PROY_VERANO', 'VENTA_PROY_INVIERNO',
-                    'VTA_VERANO_ACTUAL', 'VTA_INVIERNO_ACTUAL'
+                    'VTA_VERANO_ACTUAL', 'VTA_INVIERNO_ACTUAL',
+                    // Bases del cálculo, ya exportadas como "Venta Ver./Inv. Anterior".
+                    'VENTA_VERANO_ANTERIOR', 'VENTA_INVIERNO_ANTERIOR'
                 ];
 
                 Object.keys(item).forEach(key => {
@@ -228,28 +234,32 @@ class ExcelExporter {
                         !key.startsWith('PROY') &&
                         !isNaN(parseFloat(item[key]))) {
                         
-                        // Limpiar nombre (VTA_VERANO_25 -> VERANO 25)
-                        let nombreLimpio = key.replace('VTA_', '').replace(/_/g, ' ');
-                        
-                        // Aplicar corrección de año visual (si dice 24 es 23) si corresponde
-                        // Esto para que coincida con lo que ves en la tabla HTML
-                        const match = nombreLimpio.match(/^(VERANO|INVIERNO)\s+(\d{2,4})$/i);
-                        if (match) {
-                             const temporada = match[1].toUpperCase();
-                             // Solo aplicamos la corrección de año visual si tu sistema lo requiere
-                             // Como hicimos en TablaRenderer.js
-                             if (temporada === 'VERANO') {
-                                 const anio = parseInt(match[2]);
-                                 nombreLimpio = `${temporada} ${anio - 1}`; 
-                             }
-                        }
-                        
-                        resultado[nombreLimpio.toUpperCase()] = item[key];
+                        // Misma etiqueta que la tabla HTML: la traduce el servidor
+                        // (VTA_VERANO_26 -> "VER 25-26"). Antes acá se repetía a mano el
+                        // parche de restarle 1 al año del verano, y el invierno quedaba
+                        // con otro formato, así que el Excel y la pantalla no coincidían.
+                        resultado[TemporadaServidor.etiquetaHistorica(key)] = item[key];
                     }
                 });
             }
             return resultado;
         });
+    }
+
+    /**
+     * Etiquetas de los períodos proyectados de una solapa, tomadas del servidor.
+     * Si todavía no llegaron, se cae a un rótulo genérico antes que inventar una
+     * temporada que podría no ser la que está sumada en la celda.
+     */
+    static periodosDeSolapa(solapa) {
+        const p = (typeof TemporadaServidor !== 'undefined')
+            ? TemporadaServidor.periodos(solapa === 'invierno' ? 'invierno' : 'verano')
+            : null;
+
+        return {
+            verano: p ? p.verano.etiqueta : 'período no disponible',
+            invierno: p ? p.invierno.etiqueta : 'período no disponible'
+        };
     }
 
     static buscarVentaHistorica(item, temporada) {
