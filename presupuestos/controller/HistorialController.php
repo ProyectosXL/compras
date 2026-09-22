@@ -103,6 +103,37 @@ class HistorialController {
         }
     }
 
+    /**
+     * Elimina una version guardada.
+     *
+     * Dos pasos como marcarOficial: la primera llamada no borra y devuelve
+     * cuantas filas se llevaria y si es la oficial, para poder confirmarlo con
+     * el dato real. Es la unica operacion destructiva del modulo.
+     */
+    public function eliminarVersion() {
+        $datos = json_decode(file_get_contents('php://input'), true);
+
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            $this->jsonResponse(['success' => false, 'message' => 'Error: JSON inválido.'], 400);
+            return;
+        }
+
+        $idCabecera = isset($datos['id_cabecera']) ? (int)$datos['id_cabecera'] : null;
+        $nombre = $datos['nombre_presupuesto'] ?? null;
+
+        if (!$idCabecera && empty($nombre)) {
+            $this->jsonResponse(['success' => false, 'message' => 'Falta indicar qué versión eliminar.'], 400);
+            return;
+        }
+
+        try {
+            $resultado = $this->historial->eliminarVersion($idCabecera, $nombre, !empty($datos['confirmado']));
+            $this->jsonResponse($resultado, $resultado['success'] ? 200 : 400);
+        } catch (Exception $e) {
+            $this->jsonResponse(['success' => false, 'message' => 'Error del servidor: ' . $e->getMessage()], 500);
+        }
+    }
+
     /** Quien marco que version como oficial y cuando. */
     public function historialOficial() {
         try {

@@ -580,13 +580,7 @@ class TablaRenderer {
         }
 
         const html = datos.map(item => {
-            let fechaFormateada = 'Fecha inválida';
-            if (item.fecha_guardado && item.fecha_guardado.date) {
-                const [fecha, hora] = item.fecha_guardado.date.substring(0, 19).split(' ');
-                const [Y, M, D] = fecha.split('-');
-                const [h, m] = hora.split(':');
-                fechaFormateada = `${D}/${M}/${Y} ${h}:${m}`;
-            }
+            const fechaFormateada = FormatoUtils.formatearFechaHora(item.fecha_guardado);
 
             return `
                 <tr>

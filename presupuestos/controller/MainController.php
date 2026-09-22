@@ -401,6 +401,9 @@ class MainController {
             case 'guardar-presupuesto':
             case 'buscar-historial':
             case 'marcar-oficial':
+            // No se llama 'eliminar-version' porque ese nombre ya lo usa
+            // distribución para borrar sus propias versiones.
+            case 'eliminar-version-presupuesto':
                 $this->delegarHistorial($accion);
                 break;
             case 'distribucion-canal':
@@ -590,6 +593,9 @@ class MainController {
                 break;
             case 'marcar-oficial':
                 $historialController->marcarOficial();
+                break;
+            case 'eliminar-version-presupuesto':
+                $historialController->eliminarVersion();
                 break;
             case 'historial-oficial':
                 $historialController->historialOficial();

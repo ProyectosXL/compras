@@ -6,7 +6,27 @@
  * Utilidades para formateo de números y valores
  */
 class FormatoUtils {
-    
+
+    /**
+     * Formatea una fecha/hora que viene del backend como DD/MM/AAAA HH:MM.
+     *
+     * Acepta las dos formas en que puede llegar: el string "2026-07-23 09:53:00"
+     * que manda hoy la API y el objeto {date: "..."} en que PHP serializa un
+     * DateTime crudo. El historial leía solo la segunda y, desde que el servidor
+     * pasó a formatear las fechas antes de responder, mostraba "Fecha inválida"
+     * en todas las filas.
+     */
+    static formatearFechaHora(valor) {
+        if (!valor) return '';
+
+        const texto = typeof valor === 'object' ? (valor.date || '') : String(valor);
+        const m = texto.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/);
+        if (!m) return texto || '';
+
+        const [, Y, M, D, h, min] = m;
+        return `${D}/${M}/${Y} ${h}:${min}`;
+    }
+
     /**
      * Formatear números con separadores de miles
      */

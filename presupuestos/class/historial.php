@@ -378,6 +378,17 @@ class Historial {
                 $params[] = '%' . $filtros['termino'] . '%';
             }
 
+            // Filtro por versión guardada: es el que permite mirar un solo
+            // presupuesto en vez de todo el historial mezclado. Por id cuando hay
+            // cabecera y por nombre para las versiones que todavía no la tienen.
+            if (!empty($filtros['id_cabecera']) && $conCabecera) {
+                $where[] = "d.id_cabecera = ?";
+                $params[] = (int)$filtros['id_cabecera'];
+            } elseif (!empty($filtros['nombre_presupuesto'])) {
+                $where[] = "d.nombre_presupuesto = ?";
+                $params[] = $filtros['nombre_presupuesto'];
+            }
+
             // Filtro por rubro específico
             if (!empty($filtros['rubro'])) {
                 $where[] = "d.rubro = ?";
@@ -442,13 +453,11 @@ class Historial {
             return ['success' => false, 'message' => 'Error de conexión a la base de datos.'];
         }
 
+        // Sin cabecera todavía se listan las versiones agrupando el detalle: así
+        // el panel y el filtro por versión sirven desde el primer día, antes de
+        // correr los scripts. Lo que no se puede en ese modo es marcar oficial.
         if (!$this->hayCabecera()) {
-            return [
-                'success' => true,
-                'data' => [],
-                'sin_cabecera' => true,
-                'message' => 'Esta base todavía no tiene la cabecera de versiones. Correr los scripts de presupuestos/sql/.'
-            ];
+            return $this->listarVersionesSinCabecera();
         }
 
         try {
@@ -492,6 +501,200 @@ class Historial {
             error_log("Error en listarVersiones: " . $e->getMessage());
             return ['success' => false, 'message' => 'Error al listar versiones: ' . $e->getMessage()];
         }
+    }
+
+    /**
+     * Versiones deducidas del detalle, para cuando la base todavia no tiene
+     * cabecera. Mismas claves que listarVersiones() para que el front no tenga
+     * que distinguir un caso del otro.
+     */
+    private function listarVersionesSinCabecera() {
+        $sql = "SELECT nombre_presupuesto,
+                       MAX(temporada) AS solapa,
+                       MAX(pais) AS pais,
+                       MIN(fecha_guardado) AS fecha_guardado,
+                       COUNT(*) AS filas_detalle,
+                       COUNT(DISTINCT ISNULL(rubro,'') + '|' + ISNULL(categoria_padre,'')) AS filas_guardadas
+                  FROM RO_T_HISTORIAL_COMPRAS_PROYECTADAS_PRESUPUESTO
+                 GROUP BY nombre_presupuesto
+                 ORDER BY MIN(fecha_guardado) DESC";
+
+        $stmt = sqlsrv_query($this->cid, $sql);
+        if ($stmt === false) {
+            return ['success' => false, 'message' => print_r(sqlsrv_errors(), true)];
+        }
+
+        $data = [];
+        while ($row = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC)) {
+            if ($row['fecha_guardado'] instanceof DateTime) {
+                $row['fecha_guardado'] = $row['fecha_guardado']->format('Y-m-d H:i:s');
+            }
+
+            $row['id'] = null;               // no hay cabecera a la que apuntar
+            $row['es_oficial'] = 0;
+            $row['es_completa'] = null;      // no se puede saber sin la cabecera
+            $row['filas_totales'] = null;
+            $row['oficial_usuario'] = null;
+            $row['oficial_fecha'] = null;
+
+            $periodos = $this->periodosDe($row['fecha_guardado'], $row['solapa']);
+            $row['temporada_objetivo'] = $periodos ? $periodos['objetivo']['codigo'] : null;
+            $row['temporada_objetivo_desde'] = $periodos ? $periodos['objetivo']['desde'] : null;
+            $row['temporada_objetivo_hasta'] = $periodos ? $periodos['objetivo']['hasta'] : null;
+            $row['temporada_objetivo_derivada'] = true;
+
+            $data[] = $row;
+        }
+        sqlsrv_free_stmt($stmt);
+
+        return [
+            'success' => true,
+            'data' => $data,
+            'sin_cabecera' => true,
+            'message' => 'Todavía no se corrieron los scripts de presupuestos/sql/: '
+                       . 'se puede filtrar y eliminar, pero no marcar una versión como oficial.'
+        ];
+    }
+
+    /** Períodos de una versión a partir de su fecha y su solapa. */
+    private function periodosDe($fecha, $solapa) {
+        if (!$fecha || !$solapa) {
+            return null;
+        }
+        try {
+            return PresupuestoCalculos::obtenerPeriodosProyeccion(
+                substr((string)$fecha, 0, 10),
+                strtolower($solapa) === 'invierno' ? 'invierno' : 'verano'
+            );
+        } catch (Exception $e) {
+            error_log('No se pudo derivar la temporada objetivo: ' . $e->getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Elimina una version guardada: su cabecera, su detalle y su log.
+     *
+     * En dos pasos, igual que marcarOficial(): sin `confirmado` no borra nada y
+     * devuelve que se llevaria puesto, para que la UI lo muestre antes. Es la
+     * unica operacion destructiva del modulo.
+     *
+     * Acepta id de cabecera o nombre, porque las versiones anteriores a la fase 2
+     * —y las de una base donde todavia no se corrieron los scripts— no tienen
+     * cabecera y solo se pueden identificar por nombre.
+     */
+    public function eliminarVersion($idCabecera = null, $nombrePresupuesto = null, $confirmado = false) {
+        if (!$this->cid) {
+            return ['success' => false, 'message' => 'Error de conexión a la base de datos.'];
+        }
+
+        $conCabecera = $this->hayCabecera();
+        $cabecera = null;
+
+        if ($conCabecera && $idCabecera) {
+            $stmt = sqlsrv_query($this->cid,
+                "SELECT id, nombre_presupuesto, temporada_objetivo, es_oficial, pais
+                   FROM RO_T_HISTORIAL_COMPRAS_PROYECTADAS_CABECERA WHERE id = ?", [(int)$idCabecera]);
+            if ($stmt === false) {
+                return ['success' => false, 'message' => print_r(sqlsrv_errors(), true)];
+            }
+            $cabecera = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC);
+            sqlsrv_free_stmt($stmt);
+
+            if (!$cabecera) {
+                return ['success' => false, 'message' => 'No existe la versión indicada.'];
+            }
+            $nombrePresupuesto = $cabecera['nombre_presupuesto'];
+        }
+
+        if (empty($nombrePresupuesto)) {
+            return ['success' => false, 'message' => 'Falta indicar qué versión eliminar.'];
+        }
+
+        // Cuántas filas de detalle se van a borrar. Se cuenta por cabecera cuando
+        // la hay, y por nombre cuando no, que es como están agrupadas las viejas.
+        if ($cabecera) {
+            $stmt = sqlsrv_query($this->cid,
+                "SELECT COUNT(*) AS n FROM RO_T_HISTORIAL_COMPRAS_PROYECTADAS_PRESUPUESTO
+                  WHERE id_cabecera = ?", [(int)$cabecera['id']]);
+        } else {
+            $stmt = sqlsrv_query($this->cid,
+                "SELECT COUNT(*) AS n FROM RO_T_HISTORIAL_COMPRAS_PROYECTADAS_PRESUPUESTO
+                  WHERE nombre_presupuesto = ?", [$nombrePresupuesto]);
+        }
+        if ($stmt === false) {
+            return ['success' => false, 'message' => print_r(sqlsrv_errors(), true)];
+        }
+        $filas = (int)sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC)['n'];
+        sqlsrv_free_stmt($stmt);
+
+        if ($filas === 0 && !$cabecera) {
+            return ['success' => false, 'message' => 'No se encontró esa versión.'];
+        }
+
+        $esOficial = $cabecera ? ((int)$cabecera['es_oficial'] === 1) : false;
+
+        if (!$confirmado) {
+            return [
+                'success' => true,
+                'requiere_confirmacion' => true,
+                'version' => [
+                    'id_cabecera' => $cabecera ? (int)$cabecera['id'] : null,
+                    'nombre' => $nombrePresupuesto,
+                    'filas' => $filas,
+                    'es_oficial' => $esOficial,
+                    'temporada_objetivo' => $cabecera['temporada_objetivo'] ?? null
+                ]
+            ];
+        }
+
+        try {
+            if (sqlsrv_begin_transaction($this->cid) === false) {
+                throw new Exception("No se pudo iniciar la transacción: " . print_r(sqlsrv_errors(), true));
+            }
+
+            // Orden obligado por las claves foráneas: primero lo que apunta a la
+            // cabecera, después la cabecera.
+            if ($cabecera) {
+                $this->ejecutar("DELETE FROM RO_T_HISTORIAL_COMPRAS_PROYECTADAS_PRESUPUESTO WHERE id_cabecera = ?",
+                    [(int)$cabecera['id']], 'detalle');
+                $this->ejecutar("DELETE FROM RO_T_HISTORIAL_COMPRAS_PROYECTADAS_OFICIAL_LOG WHERE id_cabecera = ?",
+                    [(int)$cabecera['id']], 'log de oficial');
+                $this->ejecutar("DELETE FROM RO_T_HISTORIAL_COMPRAS_PROYECTADAS_CABECERA WHERE id = ?",
+                    [(int)$cabecera['id']], 'cabecera');
+            } else {
+                // Sin cabecera: se borra por nombre, que es como se agrupan las
+                // versiones viejas. Se excluyen las filas que ya tienen cabecera
+                // para no llevarse por delante otra versión del mismo nombre.
+                $where = $conCabecera ? " AND id_cabecera IS NULL" : "";
+                $this->ejecutar("DELETE FROM RO_T_HISTORIAL_COMPRAS_PROYECTADAS_PRESUPUESTO
+                                  WHERE nombre_presupuesto = ?" . $where,
+                    [$nombrePresupuesto], 'detalle');
+            }
+
+            sqlsrv_commit($this->cid);
+
+            return [
+                'success' => true,
+                'message' => "Se eliminó '{$nombrePresupuesto}' ({$filas} fila"
+                           . ($filas === 1 ? '' : 's') . ")."
+                           . ($esOficial ? ' Era la versión oficial: no quedó ninguna vigente para esa temporada.' : '')
+            ];
+
+        } catch (Exception $e) {
+            @sqlsrv_rollback($this->cid);
+            error_log("Error en eliminarVersion: " . $e->getMessage());
+            return ['success' => false, 'message' => 'Error al eliminar la versión: ' . $e->getMessage()];
+        }
+    }
+
+    /** Ejecuta una sentencia dentro de la transacción y aborta si falla. */
+    private function ejecutar($sql, $params, $que) {
+        $stmt = sqlsrv_query($this->cid, $sql, $params);
+        if ($stmt === false) {
+            throw new Exception("Al borrar el $que: " . print_r(sqlsrv_errors(), true));
+        }
+        sqlsrv_free_stmt($stmt);
     }
 
     /**

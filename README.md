@@ -179,7 +179,17 @@ a que queden desincronizados).
 | `api.php?accion=buscar-historial`   | POST   | Busca en el historial de presupuestos guardados. |
 | `api.php?accion=versiones-presupuesto` | GET | Lista las versiones guardadas (una fila por versión). |
 | `api.php?accion=marcar-oficial`     | POST   | Marca una versión como oficial. Sin `confirmado` no escribe: devuelve cuál reemplazaría. |
+| `api.php?accion=eliminar-version-presupuesto` | POST | Elimina una versión (cabecera + detalle + log). Sin `confirmado` no borra: devuelve cuántas filas se llevaría y si es la oficial. |
 | `api.php?accion=historial-oficial`  | GET    | Quién marcó qué versión como oficial y cuándo. |
+
+`buscar-historial` acepta además `id_cabecera` o `nombre_presupuesto` para ver **una sola
+versión** en lugar de todo el historial.
+
+> ⚠️ **Zona horaria.** El `php.ini` de XAMPP viene con `Europe/Berlin`, cinco horas
+> adelante de Argentina: a partir de las 19:00 hora local PHP ya estaba en el día
+> siguiente, lo que corría la fecha de cálculo y con ella los días restantes de temporada.
+> `presupuestos/api.php` e `index.php` fijan `America/Argentina/Buenos_Aires`. Si se agrega
+> otro punto de entrada al módulo, tiene que hacer lo mismo.
 
 Los endpoints de compra proyectada devuelven, además de `data`:
 

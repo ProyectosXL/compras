@@ -26,10 +26,52 @@ class HistorialManager {
                 HistorialManager.cargarVersiones();
             }
 
+            if (target.id === 'btn-limpiar-historial') {
+                HistorialManager.limpiarFiltros();
+            }
+
             if (target.dataset.accionVersion === 'marcar-oficial') {
                 HistorialManager.marcarOficial(parseInt(target.dataset.idCabecera, 10));
             }
+
+            if (target.dataset.accionVersion === 'eliminar') {
+                HistorialManager.eliminarVersion(
+                    target.dataset.idCabecera ? parseInt(target.dataset.idCabecera, 10) : null,
+                    target.dataset.nombre
+                );
+            }
+
+            if (target.dataset.accionVersion === 'ver') {
+                HistorialManager.verSoloEstaVersion(target.dataset.clave);
+            }
         });
+
+        // Cambiar el filtro de versión busca directamente: es el uso principal
+        // de la solapa (mirar un presupuesto guardado), no hace falta el botón.
+        document.body.addEventListener('change', (event) => {
+            if (event.target && event.target.id === 'filtro-version-historial') {
+                HistorialManager.buscarHistorial();
+            }
+        });
+    }
+
+    /** Deja el historial sin filtros y vuelve a buscar. */
+    static limpiarFiltros() {
+        ['search-historial', 'filtro-rubro-historial', 'filtro-categoria-historial',
+         'filtro-fecha-desde-historial', 'filtro-fecha-hasta-historial',
+         'filtro-version-historial'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.value = '';
+        });
+        HistorialManager.buscarHistorial();
+    }
+
+    /** Filtra el detalle por una versión y baja a la tabla. */
+    static verSoloEstaVersion(clave) {
+        const select = document.getElementById('filtro-version-historial');
+        if (!select) return;
+        select.value = clave;
+        HistorialManager.buscarHistorial();
     }
 
     /**
@@ -78,40 +120,153 @@ class HistorialManager {
 
         tbody.innerHTML = versiones.map(v => {
             const oficial = parseInt(v.es_oficial, 10) === 1;
-            const completa = parseInt(v.es_completa, 10) === 1;
+            const completa = v.es_completa !== null && parseInt(v.es_completa, 10) === 1;
+            const clave = v.id ? `id:${v.id}` : `nombre:${v.nombre_presupuesto}`;
+            const nombre = (v.nombre_presupuesto || '').replace(/"/g, '&quot;');
 
             // Una parcial no puede ser oficial: en vez de dejar el botón y que el
             // servidor lo rechace, se explica por qué no se puede.
-            const accion = oficial
-                ? '<span class="text-success small"><i class="fas fa-check me-1"></i>Vigente</span>'
-                : (completa
-                    ? `<button class="btn btn-outline-success btn-sm"
-                               data-accion-version="marcar-oficial" data-id-cabecera="${v.id}">
-                         <i class="fas fa-flag me-1"></i>Marcar oficial
-                       </button>`
-                    : '<span class="text-muted small" title="Solo una versión completa puede ser oficial">Parcial</span>');
+            let oficialCel;
+            if (oficial) {
+                oficialCel = '<span class="text-success small"><i class="fas fa-flag me-1"></i>Vigente</span>';
+            } else if (v.es_completa === null) {
+                oficialCel = '<span class="text-muted small" title="Hay que correr los scripts de presupuestos/sql/">—</span>';
+            } else if (completa) {
+                oficialCel = `<button class="btn btn-outline-success btn-sm"
+                                      data-accion-version="marcar-oficial" data-id-cabecera="${v.id}"
+                                      title="Marcar como la versión vigente de esta temporada">
+                                <i class="fas fa-flag"></i>
+                              </button>`;
+            } else {
+                oficialCel = '<span class="text-muted small" title="Solo una versión completa puede ser oficial">—</span>';
+            }
+
+            let alcance;
+            if (v.es_completa === null) {
+                alcance = `<span class="badge bg-light text-dark">${v.filas_guardadas || v.filas_detalle} filas</span>`;
+            } else if (completa) {
+                alcance = '<span class="badge bg-primary">Completa</span>';
+            } else {
+                alcance = `<span class="badge bg-warning text-dark">Parcial ${v.filas_guardadas}/${v.filas_totales || '?'}</span>`;
+            }
 
             return `
                 <tr class="${oficial ? 'table-success' : ''}">
-                    <td class="small">${(v.fecha_guardado || '').substring(0, 16)}</td>
+                    <td class="small">${FormatoUtils.formatearFechaHora(v.fecha_guardado)}</td>
                     <td class="small">${v.nombre_presupuesto || ''}</td>
                     <td><span class="badge bg-secondary">${v.solapa || ''}</span></td>
                     <td><span class="badge bg-info text-dark"
                               title="${v.temporada_objetivo_desde || ''} a ${v.temporada_objetivo_hasta || ''}">
                             ${v.temporada_objetivo || 's/d'}</span></td>
-                    <td class="text-center small">
-                        ${completa
-                            ? '<span class="badge bg-primary">Completa</span>'
-                            : `<span class="badge bg-warning text-dark">Parcial ${v.filas_guardadas}/${v.filas_totales || '?'}</span>`}
-                    </td>
-                    <td class="text-center">${oficial ? '<i class="fas fa-flag text-success"></i>' : ''}</td>
+                    <td class="text-center small">${alcance}</td>
+                    <td class="text-center">${oficialCel}</td>
                     <td class="small">${v.oficial_usuario || (oficial ? 'sin usuario' : '')}
-                        ${oficial && v.oficial_fecha ? '<br><span class="text-muted">' + v.oficial_fecha.substring(0, 16) + '</span>' : ''}</td>
-                    <td class="text-end">${accion}</td>
+                        ${oficial && v.oficial_fecha ? '<br><span class="text-muted">' + FormatoUtils.formatearFechaHora(v.oficial_fecha) + '</span>' : ''}</td>
+                    <td class="text-end text-nowrap">
+                        <button class="btn btn-outline-primary btn-sm me-1"
+                                data-accion-version="ver" data-clave="${clave}"
+                                title="Ver solo este presupuesto en el detalle de abajo">
+                            <i class="fas fa-filter"></i>
+                        </button>
+                        <button class="btn btn-outline-danger btn-sm"
+                                data-accion-version="eliminar"
+                                data-id-cabecera="${v.id || ''}" data-nombre="${nombre}"
+                                title="Eliminar esta versión">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </td>
                 </tr>`;
         }).join('');
 
         if (contador) contador.textContent = `${versiones.length} versiones`;
+        HistorialManager.poblarFiltroVersiones(versiones);
+    }
+
+    /**
+     * Llena el select de versiones del filtro, conservando lo que estuviera
+     * elegido para que recargar la lista no descarte el filtro activo.
+     */
+    static poblarFiltroVersiones(versiones) {
+        const select = document.getElementById('filtro-version-historial');
+        if (!select) return;
+
+        const elegido = select.value;
+        select.innerHTML = '<option value="">Todos los presupuestos guardados</option>'
+            + (versiones || []).map(v => {
+                const clave = v.id ? `id:${v.id}` : `nombre:${v.nombre_presupuesto}`;
+                const fecha = FormatoUtils.formatearFechaHora(v.fecha_guardado);
+                const oficial = parseInt(v.es_oficial, 10) === 1 ? ' ★' : '';
+                return `<option value="${clave}">${v.nombre_presupuesto} — ${fecha}${oficial}</option>`;
+            }).join('');
+
+        if (elegido && select.querySelector(`option[value="${CSS.escape(elegido)}"]`)) {
+            select.value = elegido;
+        }
+    }
+
+    /**
+     * Elimina una versión guardada.
+     *
+     * Dos llamadas: la primera no borra y devuelve cuántas filas se llevaría y si
+     * es la oficial, para confirmarlo con el dato real del servidor.
+     */
+    static async eliminarVersion(idCabecera, nombre) {
+        UIUtils.mostrarLoading(true);
+        try {
+            const cuerpo = { id_cabecera: idCabecera || null, nombre_presupuesto: nombre || null };
+            const previa = await APIClient.llamarAPI('eliminar-version-presupuesto', {}, 'POST', cuerpo);
+
+            if (!previa.success) {
+                throw new Error(previa.message || 'No se pudo eliminar la versión.');
+            }
+
+            UIUtils.mostrarLoading(false);
+
+            const v = previa.version;
+            const aviso = v.es_oficial
+                ? `<div class="alert alert-danger p-2 mb-2">
+                     <i class="fas fa-flag me-1"></i>Es la versión <strong>oficial</strong>
+                     de <strong>${v.temporada_objetivo}</strong>. Si la borrás, esa temporada
+                     queda sin ninguna versión vigente.
+                   </div>`
+                : '';
+
+            const confirmado = await UIUtils.confirmarAccion(
+                'Eliminar versión guardada',
+                `${aviso}
+                 <p>Se va a borrar <strong>${v.nombre}</strong> y sus
+                 <strong>${v.filas}</strong> fila${v.filas === 1 ? '' : 's'} de detalle.</p>
+                 <p class="mb-0 text-danger"><strong>No se puede deshacer.</strong></p>`,
+                'danger'
+            );
+
+            if (!confirmado) return;
+
+            UIUtils.mostrarLoading(true);
+            const respuesta = await APIClient.llamarAPI('eliminar-version-presupuesto', {}, 'POST',
+                Object.assign({ confirmado: true }, cuerpo));
+
+            if (!respuesta.success) {
+                throw new Error(respuesta.message || 'No se pudo eliminar la versión.');
+            }
+
+            UIUtils.mostrarAlerta(respuesta.message, 'success');
+
+            // Si el filtro apuntaba a la versión borrada, se limpia antes de
+            // recargar: si no, la tabla quedaría vacía sin explicación.
+            const select = document.getElementById('filtro-version-historial');
+            const clave = idCabecera ? `id:${idCabecera}` : `nombre:${nombre}`;
+            if (select && select.value === clave) select.value = '';
+
+            await HistorialManager.cargarVersiones();
+            await HistorialManager.buscarHistorial();
+
+        } catch (error) {
+            console.error('Error al eliminar la versión:', error);
+            UIUtils.mostrarAlerta(`Error: ${error.message}`, 'error');
+        } finally {
+            UIUtils.mostrarLoading(false);
+        }
     }
 
     /**
@@ -352,12 +507,20 @@ class HistorialManager {
     static async buscarHistorial() {
         UIUtils.mostrarLoading(true);
         try {
+            const valor = (id) => (document.getElementById(id) || {}).value || '';
+
+            // El select de versión guarda "id:<n>" cuando hay cabecera y
+            // "nombre:<texto>" cuando no, porque las versiones viejas solo se
+            // pueden identificar por nombre.
+            const version = valor('filtro-version-historial');
             const filtros = {
-                termino: document.getElementById('search-historial').value,
-                rubro: document.getElementById('filtro-rubro-historial').value,
-                categoria: document.getElementById('filtro-categoria-historial').value,
-                fecha_desde: document.getElementById('filtro-fecha-desde-historial').value,
-                fecha_hasta: document.getElementById('filtro-fecha-hasta-historial').value
+                termino: valor('search-historial'),
+                rubro: valor('filtro-rubro-historial'),
+                categoria: valor('filtro-categoria-historial'),
+                fecha_desde: valor('filtro-fecha-desde-historial'),
+                fecha_hasta: valor('filtro-fecha-hasta-historial'),
+                id_cabecera: version.startsWith('id:') ? version.slice(3) : null,
+                nombre_presupuesto: version.startsWith('nombre:') ? version.slice(7) : null
             };
 
             const respuesta = await APIClient.llamarAPI('buscar-historial', {}, 'POST', filtros);

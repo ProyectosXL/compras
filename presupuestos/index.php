@@ -1,6 +1,10 @@
 
 <?php
 // presupuestos/index.php - Archivo principal simplificado
+
+// Misma zona horaria que api.php: el php.ini de XAMPP viene en Europe/Berlin y
+// deja al servidor cinco horas adelante. Ver el comentario en api.php.
+date_default_timezone_set('America/Argentina/Buenos_Aires');
 ?>
 <!DOCTYPE html>
 <html lang="es">

@@ -3,29 +3,40 @@
     <div class="search-container">
         <!-- Fila de Filtros -->
         <div class="row align-items-center mb-2">
+            <!-- Filtro por versión guardada: sin esto el historial mezcla todos
+                 los presupuestos y no hay forma de mirar uno solo. Se puebla al
+                 cargar las versiones y también se setea al hacer clic en una. -->
             <div class="col-md-3">
+                <select class="form-select" id="filtro-version-historial">
+                    <option value="">Todos los presupuestos guardados</option>
+                </select>
+            </div>
+            <div class="col-md-2">
                 <div class="input-group">
                     <span class="input-group-text"><i class="fas fa-search"></i></span>
-                    <input type="text" class="form-control" id="search-historial" placeholder="Buscar en rubro o categoría...">
+                    <input type="text" class="form-control" id="search-historial" placeholder="Rubro o categoría...">
                 </div>
             </div>
             <div class="col-md-2">
                 <input type="text" class="form-control" id="filtro-rubro-historial" placeholder="Filtrar por rubro...">
             </div>
             <div class="col-md-2">
-                <input type="text" class="form-control" id="filtro-categoria-historial" placeholder="Filtrar por categoría...">
+                <input type="date" class="form-control" id="filtro-fecha-desde-historial" title="Guardado desde">
             </div>
             <div class="col-md-2">
-                <input type="date" class="form-control" id="filtro-fecha-desde-historial">
+                <input type="date" class="form-control" id="filtro-fecha-hasta-historial" title="Guardado hasta">
             </div>
-            <div class="col-md-2">
-                <input type="date" class="form-control" id="filtro-fecha-hasta-historial">
-            </div>
-            <div class="col-md-1">
-                <button class="btn btn-primary" id="btn-buscar-historial">
-                    <i class="fas fa-search me-1"></i> Buscar
+            <div class="col-md-1 d-flex gap-1">
+                <button class="btn btn-primary" id="btn-buscar-historial" title="Buscar">
+                    <i class="fas fa-search"></i>
+                </button>
+                <button class="btn btn-outline-secondary" id="btn-limpiar-historial" title="Limpiar filtros">
+                    <i class="fas fa-eraser"></i>
                 </button>
             </div>
+            <!-- Se saca el filtro por categoría de la fila para hacerle lugar al
+                 de versión: el buscador de texto ya busca en rubro y categoría. -->
+            <input type="hidden" id="filtro-categoria-historial" value="">
         </div>
     </div>
 

@@ -35,6 +35,11 @@ if (PHP_SAPI !== 'cli') {
     die("Este script se corre por linea de comandos.\n");
 }
 
+// Misma zona horaria que la aplicación: el php.ini de XAMPP viene en
+// Europe/Berlin y deja al servidor cinco horas adelante, lo que correría la
+// temporada objetivo deducida de las versiones guardadas cerca de medianoche.
+date_default_timezone_set('America/Argentina/Buenos_Aires');
+
 require_once __DIR__ . '/../../class/conexion.php';
 require_once __DIR__ . '/../class/presupuestoCalculos.php';
 
