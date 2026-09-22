@@ -58,7 +58,11 @@ class ProcesadorDatos {
                     'VENTA_INVIERNO_ANTERIOR' => round($calculosCompra['venta_invierno_anterior'], 0),
                     'VENTA_PROY_VERANO' => round($calculosCompra['venta_proy_verano'], 0),
                     'VENTA_PROY_INVIERNO' => round($calculosCompra['venta_proy_invierno'], 0),
-                    'COMPRA_PROYECTADA' => round($calculosCompra['compra_proyectada'], 0)
+                    'COMPRA_PROYECTADA' => round($calculosCompra['compra_proyectada'], 0),
+                    // Compra abierta por tramo. Viaja con la fila para que la pantalla,
+                    // el Excel y el guardado usen el mismo reparto que calculó el servidor,
+                    // en vez de que cada uno lo rehaga por su cuenta.
+                    'TRAMOS' => $calculosCompra['tramos']
                 ];
 
                 // Agregar columnas de ventas históricas de forma controlada
@@ -126,7 +130,11 @@ class ProcesadorDatos {
                     'VENTA_INVIERNO_ANTERIOR' => round($calculosCompra['venta_invierno_anterior'], 0),
                     'VENTA_PROY_VERANO' => round($calculosCompra['venta_proy_verano'], 0),
                     'VENTA_PROY_INVIERNO' => round($calculosCompra['venta_proy_invierno'], 0),
-                    'COMPRA_PROYECTADA' => round($calculosCompra['compra_proyectada'], 0)
+                    'COMPRA_PROYECTADA' => round($calculosCompra['compra_proyectada'], 0),
+                    // Compra abierta por tramo. Viaja con la fila para que la pantalla,
+                    // el Excel y el guardado usen el mismo reparto que calculó el servidor,
+                    // en vez de que cada uno lo rehaga por su cuenta.
+                    'TRAMOS' => $calculosCompra['tramos']
                 ];
 
                 // Agregar columnas de ventas históricas de forma controlada
@@ -282,7 +290,9 @@ class ProcesadorDatos {
             'VENTA_INVIERNO_ANTERIOR' => round($calculosCompra['venta_invierno_anterior'], 0),
             'VENTA_PROY_VERANO' => round($calculosCompra['venta_proy_verano'], 0),
             'VENTA_PROY_INVIERNO' => round($calculosCompra['venta_proy_invierno'], 0),
-            'COMPRA_PROYECTADA' => round($calculosCompra['compra_proyectada'], 0)
+            'COMPRA_PROYECTADA' => round($calculosCompra['compra_proyectada'], 0),
+            // Ver el comentario equivalente en procesarDatosCompraVerano().
+            'TRAMOS' => $calculosCompra['tramos']
         ]);
     }
 
@@ -307,7 +317,9 @@ class ProcesadorDatos {
             'VENTA_INVIERNO_ANTERIOR' => round($calculosCompra['venta_invierno_anterior'], 0),
             'VENTA_PROY_VERANO' => round($calculosCompra['venta_proy_verano'], 0),
             'VENTA_PROY_INVIERNO' => round($calculosCompra['venta_proy_invierno'], 0),
-            'COMPRA_PROYECTADA' => round($calculosCompra['compra_proyectada'], 0)
+            'COMPRA_PROYECTADA' => round($calculosCompra['compra_proyectada'], 0),
+            // Ver el comentario equivalente en procesarDatosCompraVerano().
+            'TRAMOS' => $calculosCompra['tramos']
         ]);
     }
 

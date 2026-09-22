@@ -134,123 +134,79 @@ class PresupuestoCalculos {
     }
     
     /**
-     * CORREGIDO: Calcula la venta proyectada para INVIERNO según contexto de temporada
+     * Venta proyectada de UN tramo, con el redondeo aplicado a ese tramo.
+     *
+     * Es la unidad mínima del cálculo: un tramo completo proyecta la venta anterior
+     * por su índice, y un resto de temporada la prorratea por los días que quedan.
+     * El redondeo va acá, por tramo, y NO sobre la suma: así el total de una columna
+     * es exactamente la suma de los números que se muestran y se guardan por tramo.
+     * Sumar primero y redondear después habría dejado los tramos sin cerrar contra
+     * su propio total por uno o dos unidades.
+     */
+    public static function ventaProyectadaDeTramo($tramo, $ventaAnterior, $indice, $diasRestantes, $diasTotales) {
+        $ventaAnterior = (float)$ventaAnterior;
+        $indice = (float)$indice;
+
+        if (empty($tramo['resto'])) {
+            return (float)round($ventaAnterior * $indice);
+        }
+
+        // Un resto sin días totales no se puede prorratear; se trata como vacío antes
+        // que dividir por cero.
+        if ((int)$diasTotales <= 0) {
+            return 0.0;
+        }
+
+        return (float)round($ventaAnterior * $indice * ($diasRestantes / $diasTotales));
+    }
+
+    /**
+     * Suma de la venta proyectada de una columna ('verano' o 'invierno').
+     *
+     * Única definición de las dos columnas proyectadas: los tramos salen de
+     * obtenerPeriodosProyeccion(), que ya sabía qué cubre cada columna en cada
+     * solapa. Antes esta cuenta estaba escrita dos veces —acá con un if/else por
+     * contexto y allá como lista de tramos— y nada garantizaba que describieran lo
+     * mismo. Ahora el total ES la suma de los tramos, por construcción, que es lo
+     * que permite guardar el detalle por tramo sin que deje de cerrar con el total.
+     */
+    private static function sumarColumnaProyectada($columna, $ventaAnterior, $indice, $fecha, $contextoSolapa) {
+        $ventaAnterior = (float)$ventaAnterior;
+        $indice = (float)$indice;
+
+        if ($ventaAnterior <= 0) {
+            return 0;
+        }
+        if ($indice <= 0) {
+            $indice = 1.0; // Valor por defecto
+        }
+
+        $periodos = self::obtenerPeriodosProyeccion($fecha, $contextoSolapa);
+        $diasRestantes = self::calcularDiasRestantesTemporada($fecha);
+        $diasTotales = self::obtenerTemporadaActual($fecha)['dias'];
+
+        $total = 0;
+        foreach ($periodos[$columna]['tramos'] as $tramo) {
+            $total += self::ventaProyectadaDeTramo($tramo, $ventaAnterior, $indice, $diasRestantes, $diasTotales);
+        }
+
+        return $total;
+    }
+
+    /**
+     * Venta proyectada de la columna INVIERNO, según la solapa desde la que se mira.
+     * La descripción del período está en obtenerPeriodosProyeccion(): acá solo se suma.
      */
     public static function calcularVentaProyectadaInvierno($ventaInviernoAnterior, $indiceVariacion, $fecha = null, $contextoSolapa = 'invierno') {
-        // Validar datos de entrada
-        $ventaInviernoAnterior = (float)$ventaInviernoAnterior;
-        $indiceVariacion = (float)$indiceVariacion;
-        
-        if ($ventaInviernoAnterior <= 0) {
-            error_log("Venta invierno anterior es 0 o negativa: $ventaInviernoAnterior");
-            return 0;
-        }
-        
-        if ($indiceVariacion <= 0) {
-            $indiceVariacion = 1.0; // Valor por defecto
-        }
-        
-        $temporadaActual = self::obtenerTemporadaActual($fecha);
-        
-        if ($contextoSolapa === 'invierno') {
-            // SOLAPA COMPRA PROYECTADA INVIERNO
-            if ($temporadaActual['temporada'] === 'INVIERNO') {
-                // Contexto: Transitando invierno
-                // Proporcional Invierno Actual + Próximo Invierno Completo
-                $diasRestantes = self::calcularDiasRestantesTemporada($fecha);
-                // Los días totales salen de la temporada en curso, que es la que se prorratea.
-                // Antes se calculaban sobre el año calendario actual, que para el verano apuntaba
-                // a la temporada anterior; daba el mismo número por casualidad (agosto-enero son
-                // siempre 184 días) pero describía otro período.
-                $diasTotales = $temporadaActual['dias'];
-                $proporcion = $diasRestantes / $diasTotales;
-                
-                $inviernoActualProporcional = round($ventaInviernoAnterior * $indiceVariacion * $proporcion);
-                $proximoInviernoCompleto = round($ventaInviernoAnterior * $indiceVariacion);
-                $ventaProyectada = $inviernoActualProporcional + $proximoInviernoCompleto;
-                
-                error_log("INVIERNO PHP (Solapa Inv - Transitando Inv): Proporcional ($inviernoActualProporcional) + Completo ($proximoInviernoCompleto) = $ventaProyectada");
-            } else {
-                // Contexto: Transitando verano - Próximo Invierno Completo
-                $ventaProyectada = round($ventaInviernoAnterior * $indiceVariacion);
-                error_log("INVIERNO PHP (Solapa Inv - Transitando Ver): Próximo completo = $ventaProyectada");
-            }
-        } else {
-            // SOLAPA COMPRA PROYECTADA VERANO
-            if ($temporadaActual['temporada'] === 'INVIERNO') {
-                // Contexto: Transitando invierno - Proporcional Invierno Actual
-                $diasRestantes = self::calcularDiasRestantesTemporada($fecha);
-                $diasTotales = $temporadaActual['dias'];
-                $proporcion = $diasRestantes / $diasTotales;
-                
-                $ventaProyectada = round($ventaInviernoAnterior * $indiceVariacion * $proporcion);
-                error_log("INVIERNO PHP (Solapa Ver - Transitando Inv): Proporcional = $ventaProyectada");
-            } else {
-                // Contexto: Transitando verano - Próximo Invierno Completo
-                $ventaProyectada = round($ventaInviernoAnterior * $indiceVariacion);
-                error_log("INVIERNO PHP (Solapa Ver - Transitando Ver): Próximo completo = $ventaProyectada");
-            }
-        }
-        
-        return $ventaProyectada;
+        return self::sumarColumnaProyectada('invierno', $ventaInviernoAnterior, $indiceVariacion, $fecha, $contextoSolapa);
     }
-    
-    /*
-    * CORREGIDO: Calcula la venta proyectada para VERANO según contexto de temporada
-    */
+
+    /**
+     * Venta proyectada de la columna VERANO, según la solapa desde la que se mira.
+     * Espejo exacto de calcularVentaProyectadaInvierno().
+     */
     public static function calcularVentaProyectadaVerano($ventaVeranoAnterior, $indiceVariacion, $fecha = null, $contextoSolapa = 'verano') {
-        // Validar datos de entrada
-        $ventaVeranoAnterior = (float)$ventaVeranoAnterior;
-        $indiceVariacion = (float)$indiceVariacion;
-        
-        if ($ventaVeranoAnterior <= 0) {
-            error_log("Venta verano anterior es 0 o negativa: $ventaVeranoAnterior");
-            return 0;
-        }
-        
-        if ($indiceVariacion <= 0) {
-            $indiceVariacion = 1.0; // Valor por defecto
-        }
-        
-        $temporadaActual = self::obtenerTemporadaActual($fecha);
-        
-        if ($contextoSolapa === 'verano') {
-            // SOLAPA COMPRA PROYECTADA VERANO
-            if ($temporadaActual['temporada'] === 'VERANO') {
-                // Contexto: Transitando verano
-                // Proporcional Verano Actual + Próximo Verano Completo
-                $diasRestantes = self::calcularDiasRestantesTemporada($fecha);
-                $diasTotales = $temporadaActual['dias'];
-                $proporcion = $diasRestantes / $diasTotales;
-                
-                $veranoActualProporcional = round($ventaVeranoAnterior * $indiceVariacion * $proporcion);
-                $proximoVeranoCompleto = round($ventaVeranoAnterior * $indiceVariacion);
-                $ventaProyectada = $veranoActualProporcional + $proximoVeranoCompleto;
-                
-                error_log("VERANO PHP (Solapa Ver - Transitando Ver): Proporcional ($veranoActualProporcional) + Completo ($proximoVeranoCompleto) = $ventaProyectada");
-            } else {
-                // Contexto: Transitando invierno - Próximo Verano Completo
-                $ventaProyectada = round($ventaVeranoAnterior * $indiceVariacion);
-                error_log("VERANO PHP (Solapa Ver - Transitando Inv): Próximo completo = $ventaProyectada");
-            }
-        } else {
-            // SOLAPA COMPRA PROYECTADA INVIERNO
-            if ($temporadaActual['temporada'] === 'VERANO') {
-                // Contexto: Transitando verano - Proporcional Verano Actual
-                $diasRestantes = self::calcularDiasRestantesTemporada($fecha);
-                $diasTotales = $temporadaActual['dias'];
-                $proporcion = $diasRestantes / $diasTotales;
-                
-                $ventaProyectada = round($ventaVeranoAnterior * $indiceVariacion * $proporcion);
-                error_log("VERANO PHP (Solapa Inv - Transitando Ver): Proporcional = $ventaProyectada");
-            } else {
-                // Contexto: Transitando invierno - Próximo Verano Completo
-                $ventaProyectada = round($ventaVeranoAnterior * $indiceVariacion);
-                error_log("VERANO PHP (Solapa Inv - Transitando Inv): Próximo completo = $ventaProyectada");
-            }
-        }
-        
-        return $ventaProyectada;
+        return self::sumarColumnaProyectada('verano', $ventaVeranoAnterior, $indiceVariacion, $fecha, $contextoSolapa);
     }
     
     /**
@@ -335,7 +291,15 @@ class PresupuestoCalculos {
         
         // Calcular compra proyectada
         $compraProyectada = self::calcularCompraProyectada($stockProyectado, $ventaProyVerano, $ventaProyInvierno);
-        
+
+        // Y el mismo número abierto por tramo, que es lo que el cashflow necesita:
+        // lo de INV 27 y lo de VER 27-28 llegan en contenedores distintos y se pagan
+        // en meses distintos, así que un solo total no alcanza para proyectar pagos.
+        $tramos = self::calcularTramosDeFila(
+            $stockProyectado, $ventaVeranoAnterior, $indiceVariacion,
+            $ventaInviernoAnterior, $indiceVariacionInvierno, $fecha, $contextoSolapa
+        );
+
         return [
             // Las bases se devuelven junto con el resultado para que la pantalla muestre
             // exactamente el número desde el que se proyectó. El JS tenía su propia
@@ -348,6 +312,7 @@ class PresupuestoCalculos {
             'venta_proy_verano' => $ventaProyVerano,
             'venta_proy_invierno' => $ventaProyInvierno,
             'compra_proyectada' => $compraProyectada,
+            'tramos' => $tramos,
             'temporada_actual' => $temporadaActual,
             'dias_restantes' => self::calcularDiasRestantesTemporada($fecha),
             'contexto_aplicado' => $contextoSolapa
@@ -424,22 +389,33 @@ class PresupuestoCalculos {
     }
 
     /**
-     * Describe qué período cubre realmente cada columna de venta proyectada.
+     * Define qué período cubre cada columna de venta proyectada, como lista de tramos.
      *
-     * Es la traducción literal de lo que calculan calcularVentaProyectadaVerano() y
-     * calcularVentaProyectadaInvierno(): mismo if/else, mismos contextos. Existe
-     * porque las etiquetas viejas nombraban una sola temporada cuando la columna
-     * podía contener dos (el resto de la que está en curso MÁS la próxima completa),
-     * y en la solapa invierno llegaban a nombrar una temporada que no era la que
-     * estaba sumada. Se descartó poner solo la temporada "principal" y aclarar el
-     * resto en el tooltip: el número de la celda es la suma de los dos tramos, así
-     * que la etiqueta tiene que mostrarlos a los dos.
+     * Es la ÚNICA definición de qué se suma en cada columna. Nació describiendo lo
+     * que calculaban calcularVentaProyectadaVerano() y calcularVentaProyectadaInvierno()
+     * —para que las etiquetas dejaran de nombrar una sola temporada cuando la columna
+     * contenía dos— pero la relación se invirtió: ahora esas funciones suman los tramos
+     * que salen de acá, y repartirCompraPorTramo() reparte la compra sobre los mismos.
+     * Mientras hubo dos descripciones del mismo período, nada garantizaba que
+     * coincidieran; ahora la etiqueta, el total y el detalle por tramo son la misma
+     * lista leída de tres maneras.
+     *
+     * El resultado se memoriza por (fecha, solapa) porque el procesamiento lo pide una
+     * vez por fila y por columna —unas 300 veces por pantalla— y siempre con los mismos
+     * dos argumentos.
      *
      * @param string $contextoSolapa 'verano' o 'invierno'
      * @return array columnas 'verano' e 'invierno' + 'objetivo' (temporada que la compra debe cubrir)
      */
     public static function obtenerPeriodosProyeccion($fecha = null, $contextoSolapa = 'verano') {
+        static $memo = [];
+
         $fecha = self::normalizarFecha($fecha);
+        $clave = $fecha->format('Y-m-d') . '|' . $contextoSolapa;
+        if (isset($memo[$clave])) {
+            return $memo[$clave];
+        }
+
         $actual = self::obtenerTemporadaActual($fecha);
 
         $proximoVerano   = self::proximaTemporadaDeTipo($actual, 'VERANO');
@@ -471,7 +447,7 @@ class PresupuestoCalculos {
             ? end($tramosVerano)
             : end($tramosInvierno);
 
-        return [
+        return $memo[$clave] = [
             'verano'   => $columnaVerano,
             'invierno' => $columnaInvierno,
             'objetivo' => [
@@ -481,6 +457,179 @@ class PresupuestoCalculos {
                 'parcial' => !empty($objetivo['resto'])
             ]
         ];
+    }
+
+    /**
+     * Los tramos de las dos columnas, en el orden en que se venden.
+     *
+     * El reparto del stock necesita un solo hilo cronológico, no dos columnas: el
+     * stock que sobra del resto del verano en curso es el que después cubre INV 27.
+     * Ordenar por fecha de inicio alcanza porque los tramos no se solapan: cada uno
+     * arranca el día después de que termina el anterior.
+     */
+    public static function tramosCronologicos($periodos) {
+        $tramos = array_merge($periodos['verano']['tramos'], $periodos['invierno']['tramos']);
+
+        usort($tramos, function ($a, $b) {
+            return strcmp($a['desde'], $b['desde']);
+        });
+
+        return $tramos;
+    }
+
+    /**
+     * Reparte entre los tramos la compra que hoy es un solo número por fila.
+     *
+     * FUNCIÓN PURA: no lee el reloj, la sesión ni la base. Todo lo que necesita entra
+     * por parámetro, así que el mismo reparto se puede recalcular meses después desde
+     * una versión guardada y da idéntico. Es lo que permite migrar el historial sin
+     * inventar nada y lo que hace auditable cada fila.
+     *
+     * CÓMO REPARTE
+     * El stock proyectado es un pozo único que se consume en orden cronológico: cada
+     * tramo toma lo que puede del stock que quedó y la compra de ese tramo es lo que
+     * el stock no alcanzó a cubrir. Se descartó prorratear el stock entre los tramos
+     * en proporción a su venta: el stock que hay hoy cubre primero lo que se vende
+     * primero, no una fracción de cada temporada futura.
+     *
+     * Las OC pendientes ya vienen sumadas dentro del stock proyectado y NO se afectan
+     * a la temporada de su oleada: entran al pozo común como cualquier unidad. Es una
+     * simplificación deliberada —las fechas reales de esas OC las administra Comex y
+     * esta app no las tiene— y se midió cuánto cuesta: sobre la versión oficial de
+     * Argentina mueve 1.619 unidades del tramo objetivo, el 0,23 %, en 1 fila de 72.
+     *
+     * DÉFICIT DE COBERTURA
+     * Cuando el stock de seguridad supera a todo lo disponible, el stock proyectado
+     * arranca negativo (ACCESORIO DE CUERO: 0 - 309 = -309). Ese déficit NO se le carga
+     * al primer tramo cronológico, porque ese tramo es el resto de la temporada en
+     * curso y ya no se puede comprar: ahí el déficit desaparecería del presupuesto. Va
+     * al primer tramo COMPRABLE, el primero que no sea ese resto, que es el contenedor
+     * más cercano sobre el que todavía se puede actuar. Se descartó mandarlo al tramo
+     * objetivo: lo habría atrasado hasta un año sin motivo. Queda además separado en
+     * compra_deficit_cobertura para que el consumidor externo pueda tratarlo distinto
+     * de una compra por venta.
+     *
+     * TRAMO NO COMPRABLE
+     * El resto de la temporada en curso conserva su compra calculada, pero marcado con
+     * es_comprable = 0: no es mercadería a comprar sino venta que va a quedar sin
+     * cubrir, y se muestra aparte. Se lo deja dentro de `compra` —en vez de en una
+     * columna separada— para que el invariante siga siendo literal.
+     *
+     * INVARIANTE, por fila: SUM(compra) == MAX(0, -compra_proyectada).
+     * Se cumple exacto porque el pozo se redondea a unidades enteras igual que
+     * compra_proyectada, y restar un entero no cambia la parte decimal de un redondeo.
+     * Las filas con excedente dan compra 0 en todos los tramos.
+     *
+     * @param float $stockProyectado stock proyectado de la fila (puede ser negativo)
+     * @param array $tramos          de tramosCronologicos()
+     * @param array $bases           ['VERANO' => ['valor'=>, 'indice'=>], 'INVIERNO' => [...]]
+     * @param int   $diasRestantes   días que quedan de la temporada en curso
+     * @param int   $diasTotales     días totales de la temporada en curso
+     * @param array $objetivo        ['codigo'=>, 'parcial'=>] de obtenerPeriodosProyeccion()
+     * @return array una fila por tramo, en orden cronológico
+     */
+    public static function repartirCompraPorTramo($stockProyectado, $tramos, $bases,
+                                                  $diasRestantes, $diasTotales, $objetivo = null) {
+        // El pozo va en unidades enteras: compra_proyectada también se redondea, y sin
+        // esto el invariante fallaba por una unidad en las filas con stock fraccionario.
+        $pozo = (float)round((float)$stockProyectado);
+
+        // El déficit sale del pozo y se imputa aparte; el resto del reparto trabaja
+        // siempre con un disponible >= 0, que es lo que vuelve legible el acumulado.
+        $deficit  = max(0.0, -$pozo);
+        $restante = max(0.0, $pozo);
+
+        $filas = [];
+        $indiceComprable = null;
+
+        foreach ($tramos as $orden => $tramo) {
+            $tipo = $tramo['temporada'];
+            $base = isset($bases[$tipo]) ? (float)$bases[$tipo]['valor'] : 0.0;
+            $indice = isset($bases[$tipo]) ? (float)$bases[$tipo]['indice'] : 1.0;
+            if ($indice <= 0) {
+                $indice = 1.0;
+            }
+            // Mismo corte que sumarColumnaProyectada(): sin venta anterior no se proyecta.
+            if ($base <= 0) {
+                $base = 0.0;
+            }
+
+            $venta = self::ventaProyectadaDeTramo($tramo, $base, $indice, $diasRestantes, $diasTotales);
+
+            $aplicado = min($restante, $venta);
+            $compra   = $venta - $aplicado;
+            $restante -= $aplicado;
+
+            $esResto = !empty($tramo['resto']);
+            // Comprable = todo lo que no sea el resto de la temporada en curso. Solo ese
+            // tramo se marca como resto en obtenerPeriodosProyeccion(), y es justamente
+            // el que ya no llega a cubrirse con un contenedor nuevo.
+            $esComprable = !$esResto;
+
+            if ($esComprable && $indiceComprable === null) {
+                $indiceComprable = $orden;
+            }
+
+            $filas[] = [
+                'orden'            => $orden,
+                'temporada_codigo' => $tramo['codigo'],
+                'temporada_tipo'   => $tipo,
+                'temporada_desde'  => $tramo['desde'],
+                'temporada_hasta'  => $tramo['hasta'],
+                'es_resto'         => $esResto,
+                'es_comprable'     => $esComprable,
+                'es_objetivo'      => $objetivo
+                    ? ($tramo['codigo'] === $objetivo['codigo'] && $esResto === !empty($objetivo['parcial']))
+                    : false,
+                'venta_proyectada' => (int)$venta,
+                'stock_aplicado'   => (int)$aplicado,
+                'compra'           => (int)$compra,
+                'compra_deficit_cobertura' => 0
+            ];
+        }
+
+        if ($deficit > 0 && $filas) {
+            // Si no hubiera ningún tramo comprable —hoy no pasa, las dos solapas tienen
+            // siempre al menos una temporada completa— se usa el último antes que perderlo.
+            $destino = $indiceComprable !== null ? $indiceComprable : count($filas) - 1;
+            $filas[$destino]['compra'] += (int)$deficit;
+            $filas[$destino]['compra_deficit_cobertura'] = (int)$deficit;
+        }
+
+        return $filas;
+    }
+
+    /**
+     * Reparto por tramo de una fila del presupuesto, armando los parámetros desde el
+     * registro crudo. Atajo para los tres lugares que lo necesitan (el procesamiento
+     * de cada solapa, el guardado y la migración) sin repetir el cableado.
+     */
+    public static function calcularTramosDeFila($stockProyectado, $ventaVeranoAnterior, $indiceVerano,
+                                                $ventaInviernoAnterior, $indiceInvierno,
+                                                $fecha = null, $contextoSolapa = 'verano',
+                                                $diasRestantes = null, $diasTotales = null) {
+        $periodos = self::obtenerPeriodosProyeccion($fecha, $contextoSolapa);
+
+        // Los días pueden venir impuestos: al reconstruir una versión guardada se usan
+        // los que quedaron en su cabecera, no los de hoy.
+        if ($diasRestantes === null) {
+            $diasRestantes = self::calcularDiasRestantesTemporada($fecha);
+        }
+        if ($diasTotales === null) {
+            $diasTotales = self::obtenerTemporadaActual($fecha)['dias'];
+        }
+
+        return self::repartirCompraPorTramo(
+            $stockProyectado,
+            self::tramosCronologicos($periodos),
+            [
+                'VERANO'   => ['valor' => $ventaVeranoAnterior,   'indice' => $indiceVerano],
+                'INVIERNO' => ['valor' => $ventaInviernoAnterior, 'indice' => $indiceInvierno]
+            ],
+            $diasRestantes,
+            $diasTotales,
+            $periodos['objetivo']
+        );
     }
 
     /**
