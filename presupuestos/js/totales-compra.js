@@ -49,36 +49,15 @@ class TotalesCompra {
                 return;
             }
 
-            // 1. IDENTIFICAR COLUMNAS DINÁMICAS (Historial de años anteriores)
-            const primerItem = datos[0];
-            
-            // Columnas que ya sumamos explícitamente o que son texto/índices
-            const columnasIgnorar = [
-                'RUBRO', 'CATEGORIA', 'CATEGORIA_PADRE', 'ID', 'DESCRIPCION', 
-                'STOCK_PROYECTADO', 'STOCK_ACTUAL',
-                'INDICE_VAR_ORIGINAL', 'INDICE_VARIACION',
-                'INDICE_VER_VAR', 'INDICE_VERANO_VARIACION',
-                'INDICE_INV_VAR', 'INDICE_INVIERNO_VARIACION',
-                'COMPRA_PROYECTADA', 'COMPRA', 'COMPRA_PROY',
-                'PROY_VER', 'VENTA_PROY_VERANO', 'PROYECCION_VERANO',
-                'PROY_INV', 'VENTA_PROY_INVIERNO', 'PROYECCION_INVIERNO',
-                'VENTA_VER_ANT', 'VTA_VERANO_ANT', 'VENTA_VERANO_ANTERIOR',
-                'VENTA_INV_ANT', 'VTA_INVIERNO_ANT', 'VENTA_INVIERNO_ANTERIOR'
-            ];
-
-            // Detectamos claves numéricas extras (los años del historial)
-            const clavesDinamicas = Object.keys(primerItem).filter(key => {
-                const valor = parseFloat(primerItem[key]);
-                const esVentaAnteriorOculta = (key.startsWith('VTA_') || key.startsWith('VENTA_')) && 
-                                              (columnasIgnorar.includes(key));
-
-                return !columnasIgnorar.includes(key) && 
-                       !key.includes('INDICE') && 
-                       !key.includes('PROY_VER_26') && 
-                       !key.includes('PROY_INV_26') &&
-                       !isNaN(valor) &&
-                       !esVentaAnteriorOculta;
-            });
+            // 1. COLUMNAS DINÁMICAS (historial de temporadas anteriores)
+            //
+            // Se piden a la MISMA función que usan el encabezado y las filas de datos.
+            // Antes se deducían acá con una lista negra propia, así que cada columna
+            // numérica nueva del registro se colaba como si fuera una temporada: la
+            // fila de totales terminaba con más celdas que columnas y todo el bloque
+            // del historial quedaba corrido, mostrando los componentes del stock bajo
+            // los encabezados de los años.
+            const clavesDinamicas = TablaRendererUtils.extraerColumnasVentasHistoricas(datos);
 
             // 2. INICIALIZAR ACUMULADOR
             const acumuladorInicial = {
@@ -186,35 +165,16 @@ class TotalesCompra {
     }
 
     /**
-     * Busca inteligentemente el valor de la Venta Anterior
+     * Venta anterior de una fila: la misma que muestra la columna de arriba.
+     *
+     * Se delega en TablaRendererUtils para que el total sea la suma exacta de lo
+     * que se ve. Acá había una cuarta búsqueda propia, con el reloj del navegador
+     * y una lista de claves que no incluía la que manda el servidor: en los rubros
+     * cuya última venta es de una temporada más vieja sumaba 0 mientras la columna
+     * mostraba otro número.
      */
     static obtenerValorVentaAnterior(item, temporada) {
-        const anoActual = new Date().getFullYear().toString().substr(-2); 
-        const anoAnterior = (parseInt(anoActual) - 1).toString();
-        let posiblesKeys = [];
-
-        if (temporada === 'VERANO') {
-            posiblesKeys = [
-                'VENTA_VER_ANT', 'VENTA_VERANO_ANT', 'VTA_VERANO_ANT', 'VTA_VER_ANT',
-                `VTA_VERANO_${anoActual}`, `VTA_VERANO_${anoAnterior}`, 'VERANO_ANTERIOR'
-            ];
-        } else {
-            posiblesKeys = [
-                'VENTA_INV_ANT', 'VENTA_INVIERNO_ANT', 'VTA_INVIERNO_ANT', 'VTA_INV_ANT',
-                `VTA_INVIERNO_${anoActual}`, `VTA_INVIERNO_${anoAnterior}`, 'INVIERNO_ANTERIOR'
-            ];
-        }
-
-        for (const key of posiblesKeys) {
-            if (item.hasOwnProperty(key)) return parseFloat(item[key] || 0);
-        }
-
-        // Búsqueda por patrón
-        const patron = temporada === 'VERANO' ? 'VTA_VERANO_' : 'VTA_INVIERNO_';
-        const keysCoincidentes = Object.keys(item).filter(k => k.startsWith(patron));
-        if (keysCoincidentes.length > 0) return parseFloat(item[keysCoincidentes[0]] || 0);
-
-        return 0;
+        return TablaRendererUtils.buscarVentaHistoricaCorrecta(item, temporada);
     }
 
     static obtenerValorProyeccion(item, temporada) {
@@ -246,26 +206,37 @@ class TotalesCompra {
         }
         if (!container) return;
 
-        const icono = solapa === 'verano' ? 'fa-sun' : 'fa-snowflake';
-        const colorPrimario = solapa === 'verano' ? 'warning' : 'info';
+        const neto = TotalesCompra.formatearNumero(totales.totalCompraProyectada);
+        const periodos = (typeof TemporadaServidor !== 'undefined')
+            ? TemporadaServidor.periodos(solapa) : null;
+        const objetivo = periodos && periodos.objetivo ? periodos.objetivo.codigo : null;
 
-        container.innerHTML = `
-            <div class="row text-center">
-                <div class="col-4">
-                    <small class="text-muted d-block"><i class="fas ${icono} me-1"></i>Total Registros</small>
-                    <span class="badge bg-${colorPrimario} fs-6 text-dark">${totales.totalRegistros}</span>
-                </div>
-                <div class="col-4">
-                    <small class="text-muted d-block">Items Necesita Compra</small>
-                    <span class="badge bg-danger fs-6">${totales.itemsNegativos}</span>
-                </div>
-                <div class="col-4">
-                    <small class="text-muted d-block">Total Necesita Compra</small>
-                    <span class="badge bg-danger fs-5">${TotalesCompra.formatearNumero(totales.totalNegativo)}</span>
-                </div>
-            </div>
-        `;
+        container.innerHTML = UIUtils.resumenSuperior([
+            { label: 'Rubro / categoría', valor: totales.totalRegistros },
+            objetivo
+                ? { label: 'Temporada objetivo', valor: objetivo,
+                    ayuda: 'Temporada que esta compra tiene que cubrir: '
+                         + periodos.objetivo.desde + ' a ' + periodos.objetivo.hasta }
+                : null,
+            { label: 'Con faltante', valor: totales.itemsNegativos, tono: 'alerta',
+              ayuda: 'Rubro/categoría cuya compra proyectada da negativa, es decir que '
+                   + 'el stock proyectado no alcanza a cubrir la venta proyectada.' },
+            // Se aclara que NO compensa con los excedentes, y se muestra el neto al
+            // lado: los dos números se parecen y antes convivían sin explicación,
+            // uno acá arriba y el otro en la fila de totales de la tabla.
+            { label: 'Unidades a comprar', valor: TotalesCompra.formatearNumero(totales.totalNegativo),
+              tono: 'alerta', fin: true,
+              ayuda: 'Suma de los faltantes únicamente. No se compensa con los rubros '
+                   + 'que tienen excedente: el neto de la columna Compra Proyectada es ' + neto + '.' },
+            { label: 'Neto de la columna', valor: neto,
+              ayuda: 'Faltantes menos excedentes. Es el total que muestra la fila TOTALES '
+                   + 'al pie de la tabla.' }
+        ].filter(Boolean));
+
         container.classList.remove('d-none');
+        // La barra acaba de aparecer: la tabla de abajo tiene menos alto disponible.
+        if (window.ajustarAltura) window.ajustarAltura();
+
         container.classList.add('actualizado');
         setTimeout(() => container.classList.remove('actualizado'), 500);
     }
@@ -278,8 +249,9 @@ class TotalesCompra {
 
         const resumenContainer = document.createElement('div');
         resumenContainer.id = `total-compra-${solapa}-superior`;
-        resumenContainer.className = 'bg-light p-2 border-bottom d-none total-compra-container';
-        resumenContainer.style.borderLeft = solapa === 'verano' ? '4px solid #ffc107' : '4px solid #0dcaf0';
+        // El acento de color lo pone la clase modificadora, no un style inline:
+        // así todas las solapas comparten el mismo componente.
+        resumenContainer.className = `resumen-superior resumen-superior--${solapa} d-none`;
 
         searchContainer.parentNode.insertBefore(resumenContainer, searchContainer.nextSibling);
     }

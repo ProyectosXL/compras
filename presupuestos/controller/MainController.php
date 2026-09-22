@@ -314,6 +314,12 @@ class MainController {
             case 'info-temporadas':
                 $this->obtenerInfoTemporadas();
                 break;
+
+            // Versiones del presupuesto (cabecera) y trazabilidad de la oficial
+            case 'versiones-presupuesto':
+            case 'historial-oficial':
+                $this->delegarHistorial($accion);
+                break;
                 
             // Compras detalle
             case 'compras-detalle':
@@ -394,6 +400,10 @@ class MainController {
                 break;
             case 'guardar-presupuesto':
             case 'buscar-historial':
+            case 'marcar-oficial':
+            // No se llama 'eliminar-version' porque ese nombre ya lo usa
+            // distribución para borrar sus propias versiones.
+            case 'eliminar-version-presupuesto':
                 $this->delegarHistorial($accion);
                 break;
             case 'distribucion-canal':
@@ -577,6 +587,18 @@ class MainController {
                 break;
             case 'buscar-historial':
                 $historialController->buscarHistorial();
+                break;
+            case 'versiones-presupuesto':
+                $historialController->listarVersiones();
+                break;
+            case 'marcar-oficial':
+                $historialController->marcarOficial();
+                break;
+            case 'eliminar-version-presupuesto':
+                $historialController->eliminarVersion();
+                break;
+            case 'historial-oficial':
+                $historialController->historialOficial();
                 break;
         }
     }

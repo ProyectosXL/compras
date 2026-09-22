@@ -6,6 +6,17 @@
 // Desactivar reporte de avisos deprecados para evitar corromper las respuestas JSON
 error_reporting(E_ALL & ~E_DEPRECATED & ~E_STRICT);
 
+/* Zona horaria del negocio.
+   El php.ini de XAMPP viene con Europe/Berlin, cinco horas adelante: a partir de
+   las 19:00 hora local PHP ya estaba en el día siguiente. Eso movía la fecha de
+   cálculo y con ella los días restantes de temporada (131 en vez de 132), así que
+   las proyecciones cambiaban solas al caer la tarde. También dejaba las fechas de
+   guardado cinco horas adelantadas respecto del nombre del presupuesto.
+   Se fija acá y no en el php.ini porque ese archivo lo comparten todas las apps
+   del servidor. Argentina y Uruguay están en el mismo huso, así que alcanza con
+   uno para los dos países. */
+date_default_timezone_set('America/Argentina/Buenos_Aires');
+
 // Configurar headers para CORS y JSON
 header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');

@@ -453,3 +453,93 @@
         transform: translate3d(0, 0, 0);
     }
 }
+/* ==========================================================================
+   Barra de resumen superior
+
+   Un solo componente para todas las solapas. Antes cada una armaba su propia
+   barra con columnas de Bootstrap y badges grandes: la de compra proyectada
+   tenia ademas un degradado rosa con borde rojo que competia con la tabla y
+   hacia que los tres numeros se leyeran como una alarma.
+
+   Ahora es una tira de items separados por lineas finas, alineada a la
+   izquierda como el resto del contenido. El color solo se usa para distinguir
+   la solapa (barra lateral) y para marcar el dato que exige accion.
+   ========================================================================== */
+.resumen-superior {
+    --resumen-acento: #6c757d;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: stretch;
+    background: #fff;
+    border-bottom: 1px solid #dee2e6;
+    border-left: 3px solid var(--resumen-acento);
+    transition: border-left-color .3s ease;
+}
+
+/* Acento por solapa: el mismo criterio de color que usan las pestañas. */
+.resumen-superior--verano    { --resumen-acento: #ffc107; }
+.resumen-superior--invierno  { --resumen-acento: #0dcaf0; }
+.resumen-superior--stock     { --resumen-acento: #0d6efd; }
+.resumen-superior--compras   { --resumen-acento: #6610f2; }
+.resumen-superior--ventas    { --resumen-acento: #20c997; }
+
+.resumen-item {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 1px;
+    padding: .35rem .9rem;
+    border-right: 1px solid rgba(0, 0, 0, .07);
+}
+
+.resumen-item__label {
+    font-size: .68rem;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: #6c757d;
+    white-space: nowrap;
+    line-height: 1.2;
+}
+
+/* Tabular para que los números no bailen al recalcular con los filtros. */
+.resumen-item__valor {
+    font-size: 1rem;
+    font-weight: 700;
+    line-height: 1.2;
+    color: #212529;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+/* El dato que exige acción: es el único que va en rojo, para que el color
+   signifique algo y no sea decoración. */
+.resumen-item--alerta { background: rgba(220, 53, 69, .05); }
+.resumen-item--alerta .resumen-item__valor { color: #b02a37; }
+.resumen-item--ok .resumen-item__valor { color: #146c43; }
+
+/* Empuja el item hacia el extremo derecho de la barra. */
+.resumen-item--fin { margin-left: auto; border-right: none; }
+
+/* Marca que el dato tiene una aclaración en el title. */
+.resumen-item__ayuda {
+    font-size: .62rem;
+    color: #adb5bd;
+    cursor: help;
+    vertical-align: super;
+}
+
+.resumen-superior.actualizado { border-left-color: #198754; }
+
+@media (max-width: 768px) {
+    .resumen-item { padding: .3rem .6rem; }
+    .resumen-item__valor { font-size: .9rem; }
+    .resumen-item--fin { margin-left: 0; }
+}
+
+/* Chevron del panel colapsable: apunta hacia abajo cuando está abierto. */
+.icono-colapso {
+    transition: transform .2s ease;
+}
+[aria-expanded="true"] .icono-colapso {
+    transform: rotate(90deg);
+}

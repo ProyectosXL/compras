@@ -267,6 +267,26 @@
                             </div>
                         </div>
                     </div>
+
+                    <div class="alert alert-info mt-2 p-2">
+                        <strong class="small">📊 Los dos totales de la pantalla no son lo mismo</strong>
+                        <ul class="small mb-0 mt-1">
+                            <li>
+                                <strong>Unidades a comprar</strong> (barra de arriba): suma
+                                <strong>solo los faltantes</strong>, o sea los rubros con compra
+                                proyectada negativa. Es lo que hay que pedir.
+                            </li>
+                            <li>
+                                <strong>Neto de la columna</strong> (fila TOTALES al pie de la tabla):
+                                faltantes <strong>menos</strong> excedentes. Es siempre menor, porque
+                                los rubros que sobran compensan a los que faltan.
+                            </li>
+                        </ul>
+                        <p class="small mb-0 mt-1">
+                            No se compensan entre sí para comprar: que sobren camperas no evita
+                            tener que comprar ojotas.
+                        </p>
+                    </div>
                 </div>
             </div>
         </div>

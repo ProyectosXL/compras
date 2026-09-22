@@ -84,20 +84,20 @@
     </div>
 
     <!-- Resumen de totales en la parte superior (siempre visible) -->
-    <div class="bg-light p-2 border-bottom d-none" id="resumen-contenedores-superior">
-        <div class="row text-center">
-            <div class="col-4">
-                <small class="text-muted d-block">Total Verano</small>
-                <span class="badge bg-warning text-dark fs-6" id="badge-cont-verano">0</span>
-            </div>
-            <div class="col-4">
-                <small class="text-muted d-block">Total Invierno</small>
-                <span class="badge bg-info fs-6" id="badge-cont-invierno">0</span>
-            </div>
-            <div class="col-4">
-                <small class="text-muted d-block">Total General</small>
-                <span class="badge bg-primary fs-6" id="badge-cont-total">0</span>
-            </div>
+    <!-- Mismo componente que el resto de las solapas. Los IDs se conservan:
+         ContenedoresManager solo escribe el texto adentro. -->
+    <div class="resumen-superior resumen-superior--compras d-none" id="resumen-contenedores-superior">
+        <div class="resumen-item">
+            <span class="resumen-item__label">Verano</span>
+            <span class="resumen-item__valor" id="badge-cont-verano">0</span>
+        </div>
+        <div class="resumen-item">
+            <span class="resumen-item__label">Invierno</span>
+            <span class="resumen-item__valor" id="badge-cont-invierno">0</span>
+        </div>
+        <div class="resumen-item resumen-item--fin">
+            <span class="resumen-item__label">Total</span>
+            <span class="resumen-item__valor" id="badge-cont-total">0</span>
         </div>
     </div>
 

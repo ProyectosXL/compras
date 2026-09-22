@@ -20,14 +20,25 @@
                     </h5>
                     <ol>
                         <li>Navegue a la solapa <strong>Compra Proy. Verano</strong> o <strong>Compra Proy. Invierno</strong>.</li>
-                        <li>Aplique los filtros de búsqueda, rubro o categoría que necesite para refinar su proyección.</li>
                         <li>
                             Haga clic en el botón <button class="btn btn-primary btn-sm disabled"><i class="fas fa-save me-1"></i> Guardar</button> que se encuentra en la esquina superior derecha.
                         </li>
-                        <li>El sistema guardará únicamente las filas <strong>visibles</strong> en ese momento.</li>
-                        <li>Se generará un nombre automático para el presupuesto que incluye la fecha y hora local (ej: <code>Presupuesto_2025-09-02_10-30_verano</code>).</li>
-                        <li>Recibirá una notificación confirmando que el presupuesto ha sido guardado.</li>
+                        <li>
+                            <strong>Se guarda el presupuesto completo</strong>, aunque tenga filtros aplicados.
+                            Si hay filtros, el sistema le pregunta si quiere guardar todo o solo lo que está
+                            viendo.
+                        </li>
+                        <li>Se generará un nombre automático que incluye la fecha y la hora (ej: <code>Presupuesto_2026-09-22_10-30_verano</code>).</li>
+                        <li>Recibirá una notificación con el resultado y la temporada objetivo de la versión.</li>
                     </ol>
+
+                    <div class="alert alert-warning">
+                        <i class="fas fa-filter me-2"></i>
+                        <strong>Versiones parciales:</strong> guardar solo lo filtrado sirve para sacar una
+                        foto de lo que está mirando, pero esa versión queda marcada como <em>parcial</em> y
+                        <strong>no puede marcarse como oficial</strong>, porque no representa el presupuesto
+                        completo de la temporada.
+                    </div>
                 </div>
             </div>
 
@@ -45,8 +56,56 @@
                         <strong>Solapa y Temporada objetivo:</strong> la columna <em>Solapa</em> indica desde
                         dónde se guardó (verano o invierno) y <em>Temporada objetivo</em> la temporada que esa
                         compra tenía que cubrir, en la convención <code>VER AA-AA</code> / <code>INV AA</code>
-                        (por ejemplo <code>VER 27-28</code>). Se deduce de la fecha de guardado y de la solapa,
-                        porque las versiones guardadas hasta ahora no la registran.
+                        (por ejemplo <code>VER 27-28</code>). Es la temporada en la que los contenedores
+                        tienen que estar. Un asterisco (<code>*</code>) al lado del código significa que esa
+                        versión es anterior a esta funcionalidad y la temporada se dedujo de la fecha de
+                        guardado.
+                    </div>
+                </div>
+            </div>
+
+            <div class="card mt-3">
+                <div class="card-body">
+                    <h5 class="card-title text-success">
+                        <i class="fas fa-flag me-2"></i>
+                        La versión oficial
+                    </h5>
+                    <p>
+                        El panel <strong>Versiones guardadas</strong>, arriba de la tabla de historial, lista
+                        una fila por versión. Ahí se marca cuál es la <strong>oficial</strong>: la versión
+                        vigente de cada país y temporada objetivo, que es la que leen los sistemas que
+                        proyectan las compras del exterior.
+                    </p>
+                    <ul>
+                        <li>Hay <strong>una sola oficial</strong> por país y temporada objetivo.</li>
+                        <li>Marcar una versión como oficial <strong>desmarca la anterior</strong>. El sistema
+                            le muestra cuál va a reemplazar antes de hacerlo.</li>
+                        <li>Queda registrado <strong>quién marcó qué y cuándo</strong>, incluido el desmarcado
+                            de la versión anterior.</li>
+                        <li>Una versión <strong>parcial no puede ser oficial</strong>. Si necesita oficializarla,
+                            vuelva a guardar el presupuesto completo.</li>
+                    </ul>
+                    <div class="alert alert-secondary small">
+                        <i class="fas fa-database me-1"></i>
+                        Cada versión guarda además el costo FOB y el porcentaje de nacionalización con los
+                        que se calculó, y las unidades de OC pendientes que entraron al stock proyectado.
+                        Sin eso la versión no se podría releer más adelante: los costos se pisan en el lugar
+                        y las OC pendientes terminan ingresando.
+                    </div>
+
+                    <h5 class="card-title text-danger mt-3">
+                        <i class="fas fa-trash me-2"></i>
+                        Eliminar una versión
+                    </h5>
+                    <p>
+                        El botón <i class="fas fa-trash text-danger"></i> de cada fila borra esa versión
+                        completa: su cabecera y todas sus filas de detalle. Antes de borrar, el sistema
+                        muestra cuántas filas se va a llevar y avisa si es la versión oficial.
+                    </p>
+                    <div class="alert alert-danger mb-0">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        <strong>No se puede deshacer.</strong> Si borra la versión oficial, esa temporada
+                        queda sin ninguna versión vigente hasta que marque otra.
                     </div>
                     <div class="alert alert-warning">
                         <i class="fas fa-info-circle me-2"></i>
@@ -54,9 +113,19 @@
                     </div>
                     <h6>Filtros Disponibles:</h6>
                     <ul class="list-group list-group-flush">
+                        <li class="list-group-item">
+                            <strong>Presupuesto guardado:</strong> el primer desplegable. Es el que
+                            sirve para <strong>ver una sola versión</strong> en lugar de todo el
+                            historial mezclado. También se llega desde el botón
+                            <i class="fas fa-filter"></i> de cada fila del panel de versiones.
+                            Cambiarlo busca solo.
+                        </li>
                         <li class="list-group-item"><strong>Búsqueda Rápida:</strong> Busque por texto en las columnas de rubro o categoría.</li>
-                        <li class="list-group-item"><strong>Filtrar por Rubro/Categoría:</strong> Escriba el nombre exacto de un rubro o categoría para acotar los resultados.</li>
+                        <li class="list-group-item"><strong>Filtrar por Rubro:</strong> Escriba el nombre exacto de un rubro para acotar los resultados.</li>
                         <li class="list-group-item"><strong>Rango de Fechas:</strong> Seleccione una fecha de inicio y/o fin para ver los presupuestos guardados en ese período.</li>
+                        <li class="list-group-item">
+                            El botón <i class="fas fa-eraser"></i> limpia todos los filtros de una vez.
+                        </li>
                     </ul>
                     <p class="mt-3">
                         Una vez que haya configurado sus filtros, presione el botón <button class="btn btn-primary btn-sm disabled"><i class="fas fa-search me-1"></i> Buscar</button> para cargar los datos en la tabla.

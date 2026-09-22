@@ -1,6 +1,10 @@
 
 <?php
 // presupuestos/index.php - Archivo principal simplificado
+
+// Misma zona horaria que api.php: el php.ini de XAMPP viene en Europe/Berlin y
+// deja al servidor cinco horas adelante. Ver el comentario en api.php.
+date_default_timezone_set('America/Argentina/Buenos_Aires');
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -13,8 +17,8 @@
     <!-- CSS -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-    <link href="css/obtener-presupuesto.css?v=1.2" rel="stylesheet">
-    <link href="css/tabla-optimizada.css?v=1.2" rel="stylesheet">
+    <link href="css/obtener-presupuesto.css?v=1.3" rel="stylesheet">
+    <link href="css/tabla-optimizada.css?v=1.5" rel="stylesheet">
     <link href="css/filtros-persistentes.css?v=1.2" rel="stylesheet">
     <link href="css/proceso-presupuesto.css?v=1.2" rel="stylesheet">
     

@@ -150,7 +150,8 @@ const TablaRendererUtils = {
             'COMPRA_PROYECTADA', 'STOCK_PROYECTADO',
             // Bases del cálculo, no columnas históricas: llevan VERANO/INVIERNO en el
             // nombre y si no se excluyen aparecen como una temporada más en la tabla.
-            'VENTA_VERANO_ANTERIOR', 'VENTA_INVIERNO_ANTERIOR'
+            'VENTA_VERANO_ANTERIOR', 'VENTA_INVIERNO_ANTERIOR',
+            'TEMPORADA_BASE_VERANO', 'TEMPORADA_BASE_INVIERNO'
         ];
         
         const columnasVenta = [];
@@ -531,6 +532,41 @@ class TablaRenderer {
      * Renderiza la tabla de historial de compras proyectadas.
      * @param {Array} datos Los datos del historial a renderizar.
      */
+    /**
+     * Celda de temporada objetivo de una fila del historial.
+     *
+     * Muestra tres cosas en un solo lugar para no sumar columnas: la temporada,
+     * si la versión es la oficial (bandera) y si es parcial. Distingue además
+     * las temporadas guardadas en la cabecera de las derivadas de la fecha, que
+     * son las versiones viejas todavía sin migrar.
+     */
+    static badgeTemporadaObjetivo(item) {
+        const codigo = item.temporada_objetivo || 's/d';
+        const oficial = parseInt(item.es_oficial, 10) === 1;
+        const parcial = item.es_completa !== undefined && item.es_completa !== null
+                        && parseInt(item.es_completa, 10) === 0;
+        const derivada = !!item.temporada_objetivo_derivada;
+
+        const rango = item.temporada_objetivo_desde
+            ? `${UIUtils.formatearFechaCorta(item.temporada_objetivo_desde)} a ${UIUtils.formatearFechaCorta(item.temporada_objetivo_hasta)}`
+            : '';
+        const titulo = derivada
+            ? `${rango} (deducida de la fecha de guardado: esta versión es anterior a la cabecera)`
+            : rango;
+
+        let html = `<span class="badge bg-info text-dark" title="${titulo}">${codigo}`;
+        if (derivada) html += ' *';
+        html += '</span>';
+
+        if (oficial) {
+            html += ' <i class="fas fa-flag text-success" title="Versión oficial"></i>';
+        }
+        if (parcial) {
+            html += ' <span class="badge bg-warning text-dark" title="Versión parcial: no puede ser oficial">parcial</span>';
+        }
+        return html;
+    }
+
     static renderizarTablaHistorial(datos) {
         const tbody = document.getElementById('tbody-historial');
         if (!tbody) {
@@ -544,20 +580,14 @@ class TablaRenderer {
         }
 
         const html = datos.map(item => {
-            let fechaFormateada = 'Fecha inválida';
-            if (item.fecha_guardado && item.fecha_guardado.date) {
-                const [fecha, hora] = item.fecha_guardado.date.substring(0, 19).split(' ');
-                const [Y, M, D] = fecha.split('-');
-                const [h, m] = hora.split(':');
-                fechaFormateada = `${D}/${M}/${Y} ${h}:${m}`;
-            }
+            const fechaFormateada = FormatoUtils.formatearFechaHora(item.fecha_guardado);
 
             return `
                 <tr>
                     <td>${fechaFormateada}</td>
                     <td>${item.nombre_presupuesto || ''}</td>
                     <td><span class="badge bg-secondary">${item.temporada || ''}</span></td>
-                    <td><span class="badge bg-info text-dark" title="${item.temporada_objetivo_desde ? `${UIUtils.formatearFechaCorta(item.temporada_objetivo_desde)} a ${UIUtils.formatearFechaCorta(item.temporada_objetivo_hasta)}` : ''}">${item.temporada_objetivo || 's/d'}</span></td>
+                    <td>${TablaRenderer.badgeTemporadaObjetivo(item)}</td>
                     <td>${item.rubro || ''}</td>
                     <td>${item.categoria_padre || ''}</td>
                     <td class="text-end">${FormatoUtils.formatearNumero(item.stock_proyectado)}</td>

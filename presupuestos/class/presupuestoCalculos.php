@@ -308,9 +308,12 @@ class PresupuestoCalculos {
         $indiceVariacion = (float)($registro['INDICE_VARIACION'] ?? 1.0);
         $indiceVariacionInvierno = (float)($registro['INDICE_VARIACION_INVIERNO'] ?? $indiceVariacion);
         
-        // Extraer ventas anteriores
-        $ventaVeranoAnterior = self::extraerVentaAnterior($registro, 'VERANO');
-        $ventaInviernoAnterior = self::extraerVentaAnterior($registro, 'INVIERNO');
+        // Extraer ventas anteriores, junto con la temporada de la que salieron:
+        // la version guardada tiene que poder decir sobre que base se proyecto.
+        $baseVerano = self::extraerColumnaVentaAnterior($registro, 'VERANO');
+        $baseInvierno = self::extraerColumnaVentaAnterior($registro, 'INVIERNO');
+        $ventaVeranoAnterior = $baseVerano ? $baseVerano['valor'] : 0;
+        $ventaInviernoAnterior = $baseInvierno ? $baseInvierno['valor'] : 0;
         
         // Debug
         error_log("Debug - Procesando registro: " . ($registro['RUBRO'] ?? 'Unknown'));
@@ -340,6 +343,8 @@ class PresupuestoCalculos {
             // la última venta era más vieja mostraba 0 mientras el cálculo usaba otro valor.
             'venta_verano_anterior' => $ventaVeranoAnterior,
             'venta_invierno_anterior' => $ventaInviernoAnterior,
+            'temporada_base_verano' => $baseVerano ? $baseVerano['codigo'] : null,
+            'temporada_base_invierno' => $baseInvierno ? $baseInvierno['codigo'] : null,
             'venta_proy_verano' => $ventaProyVerano,
             'venta_proy_invierno' => $ventaProyInvierno,
             'compra_proyectada' => $compraProyectada,
@@ -354,75 +359,57 @@ class PresupuestoCalculos {
      * Ahora busca la columna más reciente con datos
      */
     private static function extraerVentaAnterior($registro, $temporada) {
-        $ventaAnterior = 0;
-        
-        if ($temporada === 'VERANO') {
-            // Buscar columnas de VERANO y ordenar por año (más reciente primero)
-            $columnasVerano = [];
-            foreach ($registro as $columna => $valor) {
-                if (stripos($columna, 'VERANO') !== false && 
-                    stripos($columna, 'PROY') === false && 
-                    is_numeric($valor) && $valor > 0) {
-                    
-                    // Extraer año de la columna
-                    preg_match('/\d{2}/', $columna, $matches);
-                    $ano = isset($matches[0]) ? intval($matches[0]) : 0;
-                    
-                    $columnasVerano[] = [
-                        'columna' => $columna,
-                        'valor' => floatval($valor),
-                        'ano' => $ano
-                    ];
-                }
-            }
-            
-            // Ordenar por año descendente (más reciente primero)
-            usort($columnasVerano, function($a, $b) {
-                return $b['ano'] - $a['ano'];
-            });
-            
-            // Tomar la primera (más reciente)
-            if (!empty($columnasVerano)) {
-                error_log("PHP VERANO elegido: " . $columnasVerano[0]['columna'] . " = " . $columnasVerano[0]['valor']);
-                return $columnasVerano[0]['valor'];
-            }
-            
-        } else if ($temporada === 'INVIERNO') {
-            // Buscar columnas de INVIERNO y ordenar por año (más reciente primero)
-            $columnasInvierno = [];
-            foreach ($registro as $columna => $valor) {
-                if (stripos($columna, 'INVIERNO') !== false && 
-                    stripos($columna, 'PROY') === false && 
-                    is_numeric($valor) && $valor > 0) {
-                    
-                    // Extraer año de la columna
-                    preg_match('/\d{2}/', $columna, $matches);
-                    $ano = isset($matches[0]) ? intval($matches[0]) : 0;
-                    
-                    $columnasInvierno[] = [
-                        'columna' => $columna,
-                        'valor' => floatval($valor),
-                        'ano' => $ano
-                    ];
-                }
-            }
-            
-            // Ordenar por año descendente (más reciente primero)
-            usort($columnasInvierno, function($a, $b) {
-                return $b['ano'] - $a['ano'];
-            });
-            
-            // Tomar la primera (más reciente)
-            if (!empty($columnasInvierno)) {
-                error_log("PHP INVIERNO elegido: " . $columnasInvierno[0]['columna'] . " = " . $columnasInvierno[0]['valor']);
-                return $columnasInvierno[0]['valor'];
-            }
-        }
-        
-        error_log("PHP No se encontró venta anterior para temporada: $temporada");
-        return 0;
+        $elegida = self::extraerColumnaVentaAnterior($registro, $temporada);
+        return $elegida ? $elegida['valor'] : 0;
     }
-    
+
+    /**
+     * Igual que extraerVentaAnterior pero devuelve tambien de que columna salio.
+     *
+     * Hace falta porque la columna base varia POR FILA: se toma la ultima
+     * temporada con ventas, y un rubro sin movimiento reciente cae a una mas
+     * vieja que el de al lado. Guardar solo el numero dejaba la version sin
+     * poder decir de que temporada venia cada base.
+     *
+     * @return array|null ['valor' => float, 'columna' => string, 'codigo' => string]
+     */
+    public static function extraerColumnaVentaAnterior($registro, $temporada) {
+        $candidatas = [];
+
+        foreach ($registro as $columna => $valor) {
+            if (stripos($columna, $temporada) === false
+                || stripos($columna, 'PROY') !== false
+                || !is_numeric($valor) || $valor <= 0) {
+                continue;
+            }
+
+            // Solo columnas que correspondan a una temporada identificable: asi
+            // quedan afuera CANT_PEND_OC_* y compania, que llevan la palabra
+            // VERANO/INVIERNO en el nombre pero no son ventas historicas.
+            $t = self::temporadaDeColumna($columna);
+            if (!$t) {
+                continue;
+            }
+
+            $candidatas[] = [
+                'valor'   => (float)$valor,
+                'columna' => $columna,
+                'codigo'  => $t['codigo'],
+                'desde'   => $t['desde']
+            ];
+        }
+
+        if (empty($candidatas)) {
+            return null;
+        }
+
+        // Mas reciente primero, por fecha real de inicio de temporada.
+        usort($candidatas, function ($a, $b) {
+            return strcmp($b['desde'], $a['desde']);
+        });
+
+        return $candidatas[0];
+    }
     /**
      * Devuelve la próxima temporada del tipo pedido, a partir de la temporada en curso.
      */

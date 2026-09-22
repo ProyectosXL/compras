@@ -13,10 +13,10 @@
 @import url('layout.css');
 
 /* Estilos de tablas */
-@import url('tables.css');
+@import url('tables.css?v=1.3');
 
 /* Componentes UI */
-@import url('components.css');
+@import url('components.css?v=1.3');
 
 /* Modo oscuro (desactivado para mantener consistencia visual en todas las plataformas) */
 /* @import url('dark-mode.css'); */

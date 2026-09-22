@@ -415,6 +415,23 @@ html, body {
     max-height: calc(100vh - 430px) !important;
 }
 
+/* Historial: le faltaba la suya y era la única solapa sin scroll.
+   Hace falta el !important porque más arriba de este mismo archivo hay un
+   ".table-responsive { max-height: none !important }" global, y sin repetirlo
+   acá esa regla gana y la tabla se queda sin tope: crece hasta donde le da el
+   contenido, .tab-pane recorta lo que sobra y no hay forma de llegar al final.
+
+   El selector es ">" para no pisar la tabla del panel de versiones, que está
+   anidada dentro de una tarjeta y tiene su propio alto. */
+#historial > .table-responsive {
+    max-height: calc(100vh - 360px) !important;
+}
+
+/* Con el panel de versiones desplegado la tabla arranca ~240px más abajo. */
+#historial:has(#panel-versiones.show) > .table-responsive {
+    max-height: calc(100vh - 600px) !important;
+}
+
 /* Ajustes específicos para cada solapa */
 .tab-pane {
     height: 100%;
@@ -493,64 +510,6 @@ html, body {
 .header-compacto .d-flex {
     padding-left: 1rem;
     padding-right: 1rem;
-}
-
-.total-compra-container {
-    border-left: 4px solid #dc3545 !important;
-    background: linear-gradient(135deg, #fff5f5 0%, #ffe6e6 100%) !important;
-    transition: all 0.3s ease;
-}
-
-.total-compra-container.actualizado {
-    animation: pulse-total-compra 0.6s ease;
-    border-left-color: #28a745 !important;
-}
-
-@keyframes pulse-total-compra {
-    0% { 
-        transform: scale(1); 
-        background: linear-gradient(135deg, #f0fff4 0%, #e6ffe6 100%);
-    }
-    50% { 
-        transform: scale(1.02); 
-        background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
-    }
-    100% { 
-        transform: scale(1); 
-        background: linear-gradient(135deg, #fff5f5 0%, #ffe6e6 100%);
-    }
-}
-
-.total-compra-container .badge {
-    font-weight: 700;
-    text-shadow: 0 1px 2px rgba(0,0,0,0.2);
-}
-
-.total-compra-container .fa-sun {
-    color: #ffc107;
-    text-shadow: 0 0 5px rgba(255, 193, 7, 0.5);
-}
-
-.total-compra-container .fa-snowflake {
-    color: #0dcaf0;
-    text-shadow: 0 0 5px rgba(13, 202, 240, 0.5);
-}
-
-/* Responsive para totales */
-@media (max-width: 768px) {
-    .total-compra-container {
-        padding: 0.5rem !important;
-    }
-    
-    .total-compra-container .d-flex {
-        flex-direction: column;
-        gap: 0.5rem;
-        text-align: center;
-    }
-    
-    .total-compra-container .badge {
-        font-size: 0.8rem !important;
-    }
 }
 
 /* ===== MODAL PARÁMETROS: scroll simple y confiable ===== */

@@ -6,7 +6,27 @@
  * Utilidades para formateo de números y valores
  */
 class FormatoUtils {
-    
+
+    /**
+     * Formatea una fecha/hora que viene del backend como DD/MM/AAAA HH:MM.
+     *
+     * Acepta las dos formas en que puede llegar: el string "2026-07-23 09:53:00"
+     * que manda hoy la API y el objeto {date: "..."} en que PHP serializa un
+     * DateTime crudo. El historial leía solo la segunda y, desde que el servidor
+     * pasó a formatear las fechas antes de responder, mostraba "Fecha inválida"
+     * en todas las filas.
+     */
+    static formatearFechaHora(valor) {
+        if (!valor) return '';
+
+        const texto = typeof valor === 'object' ? (valor.date || '') : String(valor);
+        const m = texto.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/);
+        if (!m) return texto || '';
+
+        const [, Y, M, D, h, min] = m;
+        return `${D}/${M}/${Y} ${h}:${min}`;
+    }
+
     /**
      * Formatear números con separadores de miles
      */
@@ -219,6 +239,39 @@ class UIUtils {
     /**
      * Actualizar headers dinámicos con etiquetas de temporada
      */
+    // Líneas que puede ocupar un encabezado. Todas las columnas usan el mismo
+    // presupuesto para que el thead tenga una altura pareja.
+    static LINEAS_ENCABEZADO = 3;
+
+    /**
+     * Arma el contenido de una barra de resumen superior.
+     *
+     * Existe para que las solapas no repitan cada una su propio maquetado: antes
+     * cada manager escribía sus columnas de Bootstrap y sus badges, y terminaron
+     * con tipografías y colores distintos para el mismo tipo de dato.
+     *
+     * @param {Array} items {label, valor, tono?: 'alerta'|'ok', ayuda?, fin?: bool}
+     */
+    static resumenSuperior(items) {
+        return items.map(i => {
+            const clases = ['resumen-item'];
+            if (i.tono) clases.push(`resumen-item--${i.tono}`);
+            if (i.fin) clases.push('resumen-item--fin');
+
+            // La aclaración va en el title y no en un tooltip de Bootstrap: estas
+            // barras se redibujan con cada filtro y los tooltips habría que
+            // reinicializarlos en cada redibujo.
+            const ayuda = i.ayuda
+                ? ` <i class="fas fa-circle-question resumen-item__ayuda" title="${i.ayuda}"></i>`
+                : '';
+
+            return `<div class="${clases.join(' ')}"${i.ayuda ? ` title="${i.ayuda}"` : ''}>
+                        <span class="resumen-item__label">${i.label}${ayuda}</span>
+                        <span class="resumen-item__valor">${i.valor}</span>
+                    </div>`;
+        }).join('');
+    }
+
     static actualizarHeadersDinamicos(info) {
         if (!info || !info.periodos) return;
 
@@ -246,16 +299,39 @@ class UIUtils {
             const th = document.getElementById(id);
             if (!th || !periodo) return;
 
-            // La etiqueta lleva los dos tramos cuando la columna suma dos (por ejemplo
-            // "Resto VER 26-27 + VER 27-28"): la celda es la suma, así que mostrar una
-            // sola temporada haría leer mal el número.
-            th.innerHTML = `${titulo}<br><span class="fw-normal">${periodo.etiqueta}</span>`;
+            // Cada tramo va en su propia línea. La columna puede sumar dos períodos
+            // (por ejemplo "Resto VER 26-27 + VER 27-28") y en una sola línea eso
+            // ensanchaba la columna al doble que cualquier otra. Mostrar una sola
+            // temporada no es opción: la celda es la suma de los dos tramos.
+            const tramos = (periodo.tramos || []).map((t, i) =>
+                (i > 0 ? '+ ' : '') + (t.resto ? 'Resto ' : '') + t.codigo);
+
+            // Presupuesto de 3 líneas por encabezado: lo que no usan los tramos
+            // queda para el título. Así todas las columnas miden lo mismo de alto
+            // y ninguna se estira a lo ancho.
+            th.innerHTML = UIUtils.lineasEncabezado(titulo, UIUtils.LINEAS_ENCABEZADO - tramos.length)
+                + tramos.map(t => `<span class="th-linea th-periodo">${t}</span>`).join('');
             th.title = periodo.detalle;
         });
 
         // Las columnas "anterior" nombran la temporada histórica que sirve de base.
         UIUtils.rotularVentaAnterior('header-venta-verano-ant' + sufijo, 'Venta Ver. Anterior', 'VERANO');
         UIUtils.rotularVentaAnterior('header-venta-invierno-ant' + sufijo, 'Venta Inv. Anterior', 'INVIERNO');
+    }
+
+    /**
+     * Parte un título en líneas cortas para que el encabezado no estire la columna.
+     * "Venta Proy. Verano" con 2 líneas -> "Venta Proy." / "Verano".
+     * El ancho de la columna lo fija la línea más larga, así que conviene cortar
+     * antes de la última palabra en vez de dejar todo el título en un renglón.
+     */
+    static lineasEncabezado(titulo, maximo = UIUtils.LINEAS_ENCABEZADO) {
+        const palabras = titulo.split(' ');
+        const lineas = (maximo >= 2 && palabras.length > 2)
+            ? [palabras.slice(0, -1).join(' '), palabras[palabras.length - 1]]
+            : [titulo];
+
+        return lineas.map(l => `<span class="th-linea">${l}</span>`).join('');
     }
 
     /**
@@ -270,7 +346,8 @@ class UIUtils {
         const ultima = columnas.filter(c => c.toUpperCase().includes(tipo)).pop();
         if (!ultima) return;
 
-        th.innerHTML = `${titulo}<br><span class="fw-normal">${TemporadaServidor.etiquetaHistorica(ultima)}</span>`;
+        th.innerHTML = UIUtils.lineasEncabezado(titulo)
+            + `<span class="th-linea th-periodo">${TemporadaServidor.etiquetaHistorica(ultima)}</span>`;
     }
 
     /** Fecha YYYY-MM-DD a DD/MM/YYYY, para los tooltips. */

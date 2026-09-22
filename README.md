@@ -55,6 +55,9 @@ compra/
 │   │   ├── tabla-renderer.js
 │   │   ├── temporada-servidor.js  # Temporada/días que calcula el servidor
 │   │   └── utils.js
+│   ├── sql/
+│   │   ├── 01_cabecera_versiones.sql      # DDL de la cabecera de versiones
+│   │   └── 02_migracion_versiones.php     # Migración de las versiones existentes
 │   ├── api.php                    # API REST endpoints
 │   ├── index.php                  # Interfaz principal
 │   └── test_web.php               # Test de conexión y despliegue
@@ -89,6 +92,27 @@ ENV=PROD
 1. Acceder a `presupuestos/test_web.php` para verificar la conexión
 2. Si todo está correcto, ingresar a `presupuestos/index.php`
 
+### 4. Scripts de base de datos
+
+En `presupuestos/sql/`, en orden. Hay que correrlos **en las dos bases**:
+`POWER_BI_CONTROL` (Argentina) y `POWER_BI_CONTROL_URUGUAY` (Uruguay).
+
+```
+01_cabecera_versiones.sql     Crea la cabecera de versiones, el log de oficial y
+                              las columnas nuevas del detalle.
+                              Los 4 bloques vienen en @CONFIRMAR_* = 0: así solo
+                              informan qué harían. Poner en 1 para aplicar.
+
+02_migracion_versiones.php    Migra las versiones ya guardadas a la cabecera.
+                              php 02_migracion_versiones.php                 -> preview
+                              php 02_migracion_versiones.php --aplicar       -> escribe
+                              php 02_migracion_versiones.php --pais=uruguay
+```
+
+Los dos son **reejecutables** y ninguno borra datos. La aplicación funciona con o sin
+ellos aplicados: mientras falten, el panel de versiones avisa que hay que correrlos y
+el resto sigue andando igual.
+
 ## 🎯 Funcionalidades
 
 * ✅ Ejecuta el SP y muestra todos los datos
@@ -98,6 +122,48 @@ ENV=PROD
 * ✅ Visualización de temporadas
 * ✅ Interfaz responsiva y adaptada a móviles
 * ✅ **Guardado de Presupuestos**: Permite guardar un histórico de los presupuestos proyectados.
+
+## 🗂️ Versiones del presupuesto guardado
+
+Una versión guardada son **dos** cosas:
+
+| Tabla | Grano | Qué guarda |
+| ----- | ----- | ---------- |
+| `RO_T_HISTORIAL_COMPRAS_PROYECTADAS_CABECERA` | una fila por versión | cuándo y quién la guardó, desde qué solapa, con qué fecha se calculó, **temporada objetivo** con desde/hasta, período que cubre cada venta proyectada, si es completa o parcial, y si es la **oficial** |
+| `RO_T_HISTORIAL_COMPRAS_PROYECTADAS_PRESUPUESTO` | una fila por rubro/categoría | el detalle, más los componentes del stock proyectado, el costo con el que se calculó y la temporada base de cada venta anterior |
+| `RO_T_HISTORIAL_COMPRAS_PROYECTADAS_OFICIAL_LOG` | una fila por marcado | quién marcó o desmarcó qué versión y cuándo |
+
+El detalle **conserva** `nombre_presupuesto` y `temporada`, así que cualquier lector que hoy
+consulte solo esa tabla sigue funcionando igual.
+
+### La versión oficial
+
+Hay **una sola versión oficial por país y temporada objetivo**, garantizado por un índice
+único filtrado (`WHERE es_oficial = 1`). Se marca desde el panel *Versiones guardadas* del
+historial; marcar una desmarca la anterior en la misma transacción, previa confirmación.
+
+Una versión **parcial no puede ser oficial**: lo impide un `CHECK` en la base además de la
+aplicación, porque es la regla que protege al consumidor externo.
+
+### Guardado completo
+
+Por defecto se guarda el **presupuesto completo**, ignorando los filtros de la vista. Si hay
+filtros aplicados, el sistema pregunta; elegir "solo lo filtrado" marca la versión como
+parcial.
+
+### Qué guarda el detalle y por qué
+
+| Columnas | Por qué |
+| -------- | ------- |
+| `cant_stock`, `cant_stock_guardar`, `cant_pend_oc_verano/invierno/atemporal`, `stock_cobertura` | Descomponen `stock_proyectado` y la fila se audita sola. Las OC pendientes son las clave: entran al stock proyectado, así que la compra es **neta de lo ya pedido**, y meses después esas OC ya ingresaron y no habría forma de saber cuánto había pendiente |
+| `costo_prom`, `inc_fob`, `vcosto` | Copiados de `FP_T_COSTOS_PARAMETROS` al guardar. Esa tabla **no tiene versión ni fecha**: se pisa en el lugar, así que sin copiarlos la versión deja de ser reproducible. Mismos nombres que usa el circuito de distribución |
+| `temporada_base_verano`, `temporada_base_invierno` | De qué temporada histórica salió cada venta anterior. **Varía por fila**: se toma la última temporada con ventas, y un rubro sin movimiento reciente cae a una más vieja que el de al lado |
+
+Se descartaron a propósito: los `markup_*` de `FP_T_COSTOS_PARAMETROS` (son margen de venta
+por canal, pertenecen al circuito de distribución y tienen otro grano), el tipo de cambio
+(depende de la fecha de **pago**, que esta tabla no conoce: lo aplica el cashflow) y el
+importe FOB calculado (es derivable de dos columnas ya guardadas y guardarlo abre la puerta
+a que queden desincronizados).
 
 ## 💻 API Endpoints
 
@@ -109,8 +175,21 @@ ENV=PROD
 | `api.php?accion=estadisticas`       | GET    | Obtener estadísticas resumidas          |
 | `api.php?accion=rubros`             | GET    | Obtener lista de rubros                 |
 | `api.php?accion=rubro&rubro=NOMBRE` | GET    | Filtrar por rubro                       |
-| `api.php?accion=guardar-presupuesto` | POST  | Guarda el presupuesto proyectado visible en la BD. |
+| `api.php?accion=guardar-presupuesto` | POST  | Guarda una versión del presupuesto proyectado. |
 | `api.php?accion=buscar-historial`   | POST   | Busca en el historial de presupuestos guardados. |
+| `api.php?accion=versiones-presupuesto` | GET | Lista las versiones guardadas (una fila por versión). |
+| `api.php?accion=marcar-oficial`     | POST   | Marca una versión como oficial. Sin `confirmado` no escribe: devuelve cuál reemplazaría. |
+| `api.php?accion=eliminar-version-presupuesto` | POST | Elimina una versión (cabecera + detalle + log). Sin `confirmado` no borra: devuelve cuántas filas se llevaría y si es la oficial. |
+| `api.php?accion=historial-oficial`  | GET    | Quién marcó qué versión como oficial y cuándo. |
+
+`buscar-historial` acepta además `id_cabecera` o `nombre_presupuesto` para ver **una sola
+versión** en lugar de todo el historial.
+
+> ⚠️ **Zona horaria.** El `php.ini` de XAMPP viene con `Europe/Berlin`, cinco horas
+> adelante de Argentina: a partir de las 19:00 hora local PHP ya estaba en el día
+> siguiente, lo que corría la fecha de cálculo y con ella los días restantes de temporada.
+> `presupuestos/api.php` e `index.php` fijan `America/Argentina/Buenos_Aires`. Si se agrega
+> otro punto de entrada al módulo, tiene que hacer lo mismo.
 
 Los endpoints de compra proyectada devuelven, además de `data`:
 

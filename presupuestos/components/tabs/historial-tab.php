@@ -3,33 +3,93 @@
     <div class="search-container">
         <!-- Fila de Filtros -->
         <div class="row align-items-center mb-2">
+            <!-- Filtro por versión guardada: sin esto el historial mezcla todos
+                 los presupuestos y no hay forma de mirar uno solo. Se puebla al
+                 cargar las versiones y también se setea al hacer clic en una. -->
             <div class="col-md-3">
+                <select class="form-select" id="filtro-version-historial">
+                    <option value="">Todos los presupuestos guardados</option>
+                </select>
+            </div>
+            <div class="col-md-2">
                 <div class="input-group">
                     <span class="input-group-text"><i class="fas fa-search"></i></span>
-                    <input type="text" class="form-control" id="search-historial" placeholder="Buscar en rubro o categoría...">
+                    <input type="text" class="form-control" id="search-historial" placeholder="Rubro o categoría...">
                 </div>
             </div>
             <div class="col-md-2">
                 <input type="text" class="form-control" id="filtro-rubro-historial" placeholder="Filtrar por rubro...">
             </div>
             <div class="col-md-2">
-                <input type="text" class="form-control" id="filtro-categoria-historial" placeholder="Filtrar por categoría...">
+                <input type="date" class="form-control" id="filtro-fecha-desde-historial" title="Guardado desde">
             </div>
             <div class="col-md-2">
-                <input type="date" class="form-control" id="filtro-fecha-desde-historial">
+                <input type="date" class="form-control" id="filtro-fecha-hasta-historial" title="Guardado hasta">
             </div>
-            <div class="col-md-2">
-                <input type="date" class="form-control" id="filtro-fecha-hasta-historial">
-            </div>
-            <div class="col-md-1">
-                <button class="btn btn-primary" id="btn-buscar-historial">
-                    <i class="fas fa-search me-1"></i> Buscar
+            <div class="col-md-1 d-flex gap-1">
+                <button class="btn btn-primary" id="btn-buscar-historial" title="Buscar">
+                    <i class="fas fa-search"></i>
                 </button>
+                <button class="btn btn-outline-secondary" id="btn-limpiar-historial" title="Limpiar filtros">
+                    <i class="fas fa-eraser"></i>
+                </button>
+            </div>
+            <!-- Se saca el filtro por categoría de la fila para hacerle lugar al
+                 de versión: el buscador de texto ya busca en rubro y categoría. -->
+            <input type="hidden" id="filtro-categoria-historial" value="">
+        </div>
+    </div>
+
+    <!-- Versiones guardadas: una fila por versión, no por rubro.
+         Es la vista sobre la que se marca cuál es la oficial de cada temporada.
+         Colapsable porque la lista crece con cada guardado y no tiene sentido que
+         se coma el alto de la tabla de detalle cuando no se la está usando. -->
+    <div class="card mb-2">
+        <div class="card-header py-1 d-flex align-items-center justify-content-between">
+            <button class="btn btn-link btn-sm p-0 text-decoration-none fw-bold"
+                    type="button" data-bs-toggle="collapse" data-bs-target="#panel-versiones"
+                    aria-expanded="false" aria-controls="panel-versiones">
+                <i class="fas fa-chevron-right me-1 icono-colapso"></i>
+                <i class="fas fa-code-branch me-1"></i> Versiones guardadas
+            </button>
+            <div>
+                <span class="badge bg-info text-dark me-2" id="count-versiones">0 versiones</span>
+                <button class="btn btn-outline-primary btn-sm" id="btn-cargar-versiones">
+                    <i class="fas fa-sync-alt me-1"></i> Cargar
+                </button>
+            </div>
+        </div>
+        <div class="collapse" id="panel-versiones">
+            <!-- data-altura-fija: esta tabla conserva su alto y no entra en el
+                 reparto que hace ajustarAltura(), que es para la tabla principal. -->
+            <div class="table-responsive" data-altura-fija style="max-height: 230px; overflow-y: auto;">
+                <table class="table table-sm table-hover mb-0" id="tabla-versiones">
+                    <thead class="table-light sticky-header">
+                        <tr>
+                            <th>Guardado</th>
+                            <th>Nombre</th>
+                            <th>Solapa</th>
+                            <th>Temporada objetivo</th>
+                            <th class="text-center">Alcance</th>
+                            <th class="text-center">Oficial</th>
+                            <th>Marcada por</th>
+                            <th class="text-end">Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbody-versiones">
+                        <tr>
+                            <td colspan="8" class="text-center text-muted py-3">
+                                <i class="fas fa-info-circle me-1"></i>
+                                Presioná "Cargar" para ver las versiones guardadas
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
             </div>
         </div>
     </div>
 
-    <div class="table-responsive" style="max-height: calc(100vh - 250px); overflow-y: auto;">
+    <div class="table-responsive">
         <table class="table table-striped table-hover table-sm mb-0" id="tabla-historial">
             <thead class="table-dark sticky-header">
                 <tr>

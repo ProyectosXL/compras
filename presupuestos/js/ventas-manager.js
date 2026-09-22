@@ -319,7 +319,14 @@ class VentasManager {
         if (badgeAnteriores) badgeAnteriores.textContent = FormatoUtils.formatearNumero(totales.ventasAnteriores);
         if (badgeVariacion) {
             badgeVariacion.textContent = `${variacionTotal > 0 ? '+' : ''}${variacionTotal.toFixed(1)}%`;
-            badgeVariacion.className = `badge fs-6 ${variacionTotal > 0 ? 'bg-success' : variacionTotal < 0 ? 'bg-danger' : 'bg-warning text-dark'}`;
+            // El tono va en el item, no en el valor: el componente de resumen pinta
+            // el número según la clase del contenedor (ver .resumen-item--alerta/ok).
+            const item = badgeVariacion.closest('.resumen-item');
+            if (item) {
+                item.classList.remove('resumen-item--ok', 'resumen-item--alerta');
+                if (variacionTotal > 0) item.classList.add('resumen-item--ok');
+                else if (variacionTotal < 0) item.classList.add('resumen-item--alerta');
+            }
         }
         if (badgeEstadisticas) badgeEstadisticas.textContent = `↗${totales.mejorados} | →${totales.estables} | ↘${totales.empeorados}`;
 
@@ -327,6 +334,8 @@ class VentasManager {
         const contenedorResumen = document.getElementById('resumen-ventas-superior');
         if (contenedorResumen) {
             contenedorResumen.classList.remove('d-none');
+            // Al aparecer la barra, la tabla de abajo tiene menos alto disponible.
+            if (window.ajustarAltura) window.ajustarAltura();
         }
     }
 

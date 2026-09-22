@@ -376,6 +376,28 @@ mark {
     font-size: 0.75rem !important;
 }
 
+/* Encabezados en varias líneas.
+   El ancho de una columna lo fija la línea más larga de su encabezado, así que
+   un título y su período en un solo renglón ("VENTA PROY. VERANO  RESTO VER
+   26-27 + VER 27-28") estiraban la columna al doble que las demás y empujaban
+   el historial fuera de la pantalla. Cada línea va en su propio bloque: el
+   encabezado crece hacia abajo, no hacia los costados. */
+.th-linea {
+    display: block;
+    white-space: nowrap;
+    line-height: 1.15;
+}
+
+/* El período que cubre la columna: se lee como subtítulo, no compite con el
+   título ni hereda las mayúsculas del thead. */
+.th-periodo {
+    font-weight: 400;
+    font-size: 0.92em;
+    text-transform: none;
+    letter-spacing: 0;
+    opacity: 0.9;
+}
+
 /* Efectos hover para columnas coloreadas */
 .fila-datos:hover .bg-primary-subtle {
     background-color: #9ec5fe !important;
