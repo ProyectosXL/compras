@@ -58,7 +58,6 @@ const TablaRendererUtils = {
         tabla.setAttribute('data-limpia', 'true');
     },
 
-
     /**
      * Venta anterior que se usó como base de la proyección.
      *
@@ -66,76 +65,12 @@ const TablaRendererUtils = {
      * lista fija de las últimas dos temporadas y el reloj del navegador: cuando la
      * última venta con movimiento era más vieja (por ejemplo BILLETERAS DE CUERO,
      * con ventas solo en INV 24), la pantalla mostraba 0 mientras la proyección se
-     * había calculado sobre 335. La búsqueda vieja queda como respaldo por si algún
-     * camino de datos no pasa por ProcesadorDatos.
+     * había calculado sobre 335. Esa lista fija se reemplazó por el respaldo de
+     * TemporadaServidor.ventaAnteriorDe(), que aplica la misma regla que PHP en vez
+     * de adivinar los años a partir de `new Date()`.
      */
     buscarVentaHistoricaCorrecta(item, temporada) {
-        const campoServidor = temporada === 'VERANO' ? 'VENTA_VERANO_ANTERIOR' : 'VENTA_INVIERNO_ANTERIOR';
-        if (item[campoServidor] !== undefined && item[campoServidor] !== null) {
-            return parseFloat(item[campoServidor]) || 0;
-        }
-
-        const anoActual = new Date().getFullYear() % 100; // 2025 -> 25
-        const mesActual = new Date().getMonth() + 1; // 1-12
-
-        if (temporada === 'VERANO') {
-            // Para verano, buscar el año actual o anterior
-            const posiblesColumnas = [
-                `VTA_VERANO_${anoActual}`,      // VERANO 25
-                `VTA_VERANO_${anoActual - 1}`,  // VERANO 24
-                'VERANO 24-25',
-                'VERANO 23-24'
-            ];
-            
-            for (const columna of posiblesColumnas) {
-                if (item[columna] && !isNaN(item[columna]) && parseFloat(item[columna]) > 0) {
-                    console.log(`✅ VERANO encontrado: ${columna} = ${item[columna]}`);
-                    return parseFloat(item[columna]);
-                }
-            }
-            
-        } else if (temporada === 'INVIERNO') {
-            // CORRECCIÓN: Determinar el último invierno según el mes actual
-            let anoInvierno;
-            
-            if (mesActual >= 8 || mesActual === 1) {
-                // Estamos en verano (Ago-Ene), el último invierno fue este año
-                anoInvierno = anoActual;
-            } else {
-                // Estamos en invierno (Feb-Jul), el último invierno completo fue el año pasado
-                anoInvierno = anoActual - 1;
-            }
-            
-            const posiblesColumnas = [
-                `VTA_INVIERNO_${anoInvierno}`,      // INVIERNO del último período
-                `INVIERNO ${anoInvierno}`,          // Formato alternativo
-                `VTA_INVIERNO_${anoInvierno - 1}`,  // Fallback año anterior
-                `INVIERNO ${anoInvierno - 1}`,      // Fallback formato alternativo
-            ];
-            
-            for (const columna of posiblesColumnas) {
-                if (item[columna] && !isNaN(item[columna]) && parseFloat(item[columna]) > 0) {
-                    console.log(`✅ INVIERNO encontrado: ${columna} = ${item[columna]}`);
-                    return parseFloat(item[columna]);
-                }
-            }
-            
-            // DEBUG: Mostrar todas las columnas disponibles si no encuentra
-            const columnasInvierno = Object.keys(item).filter(key => 
-                key.toLowerCase().includes('invierno')
-            );
-            console.warn(`❌ No se encontró venta INVIERNO. Columnas disponibles:`, columnasInvierno);
-        }
-        
-        console.warn(`❌ No se encontró venta ${temporada} anterior para item:`, {
-            rubro: item.RUBRO,
-            categoria: item.CATEGORIA_PADRE,
-            columnas_disponibles: Object.keys(item).filter(key => 
-                key.toLowerCase().includes(temporada.toLowerCase())
-            )
-        });
-        
-        return 0;
+        return TemporadaServidor.ventaAnteriorDe(item, temporada);
     },
 
     extraerColumnasVentasHistoricas(datos) {

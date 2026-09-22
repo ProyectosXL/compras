@@ -70,6 +70,89 @@ const TemporadaServidor = {
         return info.periodos[solapa] || null;
     },
 
+    /**
+     * Temporada a la que corresponde una columna de venta histórica, o null.
+     *
+     * Port literal de PresupuestoCalculos::temporadaDeColumna(). Vive acá —y no en
+     * cada calculadora— porque es la regla que decide qué columna es una venta y
+     * cuál no, y con una copia por calculadora volvían a separarse.
+     *
+     * @returns {{tipo: string, anoFin: number, desde: string}|null}
+     */
+    temporadaDeColumna(columna) {
+        const nombre = String(columna);
+
+        // Las cantidades pendientes de OC llevan VERANO/INVIERNO en el nombre pero
+        // no son ventas históricas. Sin este filtro, una fila sin ventas de verano
+        // termina proyectando sobre CANT_PEND_OC_VERANO, o sea sobre lo ya pedido.
+        if (/CANT_PEND_OC/i.test(nombre)) return null;
+
+        // Par inicio-fin ("VERANO 25-26"): el año de cierre es el segundo.
+        let m = nombre.match(/(VERANO|INVIERNO)[\s_]*(\d{2})\s*-\s*(\d{2})/i);
+        if (m) {
+            m = [m[1], m[3]];
+        } else {
+            const simple = nombre.match(/(VERANO|INVIERNO)[\s_]*(\d{2})/i);
+            if (!simple) return null;
+            m = [simple[1], simple[2]];
+        }
+
+        const tipo = m[0].toUpperCase();
+        const anoFin = 2000 + parseInt(m[1], 10);
+
+        // Mismo calendario que construirTemporada(): el verano arranca el 01/08 del
+        // año anterior al de cierre y el invierno el 01/02 del año de cierre.
+        const desde = tipo === 'VERANO' ? `${anoFin - 1}-08-01` : `${anoFin}-02-01`;
+
+        return { tipo, anoFin, desde };
+    },
+
+    /**
+     * Venta anterior sobre la que se proyecta una fila, con la MISMA regla que PHP.
+     *
+     * Prioridad al valor que ya eligió el servidor (VENTA_*_ANTERIOR): es el que usó
+     * el render y el que se guarda en la versión. El respaldo replica
+     * PresupuestoCalculos::extraerColumnaVentaAnterior(): la temporada con ventas más
+     * reciente por FECHA REAL de inicio, no por el número que aparezca en el nombre.
+     *
+     * Antes cada calculadora buscaba por su cuenta, aceptando cualquier columna que
+     * dijera VERANO/INVIERNO y ordenando por los dos primeros dígitos del nombre.
+     * Como CANT_PEND_OC_VERANO no tiene dígitos quedaba con año 0 y perdía contra
+     * cualquier VTA_*, así que casi siempre coincidía con PHP. Pero en las filas sin
+     * ninguna venta de verano era la única candidata y ganaba: en Uruguay, tres
+     * rubros (ZAPATO, BOLSO, TOALLON) pasaban a proyectar sobre las unidades pedidas
+     * en vez de sobre 0. El error solo aparecía al editar un índice, porque el render
+     * inicial lo hace PHP.
+     *
+     * @param {object} registro fila de datos
+     * @param {string} tipo 'VERANO' o 'INVIERNO'
+     */
+    ventaAnteriorDe(registro, tipo) {
+        const campoServidor = tipo === 'VERANO' ? 'VENTA_VERANO_ANTERIOR' : 'VENTA_INVIERNO_ANTERIOR';
+        const delServidor = registro ? registro[campoServidor] : undefined;
+        if (delServidor !== undefined && delServidor !== null && delServidor !== '') {
+            return parseFloat(delServidor) || 0;
+        }
+
+        const candidatas = [];
+        for (const [columna, valor] of Object.entries(registro || {})) {
+            if (valor === null || valor === '' || isNaN(valor) || parseFloat(valor) <= 0) continue;
+            if (/PROY/i.test(columna)) continue;
+
+            const t = TemporadaServidor.temporadaDeColumna(columna);
+            if (!t || t.tipo !== tipo) continue;
+
+            candidatas.push({ columna, valor: parseFloat(valor), desde: t.desde });
+        }
+
+        if (!candidatas.length) return 0;
+
+        // Más reciente primero, por fecha de inicio de temporada. Las fechas están en
+        // ISO, así que compararlas como texto ya las ordena cronológicamente.
+        candidatas.sort((a, b) => (a.desde < b.desde ? 1 : a.desde > b.desde ? -1 : 0));
+        return candidatas[0].valor;
+    },
+
     // Diccionario {columna del SP => etiqueta} que manda el servidor con cada solapa.
     _etiquetasHistoricas: {},
 
