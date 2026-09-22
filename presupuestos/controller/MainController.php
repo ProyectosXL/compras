@@ -261,6 +261,44 @@ class MainController {
     }
     
     /**
+     * Recalcula el reparto por tramo de una sola fila.
+     *
+     * Lo llama el editor de índices después de cambiar un índice: la venta
+     * proyectada la recalcula el navegador (fórmula simple, ya replicada y
+     * verificada), pero el reparto del stock entre tramos NO se duplica allá.
+     * Se le pasan los números de la fila y devuelve los tramos ya repartidos.
+     */
+    public function recalcularTramos() {
+        try {
+            $entrada = json_decode(file_get_contents('php://input'), true) ?: [];
+
+            $solapa = (strtolower($entrada['solapa'] ?? '') === 'invierno') ? 'invierno' : 'verano';
+
+            $indiceVerano = (float)($entrada['indice_verano'] ?? 1.0);
+            $indiceInvierno = (float)($entrada['indice_invierno'] ?? $indiceVerano);
+
+            $tramos = PresupuestoCalculos::calcularTramosDeFila(
+                (float)($entrada['stock_proyectado'] ?? 0),
+                (float)($entrada['venta_verano_anterior'] ?? 0),   $indiceVerano,
+                (float)($entrada['venta_invierno_anterior'] ?? 0), $indiceInvierno,
+                null,
+                $solapa
+            );
+
+            $this->jsonResponse([
+                'success' => true,
+                'tramos' => $tramos
+            ]);
+
+        } catch (Exception $e) {
+            $this->jsonResponse([
+                'success' => false,
+                'message' => 'Error al recalcular los tramos: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
      * Procesar solicitudes HTTP y rutear a controladores específicos
      */
     public function procesarSolicitud() {
@@ -397,6 +435,14 @@ class MainController {
             case 'actualizar-multiples-indices':
             case 'resetear-indices':
                 $this->delegarIndices($accion);
+                break;
+            // Reparto por tramo de UNA fila, después de editar un índice.
+            // Va al servidor en vez de recalcularse en el navegador porque el
+            // reparto tiene una sola implementación (repartirCompraPorTramo) y
+            // duplicarla en JS es exactamente lo que volvió a separar los números
+            // la última vez. Es una fila por edición, así que el viaje no pesa.
+            case 'recalcular-tramos':
+                $this->recalcularTramos();
                 break;
             case 'guardar-presupuesto':
             case 'buscar-historial':
