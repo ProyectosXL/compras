@@ -2,11 +2,7 @@
 <!-- Estilos específicos del sistema -->
 <style>
     .loading { display: none; }
-    /* Solo los modales: dentro de las solapas el alto lo resuelve el flex de
-       .tab-pane. Esta regla no estaba acotada y, al ser la última hoja en
-       cargarse, le ganaba a todas las demás y recortaba las tablas de las
-       solapas a 75vh. */
-    .modal .table-responsive { max-height: 65vh; overflow: auto; }
+    .table-responsive { max-height: 75vh; overflow: auto; }
     .nav-tabs { border-bottom: 2px solid #dee2e6; }
     .nav-tabs .nav-link { 
         border: none; 
