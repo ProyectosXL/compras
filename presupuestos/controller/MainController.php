@@ -314,6 +314,12 @@ class MainController {
             case 'info-temporadas':
                 $this->obtenerInfoTemporadas();
                 break;
+
+            // Versiones del presupuesto (cabecera) y trazabilidad de la oficial
+            case 'versiones-presupuesto':
+            case 'historial-oficial':
+                $this->delegarHistorial($accion);
+                break;
                 
             // Compras detalle
             case 'compras-detalle':
@@ -394,6 +400,7 @@ class MainController {
                 break;
             case 'guardar-presupuesto':
             case 'buscar-historial':
+            case 'marcar-oficial':
                 $this->delegarHistorial($accion);
                 break;
             case 'distribucion-canal':
@@ -577,6 +584,15 @@ class MainController {
                 break;
             case 'buscar-historial':
                 $historialController->buscarHistorial();
+                break;
+            case 'versiones-presupuesto':
+                $historialController->listarVersiones();
+                break;
+            case 'marcar-oficial':
+                $historialController->marcarOficial();
+                break;
+            case 'historial-oficial':
+                $historialController->historialOficial();
                 break;
         }
     }

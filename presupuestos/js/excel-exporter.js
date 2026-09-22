@@ -208,10 +208,14 @@ class ExcelExporter {
                 const periodos = ExcelExporter.periodosDeSolapa(solapa);
 
                 resultado['Venta Ver. Anterior'] = ExcelExporter.buscarVentaHistorica(item, 'VERANO');
+                // De qué temporada salió la base: varía por fila, así que no se puede
+                // poner en el encabezado como en la pantalla.
+                resultado['Temporada Base Ver.'] = item.TEMPORADA_BASE_VERANO || '';
                 resultado[`Proy. Verano (${periodos.verano})`] = item.VENTA_PROY_VERANO || 0;
 
                 resultado['Índice Inv. Variación'] = parseFloat(item.INDICE_VARIACION_INVIERNO || item.INDICE_VARIACION || 1).toFixed(2);
                 resultado['Venta Inv. Anterior'] = ExcelExporter.buscarVentaHistorica(item, 'INVIERNO');
+                resultado['Temporada Base Inv.'] = item.TEMPORADA_BASE_INVIERNO || '';
                 resultado[`Proy. Invierno (${periodos.invierno})`] = item.VENTA_PROY_INVIERNO || 0;
                 
                 resultado['Compra Proyectada'] = item.COMPRA_PROYECTADA || 0;
@@ -224,7 +228,12 @@ class ExcelExporter {
                     'INDICE_VARIACION_INVIERNO', 'COMPRA_PROYECTADA', 'VENTA_PROY_VERANO', 'VENTA_PROY_INVIERNO',
                     'VTA_VERANO_ACTUAL', 'VTA_INVIERNO_ACTUAL',
                     // Bases del cálculo, ya exportadas como "Venta Ver./Inv. Anterior".
-                    'VENTA_VERANO_ANTERIOR', 'VENTA_INVIERNO_ANTERIOR'
+                    'VENTA_VERANO_ANTERIOR', 'VENTA_INVIERNO_ANTERIOR',
+                    // Temporada de la que salió cada base: se exporta aparte, más abajo.
+                    'TEMPORADA_BASE_VERANO', 'TEMPORADA_BASE_INVIERNO',
+                    // Componentes del stock proyectado: no son ventas históricas.
+                    'CANT_STOCK', 'CANT_STOCK_GUARDAR', 'STOCK_COBERTURA',
+                    'CANT_PEND_OC_VERANO', 'CANT_PEND_OC_INVIERNO', 'CANT_PEND_OC_ATEMPORAL'
                 ];
 
                 Object.keys(item).forEach(key => {

@@ -10,6 +10,11 @@ class HistorialController {
 
     /**
      * Maneja la solicitud para guardar un presupuesto.
+     *
+     * El pais, la fecha y los periodos NO se toman del payload: los resuelve el
+     * servidor. La fecha venia del reloj del navegador y es contra la que se
+     * prorratean los restos de temporada, asi que una maquina desfasada dejaba
+     * guardada una version que no se podia reproducir.
      */
     public function guardarPresupuesto() {
         $datos = json_decode(file_get_contents('php://input'), true);
@@ -19,28 +24,14 @@ class HistorialController {
             return;
         }
 
-        $nombrePresupuesto = $datos['nombre_presupuesto'] ?? null;
-        $temporada = $datos['temporada'] ?? null;
-        $filas = $datos['filas'] ?? [];
-        $fechaGuardado = $datos['fecha_guardado'] ?? null;
-
-        if (session_status() === PHP_SESSION_NONE) {
-            session_start();
-        }
-        $pais = $_SESSION['pais_seleccionado'] ?? 'argentina';
-
-        if (empty($nombrePresupuesto) || empty($temporada) || empty($filas) || empty($fechaGuardado)) {
-            $this->jsonResponse(['success' => false, 'message' => 'Faltan datos requeridos (nombre, temporada, filas, fecha).'], 400);
+        if (empty($datos['nombre_presupuesto']) || empty($datos['temporada']) || empty($datos['filas'])) {
+            $this->jsonResponse(['success' => false, 'message' => 'Faltan datos requeridos (nombre, temporada, filas).'], 400);
             return;
         }
 
         try {
-            $resultado = $this->historial->guardarPresupuesto($nombrePresupuesto, $temporada, $pais, $filas, $fechaGuardado);
-            if ($resultado['success']) {
-                $this->jsonResponse($resultado);
-            } else {
-                $this->jsonResponse($resultado, 500);
-            }
+            $resultado = $this->historial->guardarPresupuesto($datos);
+            $this->jsonResponse($resultado, $resultado['success'] ? 200 : 500);
         } catch (Exception $e) {
             $this->jsonResponse(['success' => false, 'message' => 'Error del servidor: ' . $e->getMessage()], 500);
         }
@@ -59,11 +50,64 @@ class HistorialController {
 
         try {
             $resultado = $this->historial->buscarHistorial($filtros ?: []);
-            if ($resultado['success']) {
-                $this->jsonResponse($resultado);
-            } else {
-                $this->jsonResponse($resultado, 500);
-            }
+            $this->jsonResponse($resultado, $resultado['success'] ? 200 : 500);
+        } catch (Exception $e) {
+            $this->jsonResponse(['success' => false, 'message' => 'Error del servidor: ' . $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Lista las versiones guardadas: una fila por version, no por rubro.
+     * Es la vista sobre la que se marca la oficial.
+     */
+    public function listarVersiones() {
+        try {
+            $filtros = [
+                'temporada_objetivo' => $_GET['temporada_objetivo'] ?? null,
+                'solo_oficiales'     => !empty($_GET['solo_oficiales'])
+            ];
+            $resultado = $this->historial->listarVersiones($filtros);
+            $this->jsonResponse($resultado, $resultado['success'] ? 200 : 500);
+        } catch (Exception $e) {
+            $this->jsonResponse(['success' => false, 'message' => 'Error del servidor: ' . $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Marca una version como oficial.
+     *
+     * Dos pasos a proposito: la primera llamada, sin `confirmado`, no escribe y
+     * devuelve cual version se va a desmarcar para que la UI lo muestre. Recien
+     * la segunda aplica el cambio. Asi la confirmacion la decide el servidor con
+     * el dato real y no el front con lo que tenia en pantalla.
+     */
+    public function marcarOficial() {
+        $datos = json_decode(file_get_contents('php://input'), true);
+
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            $this->jsonResponse(['success' => false, 'message' => 'Error: JSON inválido.'], 400);
+            return;
+        }
+
+        $idCabecera = (int)($datos['id_cabecera'] ?? 0);
+        if ($idCabecera <= 0) {
+            $this->jsonResponse(['success' => false, 'message' => 'Falta el id de la versión.'], 400);
+            return;
+        }
+
+        try {
+            $resultado = $this->historial->marcarOficial($idCabecera, !empty($datos['confirmado']));
+            $this->jsonResponse($resultado, $resultado['success'] ? 200 : 400);
+        } catch (Exception $e) {
+            $this->jsonResponse(['success' => false, 'message' => 'Error del servidor: ' . $e->getMessage()], 500);
+        }
+    }
+
+    /** Quien marco que version como oficial y cuando. */
+    public function historialOficial() {
+        try {
+            $resultado = $this->historial->historialOficial($_GET['temporada_objetivo'] ?? null);
+            $this->jsonResponse($resultado, $resultado['success'] ? 200 : 500);
         } catch (Exception $e) {
             $this->jsonResponse(['success' => false, 'message' => 'Error del servidor: ' . $e->getMessage()], 500);
         }

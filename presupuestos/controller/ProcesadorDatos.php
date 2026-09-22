@@ -41,9 +41,20 @@ class ProcesadorDatos {
                     'INDICE_ORIGINAL' => round((float)($registro['INDICE_ORIGINAL'] ?? $registro['INDICE_VAR_ORIGINAL'] ?? $registro['INDICE_VARIACION'] ?? 1.0), 2),
                     'INDICE_VARIACION' => round((float)($registro['INDICE_VARIACION'] ?? 1.0), 2),
                     'INDICE_VARIACION_INVIERNO' => round((float)($registro['INDICE_VARIACION_INVIERNO'] ?? $registro['INDICE_VARIACION'] ?? 1.0), 2),
+                    // Componentes de STOCK_PROYECTADO. Viajan para poder guardarlos en la
+                    // versión: sin ellos, meses después no se sabe cuánto había pedido y
+                    // sin ingresar, que es lo que vuelve NETA a la compra proyectada.
+                    'CANT_STOCK' => (int)($registro['CANT_STOCK'] ?? 0),
+                    'CANT_STOCK_GUARDAR' => (int)($registro['CANT_STOCK_GUARDAR'] ?? 0),
+                    'CANT_PEND_OC_VERANO' => (int)($registro['CANT_PEND_OC_VERANO'] ?? 0),
+                    'CANT_PEND_OC_INVIERNO' => (int)($registro['CANT_PEND_OC_INVIERNO'] ?? 0),
+                    'CANT_PEND_OC_ATEMPORAL' => (int)($registro['CANT_PEND_OC_ATEMPORAL'] ?? 0),
+                    'STOCK_COBERTURA' => (int)($registro['STOCK_COBERTURA'] ?? 0),
                     // Bases efectivas del cálculo: la pantalla muestra estas, no las que
                     // el front buscaba por su cuenta (ver presupuestoCalculos).
                     'VENTA_VERANO_ANTERIOR' => round($calculosCompra['venta_verano_anterior'], 0),
+                    'TEMPORADA_BASE_VERANO' => $calculosCompra['temporada_base_verano'],
+                    'TEMPORADA_BASE_INVIERNO' => $calculosCompra['temporada_base_invierno'],
                     'VENTA_INVIERNO_ANTERIOR' => round($calculosCompra['venta_invierno_anterior'], 0),
                     'VENTA_PROY_VERANO' => round($calculosCompra['venta_proy_verano'], 0),
                     'VENTA_PROY_INVIERNO' => round($calculosCompra['venta_proy_invierno'], 0),
@@ -102,7 +113,16 @@ class ProcesadorDatos {
                     'INDICE_ORIGINAL' => round((float)($registro['INDICE_ORIGINAL'] ?? $registro['INDICE_VAR_ORIGINAL'] ?? $registro['INDICE_VARIACION'] ?? 1.0), 2),
                     'INDICE_VARIACION' => round((float)($registro['INDICE_VARIACION'] ?? 1.0), 2),
                     'INDICE_VARIACION_INVIERNO' => round((float)($registro['INDICE_VARIACION_INVIERNO'] ?? $registro['INDICE_VARIACION'] ?? 1.0), 2),
+                    // Ver el comentario equivalente en procesarDatosCompraVerano().
+                    'CANT_STOCK' => (int)($registro['CANT_STOCK'] ?? 0),
+                    'CANT_STOCK_GUARDAR' => (int)($registro['CANT_STOCK_GUARDAR'] ?? 0),
+                    'CANT_PEND_OC_VERANO' => (int)($registro['CANT_PEND_OC_VERANO'] ?? 0),
+                    'CANT_PEND_OC_INVIERNO' => (int)($registro['CANT_PEND_OC_INVIERNO'] ?? 0),
+                    'CANT_PEND_OC_ATEMPORAL' => (int)($registro['CANT_PEND_OC_ATEMPORAL'] ?? 0),
+                    'STOCK_COBERTURA' => (int)($registro['STOCK_COBERTURA'] ?? 0),
                     'VENTA_VERANO_ANTERIOR' => round($calculosCompra['venta_verano_anterior'], 0),
+                    'TEMPORADA_BASE_VERANO' => $calculosCompra['temporada_base_verano'],
+                    'TEMPORADA_BASE_INVIERNO' => $calculosCompra['temporada_base_invierno'],
                     'VENTA_INVIERNO_ANTERIOR' => round($calculosCompra['venta_invierno_anterior'], 0),
                     'VENTA_PROY_VERANO' => round($calculosCompra['venta_proy_verano'], 0),
                     'VENTA_PROY_INVIERNO' => round($calculosCompra['venta_proy_invierno'], 0),

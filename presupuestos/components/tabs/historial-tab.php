@@ -29,7 +29,47 @@
         </div>
     </div>
 
-    <div class="table-responsive" style="max-height: calc(100vh - 250px); overflow-y: auto;">
+    <!-- Versiones guardadas: una fila por versión, no por rubro.
+         Es la vista sobre la que se marca cuál es la oficial de cada temporada. -->
+    <div class="card mb-2">
+        <div class="card-header py-1 d-flex align-items-center justify-content-between">
+            <span class="small fw-bold">
+                <i class="fas fa-code-branch me-1"></i> Versiones guardadas
+            </span>
+            <div>
+                <span class="badge bg-info text-dark me-2" id="count-versiones">0 versiones</span>
+                <button class="btn btn-outline-primary btn-sm" id="btn-cargar-versiones">
+                    <i class="fas fa-sync-alt me-1"></i> Cargar
+                </button>
+            </div>
+        </div>
+        <div class="table-responsive" style="max-height: 230px; overflow-y: auto;">
+            <table class="table table-sm table-hover mb-0" id="tabla-versiones">
+                <thead class="table-light sticky-header">
+                    <tr>
+                        <th>Guardado</th>
+                        <th>Nombre</th>
+                        <th>Solapa</th>
+                        <th>Temporada objetivo</th>
+                        <th class="text-center">Alcance</th>
+                        <th class="text-center">Oficial</th>
+                        <th>Marcada por</th>
+                        <th class="text-end">Acción</th>
+                    </tr>
+                </thead>
+                <tbody id="tbody-versiones">
+                    <tr>
+                        <td colspan="8" class="text-center text-muted py-3">
+                            <i class="fas fa-info-circle me-1"></i>
+                            Presioná "Cargar" para ver las versiones guardadas
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="table-responsive" style="max-height: calc(100vh - 480px); overflow-y: auto;">
         <table class="table table-striped table-hover table-sm mb-0" id="tabla-historial">
             <thead class="table-dark sticky-header">
                 <tr>
