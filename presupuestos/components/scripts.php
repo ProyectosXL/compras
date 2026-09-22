@@ -5,12 +5,12 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <!-- Scripts modulares del sistema - ORDEN CORRECTO -->
-<script src="js/utils.js"></script>
+<script src="js/utils.js?v=2.0"></script>
 <!-- Temporada calculada por el servidor. Va temprano porque la consultan el renderer,
      el exportador a Excel y las calculadoras. -->
 <script src="js/temporada-servidor.js?v=1.0"></script>
 <script src="js/api-client.js?v=13.0"></script>
-<script src="js/tabla-renderer.js"></script>
+<script src="js/tabla-renderer.js?v=2.0"></script>
 <script src="js/busqueda-manager.js"></script>
 
 <!-- Gestor de filtros persistentes -->
@@ -27,7 +27,7 @@
 <!-- Resto de módulos -->
 <script src="js/compras-manager.js"></script>
 <script src="js/contenedores-manager.js"></script>
-<script src="js/totales-compra.js"></script>
+<script src="js/totales-compra.js?v=2.0"></script>
 <script src="js/totales-stock.js"></script>
 <script src="js/excel-exporter.js?v=13.0"></script>
 <script src="js/ventas-manager.js"></script>

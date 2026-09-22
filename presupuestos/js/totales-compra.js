@@ -49,36 +49,15 @@ class TotalesCompra {
                 return;
             }
 
-            // 1. IDENTIFICAR COLUMNAS DINÁMICAS (Historial de años anteriores)
-            const primerItem = datos[0];
-            
-            // Columnas que ya sumamos explícitamente o que son texto/índices
-            const columnasIgnorar = [
-                'RUBRO', 'CATEGORIA', 'CATEGORIA_PADRE', 'ID', 'DESCRIPCION', 
-                'STOCK_PROYECTADO', 'STOCK_ACTUAL',
-                'INDICE_VAR_ORIGINAL', 'INDICE_VARIACION',
-                'INDICE_VER_VAR', 'INDICE_VERANO_VARIACION',
-                'INDICE_INV_VAR', 'INDICE_INVIERNO_VARIACION',
-                'COMPRA_PROYECTADA', 'COMPRA', 'COMPRA_PROY',
-                'PROY_VER', 'VENTA_PROY_VERANO', 'PROYECCION_VERANO',
-                'PROY_INV', 'VENTA_PROY_INVIERNO', 'PROYECCION_INVIERNO',
-                'VENTA_VER_ANT', 'VTA_VERANO_ANT', 'VENTA_VERANO_ANTERIOR',
-                'VENTA_INV_ANT', 'VTA_INVIERNO_ANT', 'VENTA_INVIERNO_ANTERIOR'
-            ];
-
-            // Detectamos claves numéricas extras (los años del historial)
-            const clavesDinamicas = Object.keys(primerItem).filter(key => {
-                const valor = parseFloat(primerItem[key]);
-                const esVentaAnteriorOculta = (key.startsWith('VTA_') || key.startsWith('VENTA_')) && 
-                                              (columnasIgnorar.includes(key));
-
-                return !columnasIgnorar.includes(key) && 
-                       !key.includes('INDICE') && 
-                       !key.includes('PROY_VER_26') && 
-                       !key.includes('PROY_INV_26') &&
-                       !isNaN(valor) &&
-                       !esVentaAnteriorOculta;
-            });
+            // 1. COLUMNAS DINÁMICAS (historial de temporadas anteriores)
+            //
+            // Se piden a la MISMA función que usan el encabezado y las filas de datos.
+            // Antes se deducían acá con una lista negra propia, así que cada columna
+            // numérica nueva del registro se colaba como si fuera una temporada: la
+            // fila de totales terminaba con más celdas que columnas y todo el bloque
+            // del historial quedaba corrido, mostrando los componentes del stock bajo
+            // los encabezados de los años.
+            const clavesDinamicas = TablaRendererUtils.extraerColumnasVentasHistoricas(datos);
 
             // 2. INICIALIZAR ACUMULADOR
             const acumuladorInicial = {
@@ -186,35 +165,16 @@ class TotalesCompra {
     }
 
     /**
-     * Busca inteligentemente el valor de la Venta Anterior
+     * Venta anterior de una fila: la misma que muestra la columna de arriba.
+     *
+     * Se delega en TablaRendererUtils para que el total sea la suma exacta de lo
+     * que se ve. Acá había una cuarta búsqueda propia, con el reloj del navegador
+     * y una lista de claves que no incluía la que manda el servidor: en los rubros
+     * cuya última venta es de una temporada más vieja sumaba 0 mientras la columna
+     * mostraba otro número.
      */
     static obtenerValorVentaAnterior(item, temporada) {
-        const anoActual = new Date().getFullYear().toString().substr(-2); 
-        const anoAnterior = (parseInt(anoActual) - 1).toString();
-        let posiblesKeys = [];
-
-        if (temporada === 'VERANO') {
-            posiblesKeys = [
-                'VENTA_VER_ANT', 'VENTA_VERANO_ANT', 'VTA_VERANO_ANT', 'VTA_VER_ANT',
-                `VTA_VERANO_${anoActual}`, `VTA_VERANO_${anoAnterior}`, 'VERANO_ANTERIOR'
-            ];
-        } else {
-            posiblesKeys = [
-                'VENTA_INV_ANT', 'VENTA_INVIERNO_ANT', 'VTA_INVIERNO_ANT', 'VTA_INV_ANT',
-                `VTA_INVIERNO_${anoActual}`, `VTA_INVIERNO_${anoAnterior}`, 'INVIERNO_ANTERIOR'
-            ];
-        }
-
-        for (const key of posiblesKeys) {
-            if (item.hasOwnProperty(key)) return parseFloat(item[key] || 0);
-        }
-
-        // Búsqueda por patrón
-        const patron = temporada === 'VERANO' ? 'VTA_VERANO_' : 'VTA_INVIERNO_';
-        const keysCoincidentes = Object.keys(item).filter(k => k.startsWith(patron));
-        if (keysCoincidentes.length > 0) return parseFloat(item[keysCoincidentes[0]] || 0);
-
-        return 0;
+        return TablaRendererUtils.buscarVentaHistoricaCorrecta(item, temporada);
     }
 
     static obtenerValorProyeccion(item, temporada) {

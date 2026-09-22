@@ -219,6 +219,10 @@ class UIUtils {
     /**
      * Actualizar headers dinámicos con etiquetas de temporada
      */
+    // Líneas que puede ocupar un encabezado. Todas las columnas usan el mismo
+    // presupuesto para que el thead tenga una altura pareja.
+    static LINEAS_ENCABEZADO = 3;
+
     static actualizarHeadersDinamicos(info) {
         if (!info || !info.periodos) return;
 
@@ -246,16 +250,39 @@ class UIUtils {
             const th = document.getElementById(id);
             if (!th || !periodo) return;
 
-            // La etiqueta lleva los dos tramos cuando la columna suma dos (por ejemplo
-            // "Resto VER 26-27 + VER 27-28"): la celda es la suma, así que mostrar una
-            // sola temporada haría leer mal el número.
-            th.innerHTML = `${titulo}<br><span class="fw-normal">${periodo.etiqueta}</span>`;
+            // Cada tramo va en su propia línea. La columna puede sumar dos períodos
+            // (por ejemplo "Resto VER 26-27 + VER 27-28") y en una sola línea eso
+            // ensanchaba la columna al doble que cualquier otra. Mostrar una sola
+            // temporada no es opción: la celda es la suma de los dos tramos.
+            const tramos = (periodo.tramos || []).map((t, i) =>
+                (i > 0 ? '+ ' : '') + (t.resto ? 'Resto ' : '') + t.codigo);
+
+            // Presupuesto de 3 líneas por encabezado: lo que no usan los tramos
+            // queda para el título. Así todas las columnas miden lo mismo de alto
+            // y ninguna se estira a lo ancho.
+            th.innerHTML = UIUtils.lineasEncabezado(titulo, UIUtils.LINEAS_ENCABEZADO - tramos.length)
+                + tramos.map(t => `<span class="th-linea th-periodo">${t}</span>`).join('');
             th.title = periodo.detalle;
         });
 
         // Las columnas "anterior" nombran la temporada histórica que sirve de base.
         UIUtils.rotularVentaAnterior('header-venta-verano-ant' + sufijo, 'Venta Ver. Anterior', 'VERANO');
         UIUtils.rotularVentaAnterior('header-venta-invierno-ant' + sufijo, 'Venta Inv. Anterior', 'INVIERNO');
+    }
+
+    /**
+     * Parte un título en líneas cortas para que el encabezado no estire la columna.
+     * "Venta Proy. Verano" con 2 líneas -> "Venta Proy." / "Verano".
+     * El ancho de la columna lo fija la línea más larga, así que conviene cortar
+     * antes de la última palabra en vez de dejar todo el título en un renglón.
+     */
+    static lineasEncabezado(titulo, maximo = UIUtils.LINEAS_ENCABEZADO) {
+        const palabras = titulo.split(' ');
+        const lineas = (maximo >= 2 && palabras.length > 2)
+            ? [palabras.slice(0, -1).join(' '), palabras[palabras.length - 1]]
+            : [titulo];
+
+        return lineas.map(l => `<span class="th-linea">${l}</span>`).join('');
     }
 
     /**
@@ -270,7 +297,8 @@ class UIUtils {
         const ultima = columnas.filter(c => c.toUpperCase().includes(tipo)).pop();
         if (!ultima) return;
 
-        th.innerHTML = `${titulo}<br><span class="fw-normal">${TemporadaServidor.etiquetaHistorica(ultima)}</span>`;
+        th.innerHTML = UIUtils.lineasEncabezado(titulo)
+            + `<span class="th-linea th-periodo">${TemporadaServidor.etiquetaHistorica(ultima)}</span>`;
     }
 
     /** Fecha YYYY-MM-DD a DD/MM/YYYY, para los tooltips. */
