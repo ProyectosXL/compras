@@ -463,34 +463,23 @@
         // cuando la solapa Historial pasó a tener además el panel de versiones, ese
         // panel se estiraba a pantalla completa y la tabla de abajo quedaba sin
         // espacio para scrollear hasta el final.
+        // Fija el alto del contenedor principal.
+        //
+        // El alto de cada tabla NO se calcula acá: lo definen las reglas
+        // "#solapa .table-responsive { max-height: ... !important }" de
+        // tabla-optimizada.css. Este código llegó a calcularlo también, pero
+        // nunca tuvo efecto: hay un ".table-responsive { max-height: none
+        // !important }" global y un !important de hoja de estilos le gana a un
+        // estilo inline sin !important. Quedaba como código muerto que hacía
+        // pensar que el alto se resolvía desde el JS.
         function ajustarAltura() {
-            const windowHeight = window.innerHeight;
             const headerHeight = document.querySelector('.flex-header')?.offsetHeight || 0;
-            const availableHeight = windowHeight - headerHeight - 20; // 20px de margen
+            const alturaDisponible = window.innerHeight - headerHeight - 20; // 20px de margen
 
             const flexContent = document.querySelector('.flex-content');
             if (flexContent) {
-                flexContent.style.height = availableHeight + 'px';
+                flexContent.style.height = alturaDisponible + 'px';
             }
-
-            document.querySelectorAll('.tab-pane').forEach(pane => {
-                // La tabla principal es la primera que no pidió alto propio.
-                const principal = pane.querySelector('.table-responsive:not([data-altura-fija])');
-                if (!principal) return;
-
-                // Solo se puede medir la solapa visible; las demás se ajustan cuando
-                // se muestran (shown.bs.tab).
-                if (pane.offsetParent === null) return;
-
-                // Todo lo que está por encima de la tabla dentro de la misma solapa.
-                let ocupado = 0;
-                for (let el = pane.firstElementChild; el && el !== principal; el = el.nextElementSibling) {
-                    ocupado += el.offsetHeight;
-                }
-
-                principal.style.maxHeight = Math.max(180, availableHeight - ocupado - 24) + 'px';
-                principal.style.overflowY = 'auto';
-            });
         }
         
         // Ejecutar al cargar y redimensionar

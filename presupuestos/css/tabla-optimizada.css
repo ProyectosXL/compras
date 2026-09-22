@@ -415,6 +415,23 @@ html, body {
     max-height: calc(100vh - 430px) !important;
 }
 
+/* Historial: le faltaba la suya y era la única solapa sin scroll.
+   Hace falta el !important porque más arriba de este mismo archivo hay un
+   ".table-responsive { max-height: none !important }" global, y sin repetirlo
+   acá esa regla gana y la tabla se queda sin tope: crece hasta donde le da el
+   contenido, .tab-pane recorta lo que sobra y no hay forma de llegar al final.
+
+   El selector es ">" para no pisar la tabla del panel de versiones, que está
+   anidada dentro de una tarjeta y tiene su propio alto. */
+#historial > .table-responsive {
+    max-height: calc(100vh - 360px) !important;
+}
+
+/* Con el panel de versiones desplegado la tabla arranca ~240px más abajo. */
+#historial:has(#panel-versiones.show) > .table-responsive {
+    max-height: calc(100vh - 600px) !important;
+}
+
 /* Ajustes específicos para cada solapa */
 .tab-pane {
     height: 100%;
