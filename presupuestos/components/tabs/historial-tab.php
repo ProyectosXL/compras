@@ -35,7 +35,8 @@
                 <tr>
                     <th>Fecha Guardado</th>
                     <th>Nombre Presupuesto</th>
-                    <th>Temporada</th>
+                    <th>Solapa</th>
+                    <th>Temporada objetivo</th>
                     <th>Rubro</th>
                     <th>Categoría</th>
                     <th class="text-end">Stock Proy.</th>

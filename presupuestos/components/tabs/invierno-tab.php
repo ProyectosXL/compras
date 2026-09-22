@@ -48,11 +48,14 @@
                     <th class="text-center bg-info">Stock<br>Proyectado</th>
                     <th class="text-center bg-secondary text-white">Índice Var.<br>Original</th>
                     <th class="text-center bg-warning">Índice Ver.<br>Variación</th>
-                    <th class="text-center header-venta-anterior" id="header-venta-verano-ant">Venta Ver.<br>Anterior</th>
-                    <th class="text-center header-venta-proyectada" id="header-venta-verano">Venta Proy.<br>Verano</th>
+                    <!-- IDs con sufijo -inv: los de la solapa verano son otros. Antes las dos
+                         solapas usaban los mismos, así que getElementById devolvía siempre los
+                         de verano y los encabezados de esta solapa nunca se actualizaban. -->
+                    <th class="text-center header-venta-anterior" id="header-venta-verano-ant-inv">Venta Ver.<br>Anterior</th>
+                    <th class="text-center header-venta-proyectada" id="header-venta-verano-inv">Venta Proy.<br>Verano</th>
                     <th class="text-center bg-warning">Índice Inv.<br>Variación</th>
-                    <th class="text-center header-venta-anterior" id="header-venta-invierno-ant">Venta Inv.<br>Anterior</th>
-                    <th class="text-center header-venta-proyectada" id="header-venta-invierno">Venta Proy.<br>Invierno</th>
+                    <th class="text-center header-venta-anterior" id="header-venta-invierno-ant-inv">Venta Inv.<br>Anterior</th>
+                    <th class="text-center header-venta-proyectada" id="header-venta-invierno-inv">Venta Proy.<br>Invierno</th>
                     <th class="text-center header-compra-proyectada">Compra<br>Proyectada</th>
                 </tr>
             </thead>

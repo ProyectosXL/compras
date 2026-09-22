@@ -188,7 +188,11 @@ class PresupuestoApp {
                 
                 // Cargar datos de todas las solapas
                 await this.cargarDatosSolapas();
-                
+
+                // Rotular de nuevo los encabezados: recién ahora se sabe qué columnas
+                // históricas trajo el SP, que es lo que nombra las columnas "anterior".
+                UIUtils.actualizarHeadersDinamicos(this.temporadaInfo);
+
                 UIUtils.mostrarTabsContainer(true);
                 
                 // CORREGIDO: Verificar que el elemento existe antes de modificarlo
@@ -257,6 +261,10 @@ class PresupuestoApp {
                         }
                     });
                     this.datos.verano = verano.data;
+                    // Las etiquetas históricas y el orden de las columnas los define el
+                    // servidor; el front no vuelve a deducirlos del nombre de la columna.
+                    TemporadaServidor.registrarEtiquetasHistoricas(verano.etiquetas_historicas);
+                    this.columnasHistoricas = verano.columnas_venta || [];
                     this.renderizarSolapaSegura('verano', verano.data, verano.etiquetas);
                     this.cargarFiltrosPresupuesto('verano', verano.data);
                     UIUtils.actualizarContador('count-verano', verano.data.length);
@@ -291,6 +299,8 @@ class PresupuestoApp {
                         }
                     });
                     this.datos.invierno = invierno.data;
+                    TemporadaServidor.registrarEtiquetasHistoricas(invierno.etiquetas_historicas);
+                    this.columnasHistoricas = invierno.columnas_venta || this.columnasHistoricas;
                     this.renderizarSolapaSegura('invierno', invierno.data, invierno.etiquetas);
                     this.cargarFiltrosPresupuesto('invierno', invierno.data);
                     UIUtils.actualizarContador('count-invierno', invierno.data.length);

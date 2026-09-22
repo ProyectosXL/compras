@@ -73,7 +73,11 @@ class MainController {
             $datosProcessados = $this->procesador->procesarDatosCompraVerano($datosBase);
             
             $columnasVenta = PresupuestoCalculos::obtenerColumnasVentas($datosBase, 'VERANO');
-            $etiquetas = PresupuestoCalculos::generarEtiquetasVentaProyectada();
+            // Las etiquetas dependen de la solapa: la misma columna cubre distinto período
+            // en verano que en invierno, así que no se pueden calcular una sola vez para las dos.
+            $etiquetas = PresupuestoCalculos::generarEtiquetasVentaProyectada(null, 'verano');
+            $periodos = PresupuestoCalculos::obtenerPeriodosProyeccion(null, 'verano');
+            $etiquetasHistoricas = $this->etiquetarColumnasHistoricas($columnasVenta);
             
             // Log de debug
             error_log("✅ VERANO - Procesados " . count($datosProcessados) . " registros con contexto específico");
@@ -83,7 +87,9 @@ class MainController {
                 'message' => 'Datos de compra proyectada verano obtenidos',
                 'data' => $datosProcessados,
                 'columnas_venta' => $columnasVenta,
+                'etiquetas_historicas' => $etiquetasHistoricas,
                 'etiquetas' => $etiquetas,
+                'periodos' => $periodos,
                 'total_registros' => count($datosProcessados),
                 'contexto_aplicado' => 'verano'
             ]);
@@ -109,7 +115,9 @@ class MainController {
             $datosProcessados = $this->procesador->procesarDatosCompraInvierno($datosBase);
             
             $columnasVenta = PresupuestoCalculos::obtenerColumnasVentas($datosBase, 'INVIERNO');
-            $etiquetas = PresupuestoCalculos::generarEtiquetasVentaProyectada();
+            $etiquetas = PresupuestoCalculos::generarEtiquetasVentaProyectada(null, 'invierno');
+            $periodos = PresupuestoCalculos::obtenerPeriodosProyeccion(null, 'invierno');
+            $etiquetasHistoricas = $this->etiquetarColumnasHistoricas($columnasVenta);
             
             // Log de debug
             error_log("✅ INVIERNO - Procesados " . count($datosProcessados) . " registros con contexto específico");
@@ -119,7 +127,9 @@ class MainController {
                 'message' => 'Datos de compra proyectada invierno obtenidos',
                 'data' => $datosProcessados,
                 'columnas_venta' => $columnasVenta,
+                'etiquetas_historicas' => $etiquetasHistoricas,
                 'etiquetas' => $etiquetas,
+                'periodos' => $periodos,
                 'total_registros' => count($datosProcessados),
                 'contexto_aplicado' => 'invierno'
             ]);
@@ -142,13 +152,17 @@ class MainController {
             $fechaActual = new DateTime();
             $temporadaActual = PresupuestoCalculos::obtenerTemporadaActual($fechaActual);
             $diasRestantes = PresupuestoCalculos::calcularDiasRestantesTemporada($fechaActual);
-            $etiquetas = PresupuestoCalculos::generarEtiquetasVentaProyectada($fechaActual);
-            
+
             $info = [
                 'fecha_actual' => $fechaActual->format('Y-m-d H:i:s'),
                 'temporada_actual' => $temporadaActual,
                 'dias_restantes' => $diasRestantes,
-                'etiquetas_proyeccion' => $etiquetas,
+                // Los períodos se informan por solapa porque la misma columna cubre
+                // distinto rango en cada una; una sola etiqueta no alcanza para describirlas.
+                'periodos' => [
+                    'verano'   => PresupuestoCalculos::obtenerPeriodosProyeccion($fechaActual, 'verano'),
+                    'invierno' => PresupuestoCalculos::obtenerPeriodosProyeccion($fechaActual, 'invierno')
+                ],
                 'logica_aplicada' => [
                     'verano_solapa' => $this->obtenerLogicaAplicada('verano', $temporadaActual),
                     'invierno_solapa' => $this->obtenerLogicaAplicada('invierno', $temporadaActual)
@@ -167,6 +181,21 @@ class MainController {
                 'message' => 'Error obteniendo info temporadas: ' . $e->getMessage()
             ], 500);
         }
+    }
+
+    /**
+     * Mapea cada columna histórica del SP a su etiqueta en la convención de la app.
+     *
+     * Viaja como diccionario {columna => etiqueta} en vez de renombrar las claves de
+     * los datos: el front necesita seguir accediendo por VTA_VERANO_26 para leer el
+     * valor, y renombrar la clave habría roto el guardado y el Excel.
+     */
+    private function etiquetarColumnasHistoricas($columnas) {
+        $etiquetas = [];
+        foreach ($columnas as $columna) {
+            $etiquetas[$columna] = PresupuestoCalculos::etiquetaColumnaHistorica($columna);
+        }
+        return $etiquetas;
     }
 
     /**

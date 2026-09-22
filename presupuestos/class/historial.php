@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__.'/../../class/conexion.php';
+require_once __DIR__.'/presupuestoCalculos.php';
 
 class Historial {
     private $cid;
@@ -164,7 +165,7 @@ class Historial {
 
             $resultados = [];
             while ($row = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC)) {
-                $resultados[] = $row;
+                $resultados[] = $this->agregarTemporadaObjetivo($row);
             }
             sqlsrv_free_stmt($stmt);
 
@@ -174,6 +175,49 @@ class Historial {
             error_log("Error en buscarHistorial: " . $e->getMessage());
             return ['success' => false, 'message' => 'Error al buscar en el historial: ' . $e->getMessage()];
         }
+    }
+
+    /**
+     * Agrega a cada fila del historial la temporada que esa compra tenía que cubrir.
+     *
+     * La columna `temporada` de la tabla guarda la SOLAPA desde la que se guardó
+     * ('verano' / 'invierno'), no una temporada con año, así que sola no dice para
+     * qué período era la compra. Se deriva de la fecha de guardado más la solapa,
+     * que es exactamente lo que usó el cálculo en su momento.
+     *
+     * Es una derivación de lectura, no un dato guardado: se calcula con
+     * PresupuestoCalculos para no tener una segunda definición de temporada dando
+     * vueltas. Se descartó derivarlo en el navegador justamente por eso. La fase 2
+     * la persiste en la cabecera de versión y este método pasa a ser el respaldo
+     * para las filas viejas.
+     */
+    private function agregarTemporadaObjetivo($row) {
+        $row['temporada_objetivo'] = null;
+        $row['temporada_objetivo_desde'] = null;
+        $row['temporada_objetivo_hasta'] = null;
+
+        $fecha = $row['fecha_guardado'] ?? null;
+        if ($fecha instanceof DateTime) {
+            $fecha = $fecha->format('Y-m-d');
+        }
+
+        if (!$fecha || empty($row['temporada'])) {
+            return $row;
+        }
+
+        try {
+            $periodos = PresupuestoCalculos::obtenerPeriodosProyeccion(
+                $fecha,
+                strtolower($row['temporada']) === 'invierno' ? 'invierno' : 'verano'
+            );
+            $row['temporada_objetivo'] = $periodos['objetivo']['codigo'];
+            $row['temporada_objetivo_desde'] = $periodos['objetivo']['desde'];
+            $row['temporada_objetivo_hasta'] = $periodos['objetivo']['hasta'];
+        } catch (Exception $e) {
+            error_log('No se pudo derivar la temporada objetivo del historial: ' . $e->getMessage());
+        }
+
+        return $row;
     }
 
     public function __destruct() {

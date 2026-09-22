@@ -1,15 +1,65 @@
 
 <div class="tab-pane fade" id="calculos" role="tabpanel">
     <div class="accordion" id="calculosAccordion">
+        <!-- Convención de nombres -->
+        <div class="accordion-item">
+            <h2 class="accordion-header">
+                <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#collapseConvencion">
+                    <i class="fas fa-tags me-2"></i>
+                    Cómo se nombran las temporadas
+                </button>
+            </h2>
+            <div id="collapseConvencion" class="accordion-collapse collapse show" data-bs-parent="#calculosAccordion">
+                <div class="accordion-body">
+                    <p class="small">
+                        Toda la aplicación usa <strong>una sola convención</strong>: el encabezado, las columnas
+                        históricas, las columnas proyectadas, el historial y el Excel dicen lo mismo.
+                        Es la misma numeración que usan los códigos de oleada de Comercio Exterior
+                        (<code>VER01-26</code>, <code>INV01-27</code>).
+                    </p>
+                    <div class="row g-2">
+                        <div class="col-12 col-md-6">
+                            <div class="card bg-warning-subtle h-100">
+                                <div class="card-body p-2">
+                                    <h6 class="small"><i class="fas fa-sun text-warning me-2"></i>Verano: <code>VER AA-AA</code></h6>
+                                    <p class="small mb-1">Lleva los dos años porque la temporada cruza el año calendario.</p>
+                                    <p class="small mb-0"><code>VER 26-27</code> = 01/08/2026 al 31/01/2027</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <div class="card bg-info-subtle h-100">
+                                <div class="card-body p-2">
+                                    <h6 class="small"><i class="fas fa-snowflake text-info me-2"></i>Invierno: <code>INV AA</code></h6>
+                                    <p class="small mb-1">Un solo año, porque empieza y termina dentro del mismo.</p>
+                                    <p class="small mb-0"><code>INV 27</code> = 01/02/2027 al 31/07/2027</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="alert alert-warning mt-2 p-2 mb-0">
+                        <strong class="small">⚠️ "Resto":</strong>
+                        <span class="small">
+                            Si una columna dice <code>Resto VER 26-27</code>, cubre solo los días que faltan
+                            de esa temporada, no la temporada entera. Cuando la etiqueta suma dos tramos
+                            (<code>Resto VER 26-27 + VER 27-28</code>) el número de la celda es la suma de los dos.
+                            Pasando el mouse por el encabezado se ven las fechas exactas.
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Stock Proyectado -->
         <div class="accordion-item">
             <h2 class="accordion-header">
-                <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#collapseStock">
+                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseStock">
                     <i class="fas fa-boxes me-2"></i>
                     Stock Proyectado
                 </button>
             </h2>
-            <div id="collapseStock" class="accordion-collapse collapse show" data-bs-parent="#calculosAccordion">
+            <div id="collapseStock" class="accordion-collapse collapse" data-bs-parent="#calculosAccordion">
                 <div class="accordion-body">
                     <div class="alert alert-info">
                         <strong>Fórmula:</strong>
@@ -74,102 +124,102 @@
                         <small>El sistema aplica diferentes métodos de cálculo según la solapa actual y la temporada en curso.</small>
                     </div>
                     
-                    <!-- Cards apiladas en móvil, lado a lado en desktop -->
-                    <div class="row g-2">
-                        <div class="col-12 col-lg-6">
-                            <div class="card bg-warning-subtle h-100">
-                                <div class="card-body p-2">
-                                    <h6 class="card-title small">
-                                        <i class="fas fa-sun text-warning me-2"></i>
-                                        🔥 Venta Proyectada Verano
-                                    </h6>
-                                    <div class="mb-1">
-                                        <strong class="small">Transitando verano (Ago-Ene):</strong>
-                                        <ul class="mb-1 small">
-                                            <li><strong>Verano:</strong> Proporcional actual + Próximo completo</li>
-                                            <li><strong>Invierno:</strong> Próximo completo</li>
-                                        </ul>
-                                    </div>
-                                    <div>
-                                        <strong class="small">Transitando invierno (Feb-Jul):</strong>
-                                        <ul class="mb-0 small">
-                                            <li><strong>Verano:</strong> Próximo completo</li>
-                                            <li><strong>Invierno:</strong> Proporcional actual</li>
-                                        </ul>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div class="col-12 col-lg-6">
-                            <div class="card bg-info-subtle h-100">
-                                <div class="card-body p-2">
-                                    <h6 class="card-title small">
-                                        <i class="fas fa-snowflake text-info me-2"></i>
-                                        ❄️ Venta Proyectada Invierno
-                                    </h6>
-                                    <div class="mb-1">
-                                        <strong class="small">Transitando invierno (Feb-Jul):</strong>
-                                        <ul class="mb-1 small">
-                                            <li><strong>Verano:</strong> Próximo completo</li>
-                                            <li><strong>Invierno:</strong> Proporcional actual + Próximo completo</li>
-                                        </ul>
-                                    </div>
-                                    <div>
-                                        <strong class="small">Transitando verano (Ago-Ene):</strong>
-                                        <ul class="mb-0 small">
-                                            <li><strong>Verano:</strong> Proporcional actual</li>
-                                            <li><strong>Invierno:</strong> Próximo completo</li>
-                                        </ul>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+                    <p class="small">
+                        Qué período cubre cada columna, según la solapa y la temporada en curso.
+                        Los ejemplos están tomados parándose en <strong>septiembre de 2026</strong>
+                        (transitando <code>VER 26-27</code>) y en <strong>marzo de 2027</strong>
+                        (transitando <code>INV 27</code>):
+                    </p>
+
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered small align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Solapa</th>
+                                    <th>Temporada en curso</th>
+                                    <th>Columna Venta Proy. Verano</th>
+                                    <th>Columna Venta Proy. Invierno</th>
+                                    <th>La compra cubre</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td rowspan="2"><i class="fas fa-sun text-warning me-1"></i>Verano</td>
+                                    <td><code>VER 26-27</code></td>
+                                    <td><code>Resto VER 26-27</code> + <code>VER 27-28</code></td>
+                                    <td><code>INV 27</code></td>
+                                    <td><span class="badge bg-warning text-dark">VER 27-28</span></td>
+                                </tr>
+                                <tr>
+                                    <td><code>INV 27</code></td>
+                                    <td><code>VER 27-28</code></td>
+                                    <td><code>Resto INV 27</code></td>
+                                    <td><span class="badge bg-warning text-dark">VER 27-28</span></td>
+                                </tr>
+                                <tr>
+                                    <td rowspan="2"><i class="fas fa-snowflake text-info me-1"></i>Invierno</td>
+                                    <td><code>VER 26-27</code></td>
+                                    <td><code>Resto VER 26-27</code></td>
+                                    <td><code>INV 27</code></td>
+                                    <td><span class="badge bg-info text-dark">INV 27</span></td>
+                                </tr>
+                                <tr>
+                                    <td><code>INV 27</code></td>
+                                    <td><code>VER 27-28</code></td>
+                                    <td><code>Resto INV 27</code> + <code>INV 28</code></td>
+                                    <td><span class="badge bg-info text-dark">INV 28</span></td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
-                    
-                    <div class="alert alert-success mt-2">
-                        <strong class="small">🎯 Ejemplo Práctico (Marzo 2025 - Transitando Invierno):</strong><br>
-                        <div class="row mt-1 g-1">
-                            <div class="col-12 col-md-6">
-                                <small><strong>En solapa Verano:</strong><br>
-                                • Venta Ver.: Próximo verano completo<br>
-                                • Venta Inv.: Proporcional invierno actual</small>
-                            </div>
-                            <div class="col-12 col-md-6">
-                                <small><strong>En solapa Invierno:</strong><br>
-                                • Venta Ver.: Próximo verano completo<br>
-                                • Venta Inv.: Proporcional + Próximo invierno</small>
-                            </div>
-                        </div>
+
+                    <div class="alert alert-success p-2">
+                        <strong class="small">🎯 Para qué temporada es la compra:</strong>
+                        <span class="small">
+                            Cada solapa compra para la <strong>próxima temporada de su tipo</strong>.
+                            Las dos columnas proyectadas cubren juntas un período continuo desde hoy
+                            hasta que esa temporada termina, y la compra es lo que falta para llegar
+                            hasta ahí. Es la temporada en la que tienen que estar los contenedores.
+                        </span>
                     </div>
-                    
+
                     <h6 class="mt-2 small"><i class="fas fa-calculator me-2"></i>Fórmulas de Cálculo:</h6>
                     
                     <div class="row g-2">
                         <div class="col-12 col-md-6">
-                            <strong class="small">Venta Proyectada Completa:</strong>
+                            <strong class="small">Temporada completa:</strong>
                             <code class="d-block bg-light p-1 mt-1 small">
                                 Venta Anterior × Índice Variación
                             </code>
                         </div>
                         <div class="col-12 col-md-6">
-                            <strong class="small">Venta Proyectada Proporcional:</strong>
+                            <strong class="small">Resto de temporada:</strong>
                             <code class="d-block bg-light p-1 mt-1 small">
                                 Venta Anterior × Índice × (Días Restantes / Días Totales)
                             </code>
                         </div>
                     </div>
-                    
+
+                    <p class="small mt-2 mb-1">
+                        <strong>Venta Anterior</strong> es la última temporada del mismo tipo con ventas.
+                        El encabezado de cada columna "Anterior" dice cuál es.
+                    </p>
+
                     <div class="mt-2">
                         <strong class="small">Temporadas:</strong>
                         <ul class="small mb-1">
-                            <li><strong>Verano:</strong> 1° Agosto al 31 Enero</li>
-                            <li><strong>Invierno:</strong> 1° Febrero al 31 Julio</li>
+                            <li><strong>Verano:</strong> 1° de agosto al 31 de enero (<code>VER AA-AA</code>)</li>
+                            <li><strong>Invierno:</strong> 1° de febrero al 31 de julio (<code>INV AA</code>)</li>
                         </ul>
                     </div>
-                    
+
                     <div class="alert alert-warning mt-2 p-2">
-                        <strong class="small">⚠️ Importante:</strong> <span class="small">Los cálculos se ajustan automáticamente según la fecha actual y la solapa donde se esté trabajando.</span>
+                        <strong class="small">⚠️ Importante:</strong>
+                        <span class="small">
+                            Los cálculos se ajustan según la fecha y la solapa. Los días restantes los
+                            calcula el servidor: dan lo mismo a cualquier hora del día y no dependen del
+                            reloj de la computadora.
+                        </span>
                     </div>
                 </div>
             </div>

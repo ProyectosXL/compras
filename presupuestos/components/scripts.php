@@ -6,6 +6,9 @@
 
 <!-- Scripts modulares del sistema - ORDEN CORRECTO -->
 <script src="js/utils.js"></script>
+<!-- Temporada calculada por el servidor. Va temprano porque la consultan el renderer,
+     el exportador a Excel y las calculadoras. -->
+<script src="js/temporada-servidor.js?v=1.0"></script>
 <script src="js/api-client.js?v=13.0"></script>
 <script src="js/tabla-renderer.js"></script>
 <script src="js/busqueda-manager.js"></script>
@@ -15,8 +18,8 @@
 <script src="js/historial-manager.js?v=1.0"></script>
 
 <!-- Calculadoras específicas (CARGAR ANTES del indice-editor) -->
-<script src="js/calculadora-verano.js"></script>
-<script src="js/calculadora-invierno.js"></script>
+<script src="js/calculadora-verano.js?v=2.0"></script>
+<script src="js/calculadora-invierno.js?v=2.0"></script>
 
 <!-- Editor de índices (DESPUÉS de las calculadoras) -->
 <script src="js/indice-editor.js"></script>
