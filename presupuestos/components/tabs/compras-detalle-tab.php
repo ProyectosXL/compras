@@ -65,24 +65,25 @@
     </div>
     
     <!-- Resumen de totales en la parte superior (siempre visible) -->
-    <div class="bg-light p-2 border-bottom d-none" id="resumen-compras-superior">
-        <div class="row text-center">
-            <div class="col-3">
-                <small class="text-muted d-block">Total Verano</small>
-                <span class="badge bg-warning text-dark fs-6" id="badge-total-verano">0</span>
-            </div>
-            <div class="col-3">
-                <small class="text-muted d-block">Total Invierno</small>
-                <span class="badge bg-info fs-6" id="badge-total-invierno">0</span>
-            </div>
-            <div class="col-3">
-                <small class="text-muted d-block">Total Atemporal</small>
-                <span class="badge bg-success fs-6" id="badge-total-atemporal">0</span>
-            </div>
-            <div class="col-3">
-                <small class="text-muted d-block">Total General</small>
-                <span class="badge bg-primary fs-6" id="badge-total-general">0</span>
-            </div>
+    <!-- Mismo componente que el resto de las solapas (ver .resumen-superior en
+         components.css). Los IDs se conservan: ComprasManager solo escribe el
+         texto adentro. -->
+    <div class="resumen-superior resumen-superior--compras d-none" id="resumen-compras-superior">
+        <div class="resumen-item">
+            <span class="resumen-item__label">Verano</span>
+            <span class="resumen-item__valor" id="badge-total-verano">0</span>
+        </div>
+        <div class="resumen-item">
+            <span class="resumen-item__label">Invierno</span>
+            <span class="resumen-item__valor" id="badge-total-invierno">0</span>
+        </div>
+        <div class="resumen-item">
+            <span class="resumen-item__label">Atemporal</span>
+            <span class="resumen-item__valor" id="badge-total-atemporal">0</span>
+        </div>
+        <div class="resumen-item resumen-item--fin" title="Unidades pedidas que todavía no ingresaron.">
+            <span class="resumen-item__label">Total pendiente</span>
+            <span class="resumen-item__valor" id="badge-total-general">0</span>
         </div>
     </div>
     

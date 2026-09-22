@@ -162,33 +162,23 @@ class TotalesStock {
         const totalComprasPendientes = totales.comprasVerano + totales.comprasInvierno + totales.comprasAtemporal;
         const incrementoStock = totales.stockProyectado - totales.stockActual;
 
-        // Actualizar contenido
-        container.innerHTML = `
-            <div class="row text-center">
-                <div class="col-3">
-                    <small class="text-muted d-block">Stock Actual</small>
-                    <span class="badge bg-info fs-6">${TotalesStock.formatearNumero(totales.stockActual)}</span>
-                </div>
-                <div class="col-3">
-                    <small class="text-muted d-block">Compras Pendientes</small>
-                    <span class="badge bg-success fs-6">${TotalesStock.formatearNumero(totalComprasPendientes)}</span>
-                </div>
-                <div class="col-3">
-                    <small class="text-muted d-block">Stock Proyectado</small>
-                    <span class="badge bg-primary fs-6">${TotalesStock.formatearNumero(totales.stockProyectado)}</span>
-                </div>
-                <div class="col-3">
-                    <small class="text-muted d-block">Incremento Stock</small>
-                    <span class="badge ${incrementoStock >= 0 ? 'bg-success' : 'bg-danger'} fs-6">
-                        ${incrementoStock >= 0 ? '+' : ''}${TotalesStock.formatearNumero(incrementoStock)}
-                    </span>
-                </div>
-            </div>
-        `;
+        // Mismo componente que el resto de las solapas (ver UIUtils.resumenSuperior).
+        container.innerHTML = UIUtils.resumenSuperior([
+            { label: 'Stock actual', valor: TotalesStock.formatearNumero(totales.stockActual) },
+            { label: 'OC pendientes', valor: TotalesStock.formatearNumero(totalComprasPendientes),
+              ayuda: 'Unidades ya pedidas que todavía no ingresaron. Entran al stock '
+                   + 'proyectado, así que la compra proyectada es neta de esto.' },
+            { label: 'Stock proyectado', valor: TotalesStock.formatearNumero(totales.stockProyectado) },
+            { label: 'Variación', fin: true,
+              tono: incrementoStock >= 0 ? 'ok' : 'alerta',
+              valor: (incrementoStock >= 0 ? '+' : '') + TotalesStock.formatearNumero(incrementoStock),
+              ayuda: 'Stock proyectado menos stock actual.' }
+        ]);
 
-        // Mostrar el contenedor
+        // Mostrar el contenedor. Al aparecer, la tabla de abajo tiene menos alto.
         container.classList.remove('d-none');
-        
+        if (window.ajustarAltura) window.ajustarAltura();
+
         // Animación de actualización
         container.classList.add('actualizado');
         setTimeout(() => container.classList.remove('actualizado'), 500);
@@ -214,8 +204,7 @@ class TotalesStock {
         // Crear el contenedor de resumen
         const resumenContainer = document.createElement('div');
         resumenContainer.id = 'total-stock-superior';
-        resumenContainer.className = 'bg-light p-2 border-bottom d-none';
-        resumenContainer.style.borderLeft = '4px solid #0d6efd';
+        resumenContainer.className = 'resumen-superior resumen-superior--stock d-none';
 
         // Insertar después del search-container
         searchContainer.parentNode.insertBefore(resumenContainer, searchContainer.nextSibling);

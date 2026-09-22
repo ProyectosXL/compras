@@ -30,12 +30,17 @@
     </div>
 
     <!-- Versiones guardadas: una fila por versión, no por rubro.
-         Es la vista sobre la que se marca cuál es la oficial de cada temporada. -->
+         Es la vista sobre la que se marca cuál es la oficial de cada temporada.
+         Colapsable porque la lista crece con cada guardado y no tiene sentido que
+         se coma el alto de la tabla de detalle cuando no se la está usando. -->
     <div class="card mb-2">
         <div class="card-header py-1 d-flex align-items-center justify-content-between">
-            <span class="small fw-bold">
+            <button class="btn btn-link btn-sm p-0 text-decoration-none fw-bold"
+                    type="button" data-bs-toggle="collapse" data-bs-target="#panel-versiones"
+                    aria-expanded="false" aria-controls="panel-versiones">
+                <i class="fas fa-chevron-right me-1 icono-colapso"></i>
                 <i class="fas fa-code-branch me-1"></i> Versiones guardadas
-            </span>
+            </button>
             <div>
                 <span class="badge bg-info text-dark me-2" id="count-versiones">0 versiones</span>
                 <button class="btn btn-outline-primary btn-sm" id="btn-cargar-versiones">
@@ -43,33 +48,37 @@
                 </button>
             </div>
         </div>
-        <div class="table-responsive" style="max-height: 230px; overflow-y: auto;">
-            <table class="table table-sm table-hover mb-0" id="tabla-versiones">
-                <thead class="table-light sticky-header">
-                    <tr>
-                        <th>Guardado</th>
-                        <th>Nombre</th>
-                        <th>Solapa</th>
-                        <th>Temporada objetivo</th>
-                        <th class="text-center">Alcance</th>
-                        <th class="text-center">Oficial</th>
-                        <th>Marcada por</th>
-                        <th class="text-end">Acción</th>
-                    </tr>
-                </thead>
-                <tbody id="tbody-versiones">
-                    <tr>
-                        <td colspan="8" class="text-center text-muted py-3">
-                            <i class="fas fa-info-circle me-1"></i>
-                            Presioná "Cargar" para ver las versiones guardadas
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
+        <div class="collapse" id="panel-versiones">
+            <!-- data-altura-fija: esta tabla conserva su alto y no entra en el
+                 reparto que hace ajustarAltura(), que es para la tabla principal. -->
+            <div class="table-responsive" data-altura-fija style="max-height: 230px; overflow-y: auto;">
+                <table class="table table-sm table-hover mb-0" id="tabla-versiones">
+                    <thead class="table-light sticky-header">
+                        <tr>
+                            <th>Guardado</th>
+                            <th>Nombre</th>
+                            <th>Solapa</th>
+                            <th>Temporada objetivo</th>
+                            <th class="text-center">Alcance</th>
+                            <th class="text-center">Oficial</th>
+                            <th>Marcada por</th>
+                            <th class="text-end">Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbody-versiones">
+                        <tr>
+                            <td colspan="8" class="text-center text-muted py-3">
+                                <i class="fas fa-info-circle me-1"></i>
+                                Presioná "Cargar" para ver las versiones guardadas
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
 
-    <div class="table-responsive" style="max-height: calc(100vh - 480px); overflow-y: auto;">
+    <div class="table-responsive">
         <table class="table table-striped table-hover table-sm mb-0" id="tabla-historial">
             <thead class="table-dark sticky-header">
                 <tr>

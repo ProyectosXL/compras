@@ -292,6 +292,8 @@ class ContenedoresManager {
 
         const resumen = document.getElementById('resumen-contenedores-superior');
         if (resumen) resumen.classList.remove('d-none');
+        // Al aparecer la barra, la tabla de abajo tiene menos alto disponible.
+        if (window.ajustarAltura) window.ajustarAltura();
     }
 
     /**

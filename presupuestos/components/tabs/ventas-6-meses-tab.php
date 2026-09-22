@@ -48,24 +48,24 @@
     </div>
     
     <!-- Resumen de ventas en la parte superior (siempre visible) -->
-    <div class="bg-light p-2 border-bottom d-none" id="resumen-ventas-superior">
-        <div class="row text-center">
-            <div class="col-3">
-                <small class="text-muted d-block">Ventas Actuales (60 días)</small>
-                <span class="badge bg-primary fs-6" id="badge-ventas-actuales">0</span>
-            </div>
-            <div class="col-3">
-                <small class="text-muted d-block">Año Anterior</small>
-                <span class="badge bg-secondary fs-6" id="badge-ventas-anteriores">0</span>
-            </div>
-            <div class="col-3">
-                <small class="text-muted d-block">Variación Total</small>
-                <span class="badge bg-info fs-6" id="badge-variacion-total">0%</span>
-            </div>
-            <div class="col-3">
-                <small class="text-muted d-block">Items (↗Mejor | →Igual | ↘Peor)</small>
-                <span class="badge bg-warning text-dark fs-6" id="badge-estadisticas">0|0|0</span>
-            </div>
+    <!-- Mismo componente que el resto de las solapas. Los IDs se conservan:
+         VentasManager solo escribe el texto adentro. -->
+    <div class="resumen-superior resumen-superior--ventas d-none" id="resumen-ventas-superior">
+        <div class="resumen-item">
+            <span class="resumen-item__label">Últimos 60 días</span>
+            <span class="resumen-item__valor" id="badge-ventas-actuales">0</span>
+        </div>
+        <div class="resumen-item">
+            <span class="resumen-item__label">Mismo período año anterior</span>
+            <span class="resumen-item__valor" id="badge-ventas-anteriores">0</span>
+        </div>
+        <div class="resumen-item">
+            <span class="resumen-item__label">Variación</span>
+            <span class="resumen-item__valor" id="badge-variacion-total">0%</span>
+        </div>
+        <div class="resumen-item resumen-item--fin" title="Rubro/categoría que mejoraron, se mantuvieron o empeoraron respecto del año anterior.">
+            <span class="resumen-item__label">↗ Mejor · → Igual · ↘ Peor</span>
+            <span class="resumen-item__valor" id="badge-estadisticas">0|0|0</span>
         </div>
     </div>
     

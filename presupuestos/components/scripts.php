@@ -15,7 +15,7 @@
 
 <!-- Gestor de filtros persistentes -->
 <script src="js/filtros-manager.js"></script>
-<script src="js/historial-manager.js?v=1.0"></script>
+<script src="js/historial-manager.js?v=2.0"></script>
 
 <!-- Calculadoras específicas (CARGAR ANTES del indice-editor) -->
 <script src="js/calculadora-verano.js?v=2.0"></script>
@@ -25,12 +25,12 @@
 <script src="js/indice-editor.js"></script>
 
 <!-- Resto de módulos -->
-<script src="js/compras-manager.js"></script>
-<script src="js/contenedores-manager.js"></script>
+<script src="js/compras-manager.js?v=2.0"></script>
+<script src="js/contenedores-manager.js?v=2.0"></script>
 <script src="js/totales-compra.js?v=2.0"></script>
-<script src="js/totales-stock.js"></script>
+<script src="js/totales-stock.js?v=2.0"></script>
 <script src="js/excel-exporter.js?v=13.0"></script>
-<script src="js/ventas-manager.js"></script>
+<script src="js/ventas-manager.js?v=2.0"></script>
 <script src="js/distribucion-manager.js?v=21.0"></script>
 
 <!-- Script principal (SIEMPRE AL FINAL) -->
@@ -455,27 +455,41 @@
     });
 
         // Función para ajustar altura dinámicamente
+        // Reparte el alto disponible entre lo que hay arriba de la tabla principal
+        // de cada solapa (buscador, resumen, paneles) y la tabla misma.
+        //
+        // Antes se le daba el mismo alto fijo a TODOS los .table-responsive y se
+        // descontaban 100px a ojo. Con un solo bloque arriba funcionaba de casualidad;
+        // cuando la solapa Historial pasó a tener además el panel de versiones, ese
+        // panel se estiraba a pantalla completa y la tabla de abajo quedaba sin
+        // espacio para scrollear hasta el final.
         function ajustarAltura() {
             const windowHeight = window.innerHeight;
             const headerHeight = document.querySelector('.flex-header')?.offsetHeight || 0;
             const availableHeight = windowHeight - headerHeight - 20; // 20px de margen
-            
-            // Ajustar altura del contenido principal
+
             const flexContent = document.querySelector('.flex-content');
             if (flexContent) {
                 flexContent.style.height = availableHeight + 'px';
             }
-            
-            // Ajustar altura de las tablas
-            const tablesResponsive = document.querySelectorAll('.table-responsive');
-            const tableHeight = availableHeight - 100; // Espacio para controles
-            
-            tablesResponsive.forEach(table => {
-                if (table.closest('#compras-detalle')) {
-                    table.style.maxHeight = (tableHeight - 60) + 'px'; // Espacio extra para resumen
-                } else {
-                    table.style.maxHeight = tableHeight + 'px';
+
+            document.querySelectorAll('.tab-pane').forEach(pane => {
+                // La tabla principal es la primera que no pidió alto propio.
+                const principal = pane.querySelector('.table-responsive:not([data-altura-fija])');
+                if (!principal) return;
+
+                // Solo se puede medir la solapa visible; las demás se ajustan cuando
+                // se muestran (shown.bs.tab).
+                if (pane.offsetParent === null) return;
+
+                // Todo lo que está por encima de la tabla dentro de la misma solapa.
+                let ocupado = 0;
+                for (let el = pane.firstElementChild; el && el !== principal; el = el.nextElementSibling) {
+                    ocupado += el.offsetHeight;
                 }
+
+                principal.style.maxHeight = Math.max(180, availableHeight - ocupado - 24) + 'px';
+                principal.style.overflowY = 'auto';
             });
         }
         
@@ -491,6 +505,18 @@
                     setTimeout(ajustarAltura, 100);
                 });
             });
+
+            // Colapsar o desplegar un panel cambia el alto disponible para la tabla
+            // de abajo, así que hay que repartirlo de nuevo.
+            document.querySelectorAll('.collapse').forEach(panel => {
+                panel.addEventListener('shown.bs.collapse', ajustarAltura);
+                panel.addEventListener('hidden.bs.collapse', ajustarAltura);
+            });
         });
+
+        // Las barras de resumen aparecen recién cuando hay datos y al aparecer
+        // empujan la tabla hacia abajo, así que quien las muestra tiene que pedir
+        // que se reparta el alto de nuevo. Se expone global para eso.
+        window.ajustarAltura = ajustarAltura;
         
 </script>

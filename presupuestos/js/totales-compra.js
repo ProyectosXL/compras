@@ -206,26 +206,37 @@ class TotalesCompra {
         }
         if (!container) return;
 
-        const icono = solapa === 'verano' ? 'fa-sun' : 'fa-snowflake';
-        const colorPrimario = solapa === 'verano' ? 'warning' : 'info';
+        const neto = TotalesCompra.formatearNumero(totales.totalCompraProyectada);
+        const periodos = (typeof TemporadaServidor !== 'undefined')
+            ? TemporadaServidor.periodos(solapa) : null;
+        const objetivo = periodos && periodos.objetivo ? periodos.objetivo.codigo : null;
 
-        container.innerHTML = `
-            <div class="row text-center">
-                <div class="col-4">
-                    <small class="text-muted d-block"><i class="fas ${icono} me-1"></i>Total Registros</small>
-                    <span class="badge bg-${colorPrimario} fs-6 text-dark">${totales.totalRegistros}</span>
-                </div>
-                <div class="col-4">
-                    <small class="text-muted d-block">Items Necesita Compra</small>
-                    <span class="badge bg-danger fs-6">${totales.itemsNegativos}</span>
-                </div>
-                <div class="col-4">
-                    <small class="text-muted d-block">Total Necesita Compra</small>
-                    <span class="badge bg-danger fs-5">${TotalesCompra.formatearNumero(totales.totalNegativo)}</span>
-                </div>
-            </div>
-        `;
+        container.innerHTML = UIUtils.resumenSuperior([
+            { label: 'Rubro / categoría', valor: totales.totalRegistros },
+            objetivo
+                ? { label: 'Temporada objetivo', valor: objetivo,
+                    ayuda: 'Temporada que esta compra tiene que cubrir: '
+                         + periodos.objetivo.desde + ' a ' + periodos.objetivo.hasta }
+                : null,
+            { label: 'Con faltante', valor: totales.itemsNegativos, tono: 'alerta',
+              ayuda: 'Rubro/categoría cuya compra proyectada da negativa, es decir que '
+                   + 'el stock proyectado no alcanza a cubrir la venta proyectada.' },
+            // Se aclara que NO compensa con los excedentes, y se muestra el neto al
+            // lado: los dos números se parecen y antes convivían sin explicación,
+            // uno acá arriba y el otro en la fila de totales de la tabla.
+            { label: 'Unidades a comprar', valor: TotalesCompra.formatearNumero(totales.totalNegativo),
+              tono: 'alerta', fin: true,
+              ayuda: 'Suma de los faltantes únicamente. No se compensa con los rubros '
+                   + 'que tienen excedente: el neto de la columna Compra Proyectada es ' + neto + '.' },
+            { label: 'Neto de la columna', valor: neto,
+              ayuda: 'Faltantes menos excedentes. Es el total que muestra la fila TOTALES '
+                   + 'al pie de la tabla.' }
+        ].filter(Boolean));
+
         container.classList.remove('d-none');
+        // La barra acaba de aparecer: la tabla de abajo tiene menos alto disponible.
+        if (window.ajustarAltura) window.ajustarAltura();
+
         container.classList.add('actualizado');
         setTimeout(() => container.classList.remove('actualizado'), 500);
     }
@@ -238,8 +249,9 @@ class TotalesCompra {
 
         const resumenContainer = document.createElement('div');
         resumenContainer.id = `total-compra-${solapa}-superior`;
-        resumenContainer.className = 'bg-light p-2 border-bottom d-none total-compra-container';
-        resumenContainer.style.borderLeft = solapa === 'verano' ? '4px solid #ffc107' : '4px solid #0dcaf0';
+        // El acento de color lo pone la clase modificadora, no un style inline:
+        // así todas las solapas comparten el mismo componente.
+        resumenContainer.className = `resumen-superior resumen-superior--${solapa} d-none`;
 
         searchContainer.parentNode.insertBefore(resumenContainer, searchContainer.nextSibling);
     }

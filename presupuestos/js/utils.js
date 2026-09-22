@@ -223,6 +223,35 @@ class UIUtils {
     // presupuesto para que el thead tenga una altura pareja.
     static LINEAS_ENCABEZADO = 3;
 
+    /**
+     * Arma el contenido de una barra de resumen superior.
+     *
+     * Existe para que las solapas no repitan cada una su propio maquetado: antes
+     * cada manager escribía sus columnas de Bootstrap y sus badges, y terminaron
+     * con tipografías y colores distintos para el mismo tipo de dato.
+     *
+     * @param {Array} items {label, valor, tono?: 'alerta'|'ok', ayuda?, fin?: bool}
+     */
+    static resumenSuperior(items) {
+        return items.map(i => {
+            const clases = ['resumen-item'];
+            if (i.tono) clases.push(`resumen-item--${i.tono}`);
+            if (i.fin) clases.push('resumen-item--fin');
+
+            // La aclaración va en el title y no en un tooltip de Bootstrap: estas
+            // barras se redibujan con cada filtro y los tooltips habría que
+            // reinicializarlos en cada redibujo.
+            const ayuda = i.ayuda
+                ? ` <i class="fas fa-circle-question resumen-item__ayuda" title="${i.ayuda}"></i>`
+                : '';
+
+            return `<div class="${clases.join(' ')}"${i.ayuda ? ` title="${i.ayuda}"` : ''}>
+                        <span class="resumen-item__label">${i.label}${ayuda}</span>
+                        <span class="resumen-item__valor">${i.valor}</span>
+                    </div>`;
+        }).join('');
+    }
+
     static actualizarHeadersDinamicos(info) {
         if (!info || !info.periodos) return;
 

@@ -14,7 +14,7 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <link href="css/obtener-presupuesto.css?v=1.3" rel="stylesheet">
-    <link href="css/tabla-optimizada.css?v=1.2" rel="stylesheet">
+    <link href="css/tabla-optimizada.css?v=1.3" rel="stylesheet">
     <link href="css/filtros-persistentes.css?v=1.2" rel="stylesheet">
     <link href="css/proceso-presupuesto.css?v=1.2" rel="stylesheet">
     

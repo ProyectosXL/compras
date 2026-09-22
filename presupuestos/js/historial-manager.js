@@ -43,6 +43,12 @@ class HistorialManager {
                 throw new Error(respuesta.message || 'No se pudieron leer las versiones.');
             }
             HistorialManager.renderizarVersiones(respuesta.data, respuesta.sin_cabecera, respuesta.message);
+
+            // Si el panel está colapsado, abrirlo: cargar y no ver nada sería raro.
+            const panel = document.getElementById('panel-versiones');
+            if (panel && !panel.classList.contains('show')) {
+                bootstrap.Collapse.getOrCreateInstance(panel).show();
+            }
         } catch (error) {
             console.error('Error al listar versiones:', error);
             UIUtils.mostrarAlerta(`Error: ${error.message}`, 'error');
