@@ -51,10 +51,13 @@
     font-size: 0.9rem;
 }
 
-/* Tabs más compactos */
+/* Tabs más compactos.
+   flex-shrink: 0 porque la tarjeta es un flex column: sin esto las pestañas se
+   comprimirían para hacerle lugar al contenido. */
 .nav-tabs {
     padding: 0.2rem 0.4rem 0;
     margin-bottom: 0;
+    flex-shrink: 0;
 }
 
 .nav-tabs .nav-link {
@@ -63,10 +66,16 @@
     margin: 0 0.1rem;
 }
 
-/* Tab content optimizado para altura */
+/* Tab content optimizado para altura.
+   Se estira dentro de la tarjeta en vez de usar un alto calculado en vh. Había
+   tres offsets fijos distintos para el mismo espacio —140px acá, 160px en
+   #tabs-container y el alto real del header en el JS— y no podían ser los tres
+   correctos: cuando el header medía más de lo previsto, el contenido quedaba más
+   alto que su contenedor y lo de abajo se recortaba. Ahora todo cuelga del alto
+   que el JS le pone a .flex-content, que sí mide el header. */
 .tab-content {
-    min-height: calc(100vh - 160px);
-    max-height: calc(100vh - 160px);
+    flex: 1 1 auto;
+    min-height: 0;
     overflow: hidden;
 }
 
@@ -132,22 +141,33 @@
     font-weight: 600;
 }
 
-/* Tabla optimizada para altura */
+/* Tabla optimizada para altura.
+   .tab-pane ya es un flex column, asi que la tabla toma el espacio que sobra con
+   flex: 1 y scrollea sola. No hace falta calcularle el alto.
+
+   min-height: 0 es lo que faltaba. Por defecto un hijo flex tiene
+   min-height: auto, o sea que no puede achicarse por debajo del alto de su
+   contenido: la tabla empujaba el contenedor hacia abajo en vez de scrollear, y
+   el overflow: hidden de .tab-pane recortaba lo que sobresalia. En la solapa
+   Historial, que ademas tiene el panel de versiones arriba, eso dejaba las
+   ultimas filas fuera de la pantalla sin forma de llegar.
+
+   Tampoco hay max-height. Habia uno global con "none !important" —que le ganaba
+   hasta al estilo inline del JS— y encima reglas por #id tambien con !important
+   para tapar el problema en algunas solapas. Historial nunca tuvo la suya, y por
+   eso era la unica que no scrolleaba. */
 .table-responsive {
-    flex: 1;
+    flex: 1 1 auto;
+    min-height: 0;
     overflow-y: auto;
-    max-height: none !important; /* Permitir que use todo el espacio disponible */
     border: none;
 }
 
-/* Específico para compras detalle */
-#compras-detalle .table-responsive {
-    max-height: calc(100vh - 400px) !important;
-}
-
-/* Específico para contenedores */
-#contenedores .table-responsive {
-    max-height: calc(100vh - 400px) !important;
+/* Los bloques de arriba conservan su alto: solo la tabla se estira y se achica. */
+.search-container,
+.resumen-superior,
+.tab-pane > .card {
+    flex-shrink: 0;
 }
 
 #contenedores #tabla-contenedores {
@@ -227,16 +247,6 @@
         padding: 0.2rem;
     }
     
-    .tab-content {
-        min-height: calc(100vh - 120px);
-        max-height: calc(100vh - 120px);
-    }
-    
-    #compras-detalle .table-responsive,
-    #contenedores .table-responsive {
-        max-height: calc(100vh - 400px) !important;
-    }
-
     .table thead th,
     .table tbody td {
         padding: 0.1rem 0.1rem;
@@ -253,16 +263,6 @@
 }
 
 @media (max-width: 576px) {
-    .tab-content {
-        min-height: calc(100vh - 100px);
-        max-height: calc(100vh - 100px);
-    }
-    
-    #compras-detalle .table-responsive,
-    #contenedores .table-responsive {
-        max-height: calc(100vh - 400px) !important;
-    }
-
     /* Mostrar solo columnas esenciales */
     .table th:nth-child(n+5),
     .table td:nth-child(n+5) {
@@ -401,20 +401,6 @@ html, body {
     overflow: hidden;
 }
 
-/* Para las otras solapas también */
-#verano .table-responsive,
-#invierno .table-responsive {
-    max-height: calc(100vh - 360px) !important;
-}
-
-#stock .table-responsive {
-    max-height: calc(100vh - 350px) !important;
-}
-
-#distribucion .table-responsive {
-    max-height: calc(100vh - 430px) !important;
-}
-
 /* Ajustes específicos para cada solapa */
 .tab-pane {
     height: 100%;
@@ -427,8 +413,11 @@ html, body {
 }
 
 /* Optimización final para altura completa */
+/* Ocupa todo .flex-content, cuyo alto lo calcula el JS midiendo el header.
+   Antes tenía su propio calc(100vh - 140px), que era un tercer número fijo
+   para el mismo espacio. */
 #tabs-container {
-    height: calc(100vh - 140px);
+    height: 100%;
 }
 
 #tabs-container .card {

@@ -463,34 +463,23 @@
         // cuando la solapa Historial pasó a tener además el panel de versiones, ese
         // panel se estiraba a pantalla completa y la tabla de abajo quedaba sin
         // espacio para scrollear hasta el final.
+        // Fija el alto del contenedor principal. El reparto dentro de cada solapa
+        // lo hace el flex de .tab-pane: la tabla es el único hijo que se estira y,
+        // con min-height: 0, se achica y scrollea sola.
+        //
+        // Antes esta función también le calculaba un max-height a cada tabla. Eso
+        // era adivinar lo que la tabla tenía encima, y convivía con reglas CSS que
+        // hacían lo mismo con !important: una tabla terminaba con tres candidatos a
+        // alto y ganaba el que el CSS hubiera marcado más fuerte. La solapa que no
+        // tenía regla propia —Historial— se quedaba sin ninguno y no scrolleaba.
         function ajustarAltura() {
-            const windowHeight = window.innerHeight;
             const headerHeight = document.querySelector('.flex-header')?.offsetHeight || 0;
-            const availableHeight = windowHeight - headerHeight - 20; // 20px de margen
+            const alturaDisponible = window.innerHeight - headerHeight - 20; // 20px de margen
 
             const flexContent = document.querySelector('.flex-content');
             if (flexContent) {
-                flexContent.style.height = availableHeight + 'px';
+                flexContent.style.height = alturaDisponible + 'px';
             }
-
-            document.querySelectorAll('.tab-pane').forEach(pane => {
-                // La tabla principal es la primera que no pidió alto propio.
-                const principal = pane.querySelector('.table-responsive:not([data-altura-fija])');
-                if (!principal) return;
-
-                // Solo se puede medir la solapa visible; las demás se ajustan cuando
-                // se muestran (shown.bs.tab).
-                if (pane.offsetParent === null) return;
-
-                // Todo lo que está por encima de la tabla dentro de la misma solapa.
-                let ocupado = 0;
-                for (let el = pane.firstElementChild; el && el !== principal; el = el.nextElementSibling) {
-                    ocupado += el.offsetHeight;
-                }
-
-                principal.style.maxHeight = Math.max(180, availableHeight - ocupado - 24) + 'px';
-                principal.style.overflowY = 'auto';
-            });
         }
         
         // Ejecutar al cargar y redimensionar

@@ -2,11 +2,14 @@
 /* Estilos de Tablas - Sistema de Presupuesto de Compras */
 /* Archivo: presupuestos/css/tables.css */
 
-/* Tabla principal responsive */
+/* Tabla principal responsive.
+   Sin max-height: dentro de las solapas el alto lo resuelve el flex de .tab-pane
+   (ver tabla-optimizada.css). Un tope en vh acá competía con eso y dejaba a la
+   tabla más corta que el espacio disponible. Las tablas de los modales, que no
+   están en un contenedor flex, tienen su propio tope. */
 .table-responsive {
     border-radius: 0 0 var(--border-radius) var(--border-radius);
     box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.05);
-    max-height: 65vh; /* Reducido de 70vh */
     overflow: auto;
     background: var(--card-bg);
 }
