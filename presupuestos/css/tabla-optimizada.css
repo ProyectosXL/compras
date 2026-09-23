@@ -584,3 +584,27 @@ html, body {
 .btn-reporte-excel:hover .icono-reporte {
     color: #ffffff !important;
 }
+/* =====================================================================
+   Compra abierta por tramo
+   Las columnas de tramo se crean dinámicamente (una por temporada que cubre la
+   solapa), así que su color lo pone la clase de Bootstrap que asigna
+   TablaRendererUtils. Acá van solo los dos estados que no son de color fijo.
+   ===================================================================== */
+
+/* Mientras el servidor devuelve el reparto de la fila editada. El reparto NO se
+   recalcula en el navegador, así que hay un viaje de por medio y el número viejo
+   sigue en pantalla unos milisegundos: se atenúa para que no se lea como el nuevo. */
+td.tramo-recalculando {
+    opacity: 0.45;
+    font-style: italic;
+}
+
+/* El recálculo falló. Se marca en vez de dejar el número anterior como si fuera
+   el vigente: un valor desactualizado sin aviso es peor que ninguno. */
+td.tramo-desactualizado {
+    position: relative;
+    text-decoration: line-through;
+    text-decoration-color: var(--bs-danger, #dc3545);
+    opacity: 0.6;
+    cursor: help;
+}

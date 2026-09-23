@@ -29,6 +29,7 @@ class Historial {
     // función: cada instancia puede estar apuntada a otra base.
     private $cacheDetalleAmpliado = null;
     private $cacheHayTramos = null;
+    private $cacheEstadoTramos = null;
 
     public function __construct() {
         if (session_status() === PHP_SESSION_NONE) {
@@ -514,6 +515,11 @@ class Historial {
                              c.es_completa, c.es_oficial, c.filas_guardadas, c.filas_totales,
                              c.periodo_venta_verano_etiqueta, c.periodo_venta_invierno_etiqueta,
                              c.usuario_guardado";
+                if ($this->cabeceraConEstadoTramos()) {
+                    // Sin esto, una versión sin reparto no se distingue en pantalla de
+                    // una que sí lo tiene pero cuyas filas todavía no se leyeron.
+                    $campos .= ", c.tramos_estado, c.tramos_observacion";
+                }
                 $sql = "SELECT $campos
                         FROM RO_T_HISTORIAL_COMPRAS_PROYECTADAS_PRESUPUESTO d
                         LEFT JOIN RO_T_HISTORIAL_COMPRAS_PROYECTADAS_CABECERA c ON c.id = d.id_cabecera";
@@ -589,12 +595,94 @@ class Historial {
             }
             sqlsrv_free_stmt($stmt);
 
+            $resultados = $this->adjuntarTramos($resultados);
+
             return ['success' => true, 'data' => $resultados];
 
         } catch (Exception $e) {
             error_log("Error en buscarHistorial: " . $e->getMessage());
             return ['success' => false, 'message' => 'Error al buscar en el historial: ' . $e->getMessage()];
         }
+    }
+
+    /**
+     * Agrega a cada fila del historial su reparto por tramo.
+     *
+     * En UNA consulta para todas las filas y no una por fila: el historial trae
+     * cientos de filas y consultarlas de a una multiplicaba los viajes a la base por
+     * el tamaño del resultado. Se filtra por los id de detalle que ya se leyeron, que
+     * es lo que mantiene la consulta acotada al mismo universo que se va a mostrar.
+     */
+    private function adjuntarTramos($filas) {
+        if (empty($filas) || !$this->hayTramos()) {
+            return $filas;
+        }
+
+        $ids = [];
+        foreach ($filas as $f) {
+            if (!empty($f['id'])) {
+                $ids[] = (int)$f['id'];
+            }
+        }
+        if (empty($ids)) {
+            return $filas;
+        }
+
+        // Los id son enteros propios, ya casteados: se interpolan porque un IN con
+        // parámetros necesita un placeholder por valor y acá pueden ser cientos.
+        $lista = implode(',', $ids);
+        $stmt = sqlsrv_query($this->cid,
+            "SELECT id_detalle, orden, temporada_codigo, temporada_tipo,
+                    temporada_desde, temporada_hasta, es_resto, es_objetivo, es_comprable,
+                    venta_proyectada, stock_aplicado, compra, compra_deficit_cobertura
+               FROM RO_T_HISTORIAL_COMPRAS_PROYECTADAS_TRAMO
+              WHERE id_detalle IN ($lista)
+              ORDER BY id_detalle, orden");
+        if ($stmt === false) {
+            // El historial sirve igual sin el desglose, así que no se aborta la
+            // búsqueda entera por esto: queda el log para poder detectarlo.
+            error_log('No se pudieron leer los tramos del historial: ' . print_r(sqlsrv_errors(), true));
+            return $filas;
+        }
+
+        $porDetalle = [];
+        while ($t = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC)) {
+            foreach (['temporada_desde', 'temporada_hasta'] as $k) {
+                if ($t[$k] instanceof DateTime) {
+                    $t[$k] = $t[$k]->format('Y-m-d');
+                }
+            }
+            foreach (['es_resto', 'es_objetivo', 'es_comprable'] as $k) {
+                $t[$k] = (bool)$t[$k];
+            }
+            $porDetalle[(int)$t['id_detalle']][] = $t;
+        }
+        sqlsrv_free_stmt($stmt);
+
+        foreach ($filas as &$f) {
+            $f['tramos'] = $porDetalle[(int)($f['id'] ?? 0)] ?? [];
+        }
+        unset($f);
+
+        return $filas;
+    }
+
+    /** Indica si la cabecera ya tiene las columnas de estado del reparto (script 03). */
+    private function cabeceraConEstadoTramos() {
+        if ($this->cacheEstadoTramos !== null) {
+            return $this->cacheEstadoTramos;
+        }
+
+        $stmt = sqlsrv_query($this->cid,
+            "SELECT CASE WHEN COL_LENGTH('dbo.RO_T_HISTORIAL_COMPRAS_PROYECTADAS_CABECERA','tramos_estado') IS NULL
+                         THEN 0 ELSE 1 END AS existe");
+        if ($stmt === false) {
+            return $this->cacheEstadoTramos = false;
+        }
+        $row = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC);
+        sqlsrv_free_stmt($stmt);
+
+        return $this->cacheEstadoTramos = (bool)$row['existe'];
     }
 
     /**

@@ -173,6 +173,73 @@ class IndiceEditor {
         if (typeof TotalesCompra !== 'undefined') {
             TotalesCompra.onIndiceActualizado(solapa, rubro, categoria, nuevoIndice);
         }
+
+        // 8. Pedirle al servidor el reparto por tramo de esta fila.
+        //
+        // No se recalcula acá: el reparto del stock entre tramos tiene UNA sola
+        // implementación (PresupuestoCalculos::repartirCompraPorTramo) y duplicarla en
+        // JS es exactamente lo que ya separó los números una vez. Va aparte del resto
+        // del flujo, que sigue siendo síncrono, para que la edición no se quede esperando
+        // el viaje: las celdas de tramo se marcan mientras tanto y se completan al volver.
+        IndiceEditor.refrescarTramos(solapa, indiceReal, registroActualizado, filaVisual);
+    }
+
+    /**
+     * Actualiza las celdas de tramo de una fila con el reparto que devuelve el servidor.
+     * Si la llamada falla, las celdas quedan marcadas como desactualizadas en vez de
+     * mostrar un número viejo como si fuera el nuevo.
+     */
+    static async refrescarTramos(solapa, indiceReal, registro, filaVisual) {
+        const celdas = filaVisual
+            ? Array.from(filaVisual.querySelectorAll('td[data-tramo-orden]'))
+            : [];
+
+        celdas.forEach(td => td.classList.add('tramo-recalculando'));
+
+        try {
+            const respuesta = await APIClient.llamarAPI('recalcular-tramos', {}, 'POST', {
+                solapa: solapa,
+                stock_proyectado: parseFloat(registro.STOCK_PROYECTADO || 0),
+                venta_verano_anterior: TemporadaServidor.ventaAnteriorDe(registro, 'VERANO'),
+                venta_invierno_anterior: TemporadaServidor.ventaAnteriorDe(registro, 'INVIERNO'),
+                indice_verano: parseFloat(registro.INDICE_VARIACION || 1.0),
+                indice_invierno: parseFloat(registro.INDICE_VARIACION_INVIERNO || registro.INDICE_VARIACION || 1.0)
+            });
+
+            if (!respuesta || !respuesta.success || !Array.isArray(respuesta.tramos)) {
+                throw new Error(respuesta && respuesta.message ? respuesta.message : 'Respuesta inesperada');
+            }
+
+            // El registro en memoria es el que después se guarda y el que suman los
+            // totales, así que se actualiza junto con la pantalla.
+            registro.TRAMOS = respuesta.tramos;
+            const datos = window.presupuestoApp.getDatos(solapa);
+            if (datos[indiceReal]) {
+                datos[indiceReal].TRAMOS = respuesta.tramos;
+            }
+
+            respuesta.tramos.forEach(tramo => {
+                const td = celdas.find(c => String(c.dataset.tramoOrden) === String(tramo.orden));
+                if (td) {
+                    TablaRendererUtils.pintarCeldaTramo(td, tramo);
+                    td.classList.remove('tramo-desactualizado');
+                }
+            });
+
+            if (typeof TotalesCompra !== 'undefined') {
+                TotalesCompra.onIndiceActualizado(solapa, registro.RUBRO, registro.CATEGORIA_PADRE, null);
+            }
+
+        } catch (error) {
+            console.error('No se pudo recalcular el reparto por tramo:', error);
+            celdas.forEach(td => {
+                td.classList.add('tramo-desactualizado');
+                td.title = 'No se pudo recalcular el reparto por tramo. El número que se ve es el '
+                         + 'anterior a esta edición: volvé a cargar los datos.';
+            });
+        } finally {
+            celdas.forEach(td => td.classList.remove('tramo-recalculando'));
+        }
     }
 
     /**

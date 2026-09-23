@@ -177,6 +177,18 @@ class ExcelExporter {
     static prepararDatosPresupuesto(datos, solapa) {
         if (!datos || datos.length === 0) return [];
 
+        // Qué tramos llevan déficit de cobertura EN ALGUNA fila. Se decide una vez para
+        // toda la hoja y no fila por fila: si la columna apareciera solo en las filas
+        // que tienen déficit, quedaría ubicada donde aparece por primera vez, después
+        // de las columnas de la fila anterior, y la hoja saldría con el encabezado
+        // corrido respecto de los datos.
+        const tramosConDeficit = new Set();
+        datos.forEach(item => {
+            (item.TRAMOS || []).forEach(t => {
+                if (t.compra_deficit_cobertura > 0) { tramosConDeficit.add(t.orden); }
+            });
+        });
+
         return datos.map(item => {
             // Campos base
             const resultado = {
@@ -219,7 +231,30 @@ class ExcelExporter {
                 resultado[`Proy. Invierno (${periodos.invierno})`] = item.VENTA_PROY_INVIERNO || 0;
                 
                 resultado['Compra Proyectada'] = item.COMPRA_PROYECTADA || 0;
-                
+
+                // Compra abierta por tramo, pegada al total que abre. Es el dato con el
+                // que el cashflow proyecta pagos: lo de cada temporada llega en
+                // contenedores distintos y se paga en meses distintos, así que el total
+                // solo no alcanza. El encabezado dice si el tramo es el objetivo de la
+                // solapa y si es comprable, porque el resto de la temporada en curso
+                // suma al total pero NO es mercadería a comprar.
+                (item.TRAMOS || []).forEach(tramo => {
+                    const nombre = (tramo.es_resto ? 'Resto ' : '') + tramo.temporada_codigo;
+                    const etiqueta = tramo.es_comprable
+                        ? (tramo.es_objetivo ? `Compra ${nombre} (OBJETIVO)` : `Compra ${nombre}`)
+                        : `Sin cubrir ${nombre}`;
+
+                    resultado[etiqueta] = tramo.compra || 0;
+
+                    // El déficit de cobertura va aparte: es stock de seguridad sin
+                    // reponer, no venta proyectada, y finanzas puede querer tratarlo
+                    // distinto. La columna existe para TODAS las filas si algún rubro
+                    // tiene déficit en ese tramo, para que la hoja no quede despareja.
+                    if (tramosConDeficit.has(tramo.orden)) {
+                        resultado[`Déficit cobertura ${nombre}`] = tramo.compra_deficit_cobertura || 0;
+                    }
+                });
+
                 // Agregar columnas dinámicas (Historial de años al final)
                 // Excluimos las columnas que ya agregamos manualmente o que son de sistema
                 const columnasIgnorar = [
