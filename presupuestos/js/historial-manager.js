@@ -34,6 +34,10 @@ class HistorialManager {
                 HistorialManager.marcarOficial(parseInt(target.dataset.idCabecera, 10));
             }
 
+            if (target.dataset.accionVersion === 'desmarcar-oficial') {
+                HistorialManager.desmarcarOficial(parseInt(target.dataset.idCabecera, 10));
+            }
+
             if (target.dataset.accionVersion === 'eliminar') {
                 HistorialManager.eliminarVersion(
                     target.dataset.idCabecera ? parseInt(target.dataset.idCabecera, 10) : null,
@@ -128,7 +132,14 @@ class HistorialManager {
             // servidor lo rechace, se explica por qué no se puede.
             let oficialCel;
             if (oficial) {
-                oficialCel = '<span class="text-success small"><i class="fas fa-flag me-1"></i>Vigente</span>';
+                // La oficial ya no se puede eliminar, así que tiene que haber una forma
+                // explícita de desmarcarla: si no, queda atrapada sin salida.
+                oficialCel = `<span class="text-success small d-block"><i class="fas fa-flag me-1"></i>Vigente</span>
+                              <button class="btn btn-outline-secondary btn-sm mt-1"
+                                      data-accion-version="desmarcar-oficial" data-id-cabecera="${v.id}"
+                                      title="Dejar esta temporada sin versión vigente">
+                                <i class="fas fa-flag-checkered me-1"></i>Desmarcar
+                              </button>`;
             } else if (v.es_completa === null) {
                 oficialCel = '<span class="text-muted small" title="Hay que correr los scripts de presupuestos/sql/">—</span>';
             } else if (completa) {
@@ -210,11 +221,93 @@ class HistorialManager {
      * Dos llamadas: la primera no borra y devuelve cuántas filas se llevaría y si
      * es la oficial, para confirmarlo con el dato real del servidor.
      */
+    /**
+     * Desmarca la versión oficial, dejando la temporada sin vigente.
+     *
+     * Es una decisión fuerte —el consumidor externo deja de encontrar presupuesto para
+     * esa temporada— así que va en dos pasos y lo dice sin rodeos. Existe porque la
+     * oficial ya no se puede eliminar: sin esto quedaría atrapada para siempre.
+     */
+    static async desmarcarOficial(idCabecera) {
+        if (!idCabecera) return;
+
+        UIUtils.mostrarLoading(true);
+        try {
+            const previa = await APIClient.llamarAPI('desmarcar-oficial', {}, 'POST', {
+                id_cabecera: idCabecera
+            });
+
+            if (!previa.success) {
+                throw new Error(previa.message || 'No se pudo desmarcar la versión.');
+            }
+            if (previa.sin_cambios) {
+                UIUtils.mostrarAlerta(previa.message, 'info');
+                return;
+            }
+
+            UIUtils.mostrarLoading(false);
+
+            const confirmado = await UIUtils.confirmarAccion(
+                'Desmarcar versión oficial',
+                `<p><strong>${previa.version.nombre}</strong> va a dejar de ser la versión
+                    oficial de <strong>${previa.version.temporada_objetivo}</strong>.</p>
+                 <div class="alert alert-warning p-2 mb-0">
+                   <i class="fas fa-exclamation-triangle me-1"></i>
+                   Esa temporada queda <strong>sin ninguna versión vigente</strong>: los
+                   sistemas que proyectan las compras del exterior van a dejar de
+                   encontrarla. Queda registrado en el historial de oficiales.
+                 </div>`,
+                'warning'
+            );
+
+            if (!confirmado) return;
+
+            UIUtils.mostrarLoading(true);
+            const respuesta = await APIClient.llamarAPI('desmarcar-oficial', {}, 'POST', {
+                id_cabecera: idCabecera,
+                confirmado: true
+            });
+
+            if (!respuesta.success) {
+                throw new Error(respuesta.message || 'No se pudo desmarcar la versión.');
+            }
+
+            UIUtils.mostrarAlerta(respuesta.message, 'warning');
+            await HistorialManager.cargarVersiones();
+
+        } catch (error) {
+            console.error('Error al desmarcar la versión oficial:', error);
+            UIUtils.mostrarAlerta(`Error: ${error.message}`, 'error');
+        } finally {
+            UIUtils.mostrarLoading(false);
+        }
+    }
+
     static async eliminarVersion(idCabecera, nombre) {
         UIUtils.mostrarLoading(true);
         try {
             const cuerpo = { id_cabecera: idCabecera || null, nombre_presupuesto: nombre || null };
             const previa = await APIClient.llamarAPI('eliminar-version-presupuesto', {}, 'POST', cuerpo);
+
+            // El servidor puede negarse a borrar por dos motivos distintos, y cada uno
+            // tiene una salida distinta: la oficial se desmarca primero, la que tiene
+            // historial de marcado no se borra. Se muestran como aviso y no como error
+            // rojo genérico, porque no es una falla sino una regla.
+            if (!previa.success && previa.bloqueada) {
+                UIUtils.mostrarLoading(false);
+                await UIUtils.informar(
+                    previa.bloqueada === 'oficial' ? 'No se puede eliminar la versión oficial'
+                                                   : 'No se puede eliminar: tiene historial',
+                    `<p>${previa.message}</p>`
+                    + (previa.bloqueada === 'oficial'
+                        ? '<p class="mb-0 small text-muted">Usá el botón <em>Desmarcar</em> de la '
+                          + 'columna Oficial y volvé a intentarlo.</p>'
+                        : '<p class="mb-0 small text-muted">El historial de quién marcó qué versión '
+                          + 'como oficial es auditoría: no se borra.</p>'),
+                    'warning'
+                );
+                return;
+            }
 
             if (!previa.success) {
                 throw new Error(previa.message || 'No se pudo eliminar la versión.');
@@ -223,19 +316,12 @@ class HistorialManager {
             UIUtils.mostrarLoading(false);
 
             const v = previa.version;
-            const aviso = v.es_oficial
-                ? `<div class="alert alert-danger p-2 mb-2">
-                     <i class="fas fa-flag me-1"></i>Es la versión <strong>oficial</strong>
-                     de <strong>${v.temporada_objetivo}</strong>. Si la borrás, esa temporada
-                     queda sin ninguna versión vigente.
-                   </div>`
-                : '';
 
             const confirmado = await UIUtils.confirmarAccion(
                 'Eliminar versión guardada',
-                `${aviso}
-                 <p>Se va a borrar <strong>${v.nombre}</strong> y sus
-                 <strong>${v.filas}</strong> fila${v.filas === 1 ? '' : 's'} de detalle.</p>
+                `<p>Se va a borrar <strong>${v.nombre}</strong>:
+                    <strong>${v.filas}</strong> fila${v.filas === 1 ? '' : 's'} de detalle
+                    ${v.filas_tramo ? ` y <strong>${v.filas_tramo}</strong> de compra por tramo` : ''}.</p>
                  <p class="mb-0 text-danger"><strong>No se puede deshacer.</strong></p>`,
                 'danger'
             );

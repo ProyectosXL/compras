@@ -414,7 +414,18 @@ class UIUtils {
     /**
      * Confirmar acción con modal
      */
-    static async confirmarAccion(titulo, mensaje, tipoBoton = 'danger') {
+    /**
+     * Modal de solo lectura: un mensaje y un botón para cerrarlo.
+     *
+     * Reusa confirmarAccion() porque es el mismo modal; lo único que cambia es que no
+     * hay nada que confirmar. Sin esto, avisar que una acción está bloqueada mostraba
+     * un botón "Confirmar" que no confirmaba nada.
+     */
+    static async informar(titulo, mensaje, tipoBoton = 'secondary') {
+        return UIUtils.confirmarAccion(titulo, mensaje, tipoBoton, true);
+    }
+
+    static async confirmarAccion(titulo, mensaje, tipoBoton = 'danger', soloInformar = false) {
         return new Promise((resolve) => {
             const modalId = 'modal-confirmacion-' + Date.now();
             
@@ -430,8 +441,10 @@ class UIUtils {
                                 ${mensaje}
                             </div>
                             <div class="modal-footer">
-                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                                <button type="button" class="btn btn-${tipoBoton}" id="btn-confirmar">Confirmar</button>
+                                ${soloInformar ? '' : '<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>'}
+                                <button type="button" class="btn btn-${tipoBoton}" id="btn-confirmar">
+                                    ${soloInformar ? 'Entendido' : 'Confirmar'}
+                                </button>
                             </div>
                         </div>
                     </div>

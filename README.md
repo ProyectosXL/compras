@@ -246,6 +246,27 @@ por tramo cuántas filas difieren, los dos totales, la diferencia y **qué rubro
 Avisa, no bloquea: la diferencia puede ser deliberada. Lo que no puede pasar es que el
 cashflow reciba dos números para la misma temporada sin que nadie se entere.
 
+### Qué versiones se pueden eliminar, y cuáles no
+
+`eliminarVersion()` borra la cabecera, el detalle y la compra por tramo, y **no se puede
+deshacer**. Se niega a hacerlo en dos casos:
+
+| Caso | Por qué | Salida |
+| --- | --- | --- |
+| Es la **oficial** | Borrarla deja una temporada sin presupuesto sin que nadie se entere: el cashflow deja de encontrarla | Desmarcarla primero (`desmarcar-oficial`), lo que queda registrado |
+| Tiene **historial de marcado** | El log apunta a la cabecera; borrar la versión se llevaría la auditoría de quién marcó qué y cuándo | Ninguna — hoy esa versión ya no se elimina |
+
+**Desmarcar sin reemplazo** deja la temporada sin ninguna versión vigente. Es una decisión
+fuerte y va en dos pasos, pero hace falta: sin ella, la regla de arriba dejaba a la oficial
+atrapada sin salida, porque hasta ahora desmarcar solo ocurría como efecto secundario de
+marcar otra.
+
+> **Pendiente de decisión.** Las dos reglas están en tensión: si el log no se borra nunca y
+> la clave foránea lo ata a la cabecera, una versión que alguna vez fue oficial **nunca**
+> se puede eliminar, ni siquiera después de desmarcarla. La **baja lógica** —la versión
+> deja de listarse pero sigue existiendo— resuelve las dos a la vez. Ver la propuesta antes
+> de implementarla.
+
 ### Guardado completo
 
 Por defecto se guarda el **presupuesto completo**, ignorando los filtros de la vista. Si hay
@@ -280,6 +301,7 @@ a que queden desincronizados).
 | `api.php?accion=buscar-historial`   | POST   | Busca en el historial de presupuestos guardados. |
 | `api.php?accion=versiones-presupuesto` | GET | Lista las versiones guardadas (una fila por versión). |
 | `api.php?accion=marcar-oficial`     | POST   | Marca una versión como oficial. Sin `confirmado` no escribe: devuelve cuál reemplazaría y, en `discrepancias`, los tramos que contradicen a otra oficial vigente. |
+| `api.php?accion=desmarcar-oficial`  | POST   | Desmarca la oficial **sin poner otra**: deja la temporada sin vigente. Sin `confirmado` no escribe. |
 | `api.php?accion=recalcular-tramos`  | POST   | Reparto por tramo de **una** fila, tras editar un índice. El navegador no lo recalcula: hay una sola implementación. |
 | `api.php?accion=eliminar-version-presupuesto` | POST | Elimina una versión (cabecera + detalle + log). Sin `confirmado` no borra: devuelve cuántas filas se llevaría y si es la oficial. |
 | `api.php?accion=historial-oficial`  | GET    | Quién marcó qué versión como oficial y cuándo. |

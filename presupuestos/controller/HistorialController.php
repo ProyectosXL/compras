@@ -104,6 +104,35 @@ class HistorialController {
     }
 
     /**
+     * Desmarca la version oficial, sin poner otra en su lugar.
+     *
+     * Mismo esquema de dos pasos que marcarOficial(). Existe porque la version
+     * oficial ya no se puede eliminar: sin un desmarcado explicito, la regla la
+     * dejaba atrapada sin salida.
+     */
+    public function desmarcarOficial() {
+        $datos = json_decode(file_get_contents('php://input'), true);
+
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            $this->jsonResponse(['success' => false, 'message' => 'Error: JSON inválido.'], 400);
+            return;
+        }
+
+        $idCabecera = (int)($datos['id_cabecera'] ?? 0);
+        if ($idCabecera <= 0) {
+            $this->jsonResponse(['success' => false, 'message' => 'Falta el id de la versión.'], 400);
+            return;
+        }
+
+        try {
+            $resultado = $this->historial->desmarcarOficial($idCabecera, !empty($datos['confirmado']));
+            $this->jsonResponse($resultado, $resultado['success'] ? 200 : 400);
+        } catch (Exception $e) {
+            $this->jsonResponse(['success' => false, 'message' => 'Error del servidor: ' . $e->getMessage()], 500);
+        }
+    }
+
+    /**
      * Elimina una version guardada.
      *
      * Dos pasos como marcarOficial: la primera llamada no borra y devuelve

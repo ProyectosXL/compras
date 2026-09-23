@@ -875,6 +875,51 @@ class Historial {
 
         $esOficial = $cabecera ? ((int)$cabecera['es_oficial'] === 1) : false;
 
+        // LA VERSIÓN OFICIAL NO SE ELIMINA.
+        //
+        // Con un consumidor externo leyendo esta tabla, borrar la oficial deja una
+        // temporada sin presupuesto sin que nadie se entere: el cashflow simplemente
+        // deja de encontrarla. Hay que desmarcarla primero, y ese desmarcado queda en
+        // el log como cualquier otro, así que la temporada nunca se queda sin vigente
+        // por accidente, solo por una decisión explícita y registrada.
+        if ($esOficial) {
+            return [
+                'success' => false,
+                'bloqueada' => 'oficial',
+                'message' => "'{$nombrePresupuesto}' es la versión oficial de "
+                           . "{$cabecera['temporada_objetivo']}. Para eliminarla hay que desmarcarla "
+                           . "primero; el desmarcado queda registrado en el historial de oficiales."
+            ];
+        }
+
+        // EL LOG DE OFICIAL NO SE BORRA NUNCA.
+        //
+        // Si la versión tiene historial de marcado, borrarla se llevaría ese historial
+        // puesto: el log apunta a la cabecera por clave foránea. Se prefiere no
+        // eliminarla antes que perder la auditoría de quién marcó qué y cuándo, que es
+        // justamente lo que se pidió conservar.
+        //
+        // Efecto lateral: una versión que ALGUNA VEZ fue oficial ya no se puede
+        // eliminar, ni siquiera después de desmarcarla. Es la consecuencia de mantener
+        // el borrado físico, y es el motivo por el que conviene evaluar la baja lógica
+        // (ver README): con baja lógica la versión deja de listarse, el log sigue
+        // apuntando a algo que existe y las dos reglas dejan de estar en tensión.
+        $filasLog = $this->contarLogOficial($cabecera ? (int)$cabecera['id'] : null);
+        if ($filasLog > 0) {
+            return [
+                'success' => false,
+                'bloqueada' => 'log',
+                'message' => "'{$nombrePresupuesto}' tiene {$filasLog} registro(s) en el historial de "
+                           . "versiones oficiales: fue marcada o desmarcada en algún momento. "
+                           . "Ese historial no se borra, así que la versión tampoco se elimina."
+            ];
+        }
+
+        // Los tramos se cuentan para poder decir qué se lleva puesto el borrado. Se
+        // agregaron después que esta función, y como apuntan al detalle por clave
+        // foránea, sin borrarlos primero el DELETE del detalle falla entero.
+        $filasTramo = $this->contarTramos($cabecera ? (int)$cabecera['id'] : null);
+
         if (!$confirmado) {
             return [
                 'success' => true,
@@ -883,6 +928,7 @@ class Historial {
                     'id_cabecera' => $cabecera ? (int)$cabecera['id'] : null,
                     'nombre' => $nombrePresupuesto,
                     'filas' => $filas,
+                    'filas_tramo' => $filasTramo,
                     'es_oficial' => $esOficial,
                     'temporada_objetivo' => $cabecera['temporada_objetivo'] ?? null
                 ]
@@ -894,13 +940,22 @@ class Historial {
                 throw new Exception("No se pudo iniciar la transacción: " . print_r(sqlsrv_errors(), true));
             }
 
-            // Orden obligado por las claves foráneas: primero lo que apunta a la
-            // cabecera, después la cabecera.
+            // Orden obligado por las claves foráneas: primero lo que apunta al detalle,
+            // después el detalle, y al final la cabecera. Los TRAMOS van primeros de
+            // todo: apuntan al detalle y a la cabecera, así que sin borrarlos el DELETE
+            // del detalle fallaba entero (quedaba trabado el borrado de cualquier
+            // versión migrada).
+            //
+            // El log NO se borra: acá no puede haber ninguno, porque una versión con
+            // log no llega a este punto. Se deja dicho para que no se lo agregue de
+            // nuevo pensando que falta.
             if ($cabecera) {
+                if ($this->hayTramos()) {
+                    $this->ejecutar("DELETE FROM RO_T_HISTORIAL_COMPRAS_PROYECTADAS_TRAMO WHERE id_cabecera = ?",
+                        [(int)$cabecera['id']], 'tramos');
+                }
                 $this->ejecutar("DELETE FROM RO_T_HISTORIAL_COMPRAS_PROYECTADAS_PRESUPUESTO WHERE id_cabecera = ?",
                     [(int)$cabecera['id']], 'detalle');
-                $this->ejecutar("DELETE FROM RO_T_HISTORIAL_COMPRAS_PROYECTADAS_OFICIAL_LOG WHERE id_cabecera = ?",
-                    [(int)$cabecera['id']], 'log de oficial');
                 $this->ejecutar("DELETE FROM RO_T_HISTORIAL_COMPRAS_PROYECTADAS_CABECERA WHERE id = ?",
                     [(int)$cabecera['id']], 'cabecera');
             } else {
@@ -908,6 +963,19 @@ class Historial {
                 // versiones viejas. Se excluyen las filas que ya tienen cabecera
                 // para no llevarse por delante otra versión del mismo nombre.
                 $where = $conCabecera ? " AND id_cabecera IS NULL" : "";
+
+                // Por construcción una fila sin cabecera no puede tener tramos (se
+                // escriben siempre con su id_cabecera). Se limpia igual, por id de
+                // detalle: si alguna vez quedara una, el DELETE de abajo fallaría
+                // entero por la clave foránea y el borrado se trabaría sin explicación.
+                if ($this->hayTramos()) {
+                    $this->ejecutar("DELETE FROM RO_T_HISTORIAL_COMPRAS_PROYECTADAS_TRAMO
+                                      WHERE id_detalle IN (
+                                          SELECT id FROM RO_T_HISTORIAL_COMPRAS_PROYECTADAS_PRESUPUESTO
+                                           WHERE nombre_presupuesto = ?" . $where . ")",
+                        [$nombrePresupuesto], 'tramos');
+                }
+
                 $this->ejecutar("DELETE FROM RO_T_HISTORIAL_COMPRAS_PROYECTADAS_PRESUPUESTO
                                   WHERE nombre_presupuesto = ?" . $where,
                     [$nombrePresupuesto], 'detalle');
@@ -918,14 +986,145 @@ class Historial {
             return [
                 'success' => true,
                 'message' => "Se eliminó '{$nombrePresupuesto}' ({$filas} fila"
-                           . ($filas === 1 ? '' : 's') . ")."
-                           . ($esOficial ? ' Era la versión oficial: no quedó ninguna vigente para esa temporada.' : '')
+                           . ($filas === 1 ? '' : 's')
+                           . ($filasTramo ? " y {$filasTramo} de tramo" : '') . ")."
             ];
 
         } catch (Exception $e) {
             @sqlsrv_rollback($this->cid);
             error_log("Error en eliminarVersion: " . $e->getMessage());
             return ['success' => false, 'message' => 'Error al eliminar la versión: ' . $e->getMessage()];
+        }
+    }
+
+    /** Cuántas filas tiene el log de oficial para una cabecera. */
+    private function contarLogOficial($idCabecera) {
+        if (!$idCabecera) {
+            return 0;
+        }
+        $stmt = sqlsrv_query($this->cid,
+            "SELECT COUNT(*) AS n FROM RO_T_HISTORIAL_COMPRAS_PROYECTADAS_OFICIAL_LOG
+              WHERE id_cabecera = ?", [(int)$idCabecera]);
+        if ($stmt === false) {
+            // Ante la duda se responde que SÍ hay historial: equivocarse hacia "no se
+            // puede borrar" es recuperable; hacia el otro lado se pierde la auditoría.
+            error_log('No se pudo contar el log de oficial: ' . print_r(sqlsrv_errors(), true));
+            return 1;
+        }
+        $n = (int)sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC)['n'];
+        sqlsrv_free_stmt($stmt);
+        return $n;
+    }
+
+    /** Cuántas filas de tramo tiene una cabecera. */
+    private function contarTramos($idCabecera) {
+        if (!$idCabecera || !$this->hayTramos()) {
+            return 0;
+        }
+        $stmt = sqlsrv_query($this->cid,
+            "SELECT COUNT(*) AS n FROM RO_T_HISTORIAL_COMPRAS_PROYECTADAS_TRAMO
+              WHERE id_cabecera = ?", [(int)$idCabecera]);
+        if ($stmt === false) {
+            return 0;
+        }
+        $n = (int)sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC)['n'];
+        sqlsrv_free_stmt($stmt);
+        return $n;
+    }
+
+    /**
+     * Desmarca la versión oficial de una combinación, sin poner otra en su lugar.
+     *
+     * Hasta ahora desmarcar solo pasaba como efecto secundario de marcar otra: no
+     * había forma de dejar una temporada SIN versión vigente. Hace falta porque la
+     * oficial ya no se puede eliminar, y sin un desmarcado explícito la regla dejaba
+     * la versión atrapada para siempre.
+     *
+     * Deja la temporada sin vigente, así que es una decisión fuerte: el consumidor
+     * externo va a dejar de encontrar presupuesto para esa combinación. Por eso va en
+     * dos pasos, igual que marcar, y queda en el log como cualquier otro desmarcado.
+     *
+     * @param int  $idCabecera version a desmarcar
+     * @param bool $confirmado la UI ya avisó que la temporada queda sin vigente
+     */
+    public function desmarcarOficial($idCabecera, $confirmado = false) {
+        if (!$this->cid) {
+            return ['success' => false, 'message' => 'Error de conexión a la base de datos.'];
+        }
+        if (!$this->hayCabecera()) {
+            return ['success' => false, 'message' => 'Esta base todavía no tiene la cabecera de versiones.'];
+        }
+
+        $idCabecera = (int)$idCabecera;
+
+        try {
+            $stmt = sqlsrv_query($this->cid,
+                "SELECT id, nombre_presupuesto, pais, temporada_objetivo, es_oficial
+                   FROM RO_T_HISTORIAL_COMPRAS_PROYECTADAS_CABECERA WHERE id = ?", [$idCabecera]);
+            if ($stmt === false) {
+                throw new Exception(print_r(sqlsrv_errors(), true));
+            }
+            $version = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC);
+            sqlsrv_free_stmt($stmt);
+
+            if (!$version) {
+                return ['success' => false, 'message' => 'No existe la versión indicada.'];
+            }
+            if ((int)$version['es_oficial'] !== 1) {
+                return ['success' => true, 'message' => 'Esa versión no es la oficial.', 'sin_cambios' => true];
+            }
+
+            if (!$confirmado) {
+                return [
+                    'success' => true,
+                    'requiere_confirmacion' => true,
+                    'version' => [
+                        'id' => (int)$version['id'],
+                        'nombre' => $version['nombre_presupuesto'],
+                        'temporada_objetivo' => $version['temporada_objetivo'],
+                        'pais' => $version['pais']
+                    ]
+                ];
+            }
+
+            if (sqlsrv_begin_transaction($this->cid) === false) {
+                throw new Exception("No se pudo iniciar la transacción: " . print_r(sqlsrv_errors(), true));
+            }
+
+            $usuario = $this->usuarioActual();
+
+            $up = sqlsrv_query($this->cid,
+                "UPDATE RO_T_HISTORIAL_COMPRAS_PROYECTADAS_CABECERA
+                    SET es_oficial = 0, oficial_usuario = NULL, oficial_fecha = NULL
+                  WHERE id = ?", [$idCabecera]);
+            if ($up === false) {
+                throw new Exception("Al desmarcar: " . print_r(sqlsrv_errors(), true));
+            }
+            sqlsrv_free_stmt($up);
+
+            // Sin reemplazo: id_cabecera_reemplazada va NULL porque no hay ninguna que
+            // ocupe el lugar. Es lo que distingue en el log un desmarcado suelto de
+            // uno que fue parte de un reemplazo.
+            $this->registrarLogOficial(
+                $idCabecera, 'DESMARCAR', $version['pais'], $version['temporada_objetivo'],
+                null, $usuario,
+                'Desmarcada sin reemplazo: la temporada queda sin versión vigente'
+            );
+
+            sqlsrv_commit($this->cid);
+
+            return [
+                'success' => true,
+                'message' => "'{$version['nombre_presupuesto']}' ya no es la versión oficial de "
+                           . "{$version['temporada_objetivo']} ({$version['pais']}). "
+                           . "Esa temporada quedó SIN versión vigente.",
+                'id_cabecera' => $idCabecera
+            ];
+
+        } catch (Exception $e) {
+            @sqlsrv_rollback($this->cid);
+            error_log("Error en desmarcarOficial: " . $e->getMessage());
+            return ['success' => false, 'message' => 'Error al desmarcar la versión: ' . $e->getMessage()];
         }
     }
 
