@@ -107,11 +107,26 @@ En `presupuestos/sql/`, en orden. Hay que correrlos **en las dos bases**:
                               php 02_migracion_versiones.php                 -> preview
                               php 02_migracion_versiones.php --aplicar       -> escribe
                               php 02_migracion_versiones.php --pais=uruguay
+
+03_compra_por_tramo.sql       Crea la tabla de tramos (compra abierta por temporada)
+                              y agrega tramos_estado a la cabecera.
+                              Los 3 bloques vienen en @CONFIRMAR_* = 0.
+
+04_migracion_tramos.php       Reconstruye el reparto por tramo de las versiones
+                              que ya tienen cabecera. Requiere el 03 aplicado.
+                              php 04_migracion_tramos.php                 -> preview
+                              php 04_migracion_tramos.php --aplicar       -> escribe
+                              php 04_migracion_tramos.php --pais=uruguay
 ```
 
-Los dos son **reejecutables** y ninguno borra datos. La aplicación funciona con o sin
+Los cuatro son **reejecutables** y ninguno borra datos. La aplicación funciona con o sin
 ellos aplicados: mientras falten, el panel de versiones avisa que hay que correrlos y
-el resto sigue andando igual.
+el resto sigue andando igual (sin el 03, se guarda y se muestra todo salvo el reparto
+por tramo).
+
+El `04` **no inventa nada**: solo reconstruye las versiones cuyo reparto se puede
+reproducir exacto, y verifica fila por fila antes de escribir. La que no cierra queda
+marcada `SIN_REPARTO` con el motivo.
 
 ## 🎯 Funcionalidades
 
@@ -131,10 +146,87 @@ Una versión guardada son **dos** cosas:
 | ----- | ----- | ---------- |
 | `RO_T_HISTORIAL_COMPRAS_PROYECTADAS_CABECERA` | una fila por versión | cuándo y quién la guardó, desde qué solapa, con qué fecha se calculó, **temporada objetivo** con desde/hasta, período que cubre cada venta proyectada, si es completa o parcial, y si es la **oficial** |
 | `RO_T_HISTORIAL_COMPRAS_PROYECTADAS_PRESUPUESTO` | una fila por rubro/categoría | el detalle, más los componentes del stock proyectado, el costo con el que se calculó y la temporada base de cada venta anterior |
+| `RO_T_HISTORIAL_COMPRAS_PROYECTADAS_TRAMO` | una fila por rubro/categoría **y tramo** | la compra abierta por temporada: cuánto se vende en ese tramo, cuánto cubre el stock y cuánto hay que comprar |
 | `RO_T_HISTORIAL_COMPRAS_PROYECTADAS_OFICIAL_LOG` | una fila por marcado | quién marcó o desmarcó qué versión y cuándo |
 
 El detalle **conserva** `nombre_presupuesto` y `temporada`, así que cualquier lector que hoy
-consulte solo esa tabla sigue funcionando igual.
+consulte solo esa tabla sigue funcionando igual. `compra_proyectada` y
+`venta_proyectada_verano/invierno` tampoco cambiaron de significado: siguen siendo el total.
+
+## 📦 La compra, abierta por tramo
+
+La compra proyectada era **un** número por fila para toda la ventana de la solapa.
+Transitando verano, la solapa verano calcula:
+
+```
+compra = stock proyectado − (resto VER 26-27 + VER 27-28) − INV 27
+```
+
+Sirve para decidir cuánto comprar, pero no para el cashflow: lo de INV 27 y lo de
+VER 27-28 llegan en **contenedores distintos** y en **meses distintos**, así que se pagan
+en meses distintos. La tabla de tramos abre ese número por temporada.
+
+### Cómo se reparte
+
+El stock proyectado es un **pozo único** que se consume en **orden cronológico**: cada
+tramo toma lo que puede del stock que quedó, y la compra de ese tramo es lo que el stock
+no alcanzó a cubrir. Se descartó prorratear el stock entre tramos en proporción a su
+venta: el stock que hay hoy cubre primero lo que se vende primero, no una fracción de
+cada temporada futura.
+
+Las OC pendientes ya vienen dentro del stock proyectado y **no** se afectan a la
+temporada de su oleada: entran al pozo común como cualquier unidad. Es una simplificación
+deliberada — las fechas reales de esas OC las administra Comercio Exterior y esta app no
+las tiene — y está medida: sobre la versión oficial de Argentina, afectarlas movería
+**1.619 unidades del tramo objetivo, el 0,23 %, en 1 fila de 72**.
+
+Todo el reparto vive en una función pura, `PresupuestoCalculos::repartirCompraPorTramo()`:
+no lee el reloj, la sesión ni la base, así que el mismo reparto se puede reconstruir meses
+después desde una versión guardada y da idéntico. El JS **no** lo duplica: al editar un
+índice le pide al servidor el reparto de esa fila (`recalcular-tramos`).
+
+### Los tres tipos de tramo
+
+| | Qué es | Lo lee el consumidor externo |
+| --- | --- | --- |
+| **Objetivo** (`es_objetivo = 1`) | La temporada que esta versión tiene que cubrir | **Sí.** Es lo que la versión aporta |
+| **Intermedio** | Una temporada que queda en el medio del horizonte | No. Queda como **control** |
+| **No comprable** (`es_comprable = 0`) | El resto de la temporada en curso | No. Ya no llega a tiempo un contenedor nuevo |
+
+Cada versión oficial aporta **solo la compra de su temporada objetivo**. Si no, INV 27
+quedaría cubierta dos veces: por su propia oficial y por el tramo intermedio de la oficial
+de VER 27-28. Los dos números coinciden por construcción — el stock se consume en el mismo
+orden y las dos solapas usan las mismas bases — y eso se **verifica al marcar oficial**
+(ver más abajo).
+
+El tramo no comprable conserva su compra calculada, pero en pantalla se rotula
+**"Sin cubrir"** y no "Compra": es venta que va a quedar sin cobertura, no mercadería a
+comprar. Se lo deja dentro de `compra` para que el invariante siga siendo literal.
+
+### El déficit de stock de cobertura
+
+Cuando el stock de seguridad supera a todo lo disponible, el stock proyectado arranca
+negativo (`ACCESORIO DE CUERO: 0 − 309 = −309`). En Argentina eso pasa en **22 de 72
+filas, 13.986 unidades**; en Uruguay, en 2 de 36.
+
+Ese déficit **no** se le carga al primer tramo cronológico, que es el resto de la
+temporada en curso: ahí desaparecería del presupuesto, porque ese tramo no se puede
+comprar y nadie lo lee. Va al **primer tramo comprable**, que es el contenedor más cercano
+sobre el que todavía se puede actuar, y queda separado en `compra_deficit_cobertura` para
+que finanzas pueda tratarlo distinto de una compra por venta. Se descartó mandarlo al
+tramo objetivo: lo habría atrasado hasta un año sin motivo.
+
+### El invariante
+
+Por cada fila de detalle:
+
+```
+SUM(tramo.compra) = MAX(0, −compra_proyectada)
+```
+
+Las filas con excedente dan **0 en todos los tramos**. Se cumple exacto porque el pozo se
+redondea a unidades enteras igual que `compra_proyectada`, y la venta de cada tramo se
+redondea **por tramo** y no sobre la suma.
 
 ### La versión oficial
 
@@ -144,6 +236,15 @@ historial; marcar una desmarca la anterior en la misma transacción, previa conf
 
 Una versión **parcial no puede ser oficial**: lo impide un `CHECK` en la base además de la
 aplicación, porque es la regla que protege al consumidor externo.
+
+Al marcar, se comparan los **tramos compartidos** con las otras oficiales vigentes del
+mismo país. Calculadas el mismo día y sin tocar nada tienen que dar idéntico; si no dan,
+lo más común es que se haya editado el índice de un rubro en **una sola de las dos
+solapas** (el editor toca únicamente los datos de la solapa abierta). El modal muestra
+por tramo cuántas filas difieren, los dos totales, la diferencia y **qué rubros**.
+
+Avisa, no bloquea: la diferencia puede ser deliberada. Lo que no puede pasar es que el
+cashflow reciba dos números para la misma temporada sin que nadie se entere.
 
 ### Guardado completo
 
@@ -178,7 +279,8 @@ a que queden desincronizados).
 | `api.php?accion=guardar-presupuesto` | POST  | Guarda una versión del presupuesto proyectado. |
 | `api.php?accion=buscar-historial`   | POST   | Busca en el historial de presupuestos guardados. |
 | `api.php?accion=versiones-presupuesto` | GET | Lista las versiones guardadas (una fila por versión). |
-| `api.php?accion=marcar-oficial`     | POST   | Marca una versión como oficial. Sin `confirmado` no escribe: devuelve cuál reemplazaría. |
+| `api.php?accion=marcar-oficial`     | POST   | Marca una versión como oficial. Sin `confirmado` no escribe: devuelve cuál reemplazaría y, en `discrepancias`, los tramos que contradicen a otra oficial vigente. |
+| `api.php?accion=recalcular-tramos`  | POST   | Reparto por tramo de **una** fila, tras editar un índice. El navegador no lo recalcula: hay una sola implementación. |
 | `api.php?accion=eliminar-version-presupuesto` | POST | Elimina una versión (cabecera + detalle + log). Sin `confirmado` no borra: devuelve cuántas filas se llevaría y si es la oficial. |
 | `api.php?accion=historial-oficial`  | GET    | Quién marcó qué versión como oficial y cuándo. |
 
@@ -188,8 +290,10 @@ versión** en lugar de todo el historial.
 > ⚠️ **Zona horaria.** El `php.ini` de XAMPP viene con `Europe/Berlin`, cinco horas
 > adelante de Argentina: a partir de las 19:00 hora local PHP ya estaba en el día
 > siguiente, lo que corría la fecha de cálculo y con ella los días restantes de temporada.
-> `presupuestos/api.php` e `index.php` fijan `America/Argentina/Buenos_Aires`. Si se agrega
-> otro punto de entrada al módulo, tiene que hacer lo mismo.
+> `presupuestos/api.php`, `index.php` y los scripts de migración de `sql/` fijan
+> `America/Argentina/Buenos_Aires`. Si se agrega otro punto de entrada al módulo, tiene
+> que hacer lo mismo: no se toca el `php.ini`, que lo comparten todas las apps del
+> servidor. Argentina y Uruguay están en el mismo huso, así que alcanza con uno.
 
 Los endpoints de compra proyectada devuelven, además de `data`:
 
@@ -198,6 +302,11 @@ Los endpoints de compra proyectada devuelven, además de `data`:
 | `columnas_venta` | Columnas históricas en orden cronológico |
 | `etiquetas_historicas` | `{VTA_VERANO_26: "VER 25-26", ...}` |
 | `periodos` | Qué período cubre cada columna proyectada en esa solapa, más la temporada objetivo |
+
+Y cada fila de `data` trae `TRAMOS`: la compra ya repartida por temporada, con
+`es_objetivo`, `es_comprable`, `venta_proyectada`, `stock_aplicado`, `compra` y
+`compra_deficit_cobertura`. La pantalla, el Excel y el guardado usan **ese** reparto, para
+que ninguno lo rehaga por su cuenta.
 
 ## 💻 Uso del Sistema
 

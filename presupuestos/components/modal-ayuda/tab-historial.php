@@ -61,6 +61,28 @@
                         versión es anterior a esta funcionalidad y la temporada se dedujo de la fecha de
                         guardado.
                     </div>
+                    <div class="alert alert-success">
+                        <i class="fas fa-layer-group me-2"></i>
+                        <strong>Compra por tramo:</strong> la última columna abre la compra de cada fila
+                        por temporada, que es lo que necesita el cashflow: lo de cada temporada llega en
+                        contenedores distintos y se paga en meses distintos. Va en una sola columna con
+                        etiquetas porque el historial mezcla versiones de distintas solapas y fechas, y
+                        cada una puede tener otros tramos.
+                        <ul class="small mb-0 mt-2">
+                            <li><span class="badge bg-success">verde</span> la temporada objetivo: lo que
+                                esa versión le aporta al cashflow.</li>
+                            <li><span class="badge bg-light text-dark border">gris</span> un tramo
+                                intermedio, que queda como control.</li>
+                            <li><span class="badge bg-danger-subtle text-danger-emphasis">rojo</span> el
+                                resto de la temporada que estaba en curso: venta que quedó sin cubrir,
+                                no mercadería a comprar.</li>
+                            <li><span class="badge bg-secondary">sin reparto</span> no se pudo
+                                reconstruir el reparto de esa versión. El motivo está en el tooltip; no
+                                se inventó ningún número.</li>
+                            <li><code>—</code> la versión es anterior al reparto por tramo, o todavía no
+                                se corrieron los scripts en esa base.</li>
+                        </ul>
+                    </div>
                 </div>
             </div>
 
@@ -84,7 +106,24 @@
                             de la versión anterior.</li>
                         <li>Una versión <strong>parcial no puede ser oficial</strong>. Si necesita oficializarla,
                             vuelva a guardar el presupuesto completo.</li>
+                        <li>Cada oficial aporta <strong>solo la compra de su temporada objetivo</strong>.
+                            Los tramos intermedios quedan como control: si no, una temporada quedaría
+                            cubierta dos veces, por su propia versión y por el tramo intermedio de otra.</li>
                     </ul>
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        <strong>Aviso al marcar:</strong> antes de confirmar, el sistema compara los tramos
+                        que esta versión comparte con las otras oficiales vigentes del mismo país.
+                        Calculadas el mismo día y sin tocar nada tienen que dar idéntico; si no dan, lo más
+                        común es que se haya editado el índice de un rubro en <strong>una sola de las dos
+                        solapas</strong>. El aviso muestra qué tramos difieren, en cuántas filas, por
+                        cuántas unidades y qué rubros.
+                        <p class="mb-0 mt-1">
+                            <strong>Avisa, no bloquea.</strong> La diferencia puede ser deliberada; la
+                            decisión es suya. Lo que no puede pasar es que el cashflow reciba dos números
+                            para la misma temporada sin que nadie se entere.
+                        </p>
+                    </div>
                     <div class="alert alert-secondary small">
                         <i class="fas fa-database me-1"></i>
                         Cada versión guarda además el costo FOB y el porcentaje de nacionalización con los
