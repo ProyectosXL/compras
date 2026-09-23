@@ -24,6 +24,13 @@ class Historial {
     protected $cid;
     protected $nameServer;
 
+    // Qué scripts de sql/ tiene aplicados ESTA base. Se consultan una vez por
+    // instancia y no una vez por fila insertada, pero tampoco en un static de
+    // función: cada instancia puede estar apuntada a otra base.
+    private $cacheDetalleAmpliado = null;
+    private $cacheHayTramos = null;
+    private $cacheEstadoTramos = null;
+
     public function __construct() {
         if (session_status() === PHP_SESSION_NONE) {
             session_start();
@@ -120,6 +127,8 @@ class Historial {
         // la version deja de ser reproducible en cuanto alguien cambie un costo.
         $costos = $this->obtenerCostos();
 
+        $tramosGuardados = 0;
+
         try {
             if (sqlsrv_begin_transaction($this->cid) === false) {
                 throw new Exception("No se pudo iniciar la transacción: " . print_r(sqlsrv_errors(), true));
@@ -170,8 +179,22 @@ class Historial {
 
             $registrosGuardados = $this->insertarDetalle(
                 $idCabecera, $nombrePresupuesto, $solapa, $pais,
-                $ahora->format('Y-m-d H:i'), $filas, $costos
+                $ahora->format('Y-m-d H:i'), $filas, $costos,
+                $fechaCalculo, $tramosGuardados
             );
+
+            // El reparto se calculó con los días de ESTE guardado, así que la versión
+            // queda marcada como calculada y no como reconstruida: es la diferencia
+            // entre un reparto exacto y uno deducido después por la migración.
+            if ($idCabecera && $this->hayTramos()) {
+                $up = sqlsrv_query($this->cid,
+                    "UPDATE RO_T_HISTORIAL_COMPRAS_PROYECTADAS_CABECERA
+                        SET tramos_estado = 'CALCULADO' WHERE id = ?", [$idCabecera]);
+                if ($up === false) {
+                    throw new Exception("Al marcar el estado del reparto: " . print_r(sqlsrv_errors(), true));
+                }
+                sqlsrv_free_stmt($up);
+            }
 
             sqlsrv_commit($this->cid);
 
@@ -181,6 +204,7 @@ class Historial {
                            . "(" . ($esCompleta ? 'completo' : 'parcial') . ", "
                            . "temporada objetivo {$periodos['objetivo']['codigo']}).",
                 'registros_guardados' => $registrosGuardados,
+                'tramos_guardados' => $tramosGuardados,
                 'id_cabecera' => $idCabecera,
                 'es_completa' => (bool)$esCompleta,
                 'temporada_objetivo' => $periodos['objetivo']['codigo']
@@ -202,8 +226,10 @@ class Historial {
      * de la fase 2 se aplican por base, y guardar tiene que seguir funcionando
      * en la que todavia no se migro.
      */
-    private function insertarDetalle($idCabecera, $nombre, $solapa, $pais, $fecha, $filas, $costos) {
+    private function insertarDetalle($idCabecera, $nombre, $solapa, $pais, $fecha, $filas, $costos,
+                                     $fechaCalculo = null, &$tramosGuardados = 0) {
         $ampliado = $this->detalleAmpliado();
+        $conTramos = $this->hayTramos();
 
         if ($ampliado) {
             $sql = "INSERT INTO RO_T_HISTORIAL_COMPRAS_PROYECTADAS_PRESUPUESTO (
@@ -216,7 +242,7 @@ class Historial {
                         cant_pend_oc_verano, cant_pend_oc_invierno, cant_pend_oc_atemporal,
                         stock_cobertura, costo_prom, inc_fob, vcosto,
                         temporada_base_verano, temporada_base_invierno
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                    ) OUTPUT INSERTED.id VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         } else {
             $sql = "INSERT INTO RO_T_HISTORIAL_COMPRAS_PROYECTADAS_PRESUPUESTO (
                         nombre_presupuesto, fecha_guardado, temporada, pais, rubro,
@@ -233,6 +259,20 @@ class Historial {
             $rubro = $fila['rubro'] ?? null;
             $categoria = $fila['categoria_padre'] ?? null;
 
+            // El reparto se calcula ANTES de armar la fila y de él salen los totales
+            // de la fila, en vez de copiar los que mandó el navegador.
+            //
+            // El navegador recalcula la venta proyectada al editar un índice, así que
+            // hasta ahora la versión guardaba números del cliente y —desde este cambio—
+            // un reparto del servidor. Con dos orígenes, cualquier diferencia entre
+            // ellos rompía el invariante y dejaba la versión incoherente consigo misma
+            // justo en la tabla que lee el cashflow. Numéricamente da lo mismo (las dos
+            // implementaciones usan la misma fórmula y los mismos días del servidor);
+            // lo que cambia es que ahora no puede NO dar lo mismo.
+            $calculo = $conTramos
+                ? $this->totalesDesdeTramos($fila, $solapa, $fechaCalculo)
+                : null;
+
             $params = [
                 $nombre,
                 $fecha,
@@ -240,15 +280,18 @@ class Historial {
                 $pais,
                 $rubro,
                 $categoria,
-                (int)($fila['stock_proyectado'] ?? 0),
+                // round() y no (int): el cast trunca, y el reparto redondea. Hoy los
+                // componentes vienen enteros, pero si alguno trajera decimales el
+                // stock guardado y el del reparto se separarían por una unidad.
+                (int)round((float)($fila['stock_proyectado'] ?? 0)),
                 (float)($fila['indice_variacion_original'] ?? 0),
                 (float)($fila['indice_verano_variacion'] ?? 0),
                 (int)($fila['venta_verano_anterior'] ?? 0),
-                (int)($fila['venta_proyectada_verano'] ?? 0),
+                $calculo ? $calculo['venta_proy_verano'] : (int)($fila['venta_proyectada_verano'] ?? 0),
                 (float)($fila['indice_invierno_variacion'] ?? 0),
                 (int)($fila['venta_invierno_anterior'] ?? 0),
-                (int)($fila['venta_proyectada_invierno'] ?? 0),
-                (int)($fila['compra_proyectada'] ?? 0)
+                $calculo ? $calculo['venta_proy_invierno'] : (int)($fila['venta_proyectada_invierno'] ?? 0),
+                $calculo ? $calculo['compra_proyectada'] : (int)($fila['compra_proyectada'] ?? 0)
             ];
 
             if ($ampliado) {
@@ -277,36 +320,147 @@ class Historial {
             if ($stmt === false) {
                 throw new Exception("Error al insertar fila: " . print_r(sqlsrv_errors(), true));
             }
-            $registrosGuardados += sqlsrv_rows_affected($stmt);
+
+            if ($ampliado) {
+                // Con OUTPUT el driver devuelve una fila, no un contador: el id se lee
+                // acá porque es lo que enlaza los tramos con su fila de detalle.
+                $idDetalle = (int)sqlsrv_fetch_array($stmt, SQLSRV_FETCH_NUMERIC)[0];
+                $registrosGuardados++;
+            } else {
+                $idDetalle = null;
+                $registrosGuardados += sqlsrv_rows_affected($stmt);
+            }
             sqlsrv_free_stmt($stmt);
+
+            if ($conTramos && $idDetalle) {
+                $tramosGuardados += $this->insertarTramos(
+                    $idCabecera, $idDetalle, $rubro, $categoria, $calculo['tramos']
+                );
+            }
         }
 
         return $registrosGuardados;
     }
 
     /**
+     * Reparto por tramo de una fila del payload, y los totales que salen de él.
+     *
+     * Los totales se DERIVAN de los tramos en vez de venir del payload: así
+     * venta_proyectada_verano es, por definición, la suma de los tramos de verano, y
+     * el invariante de la tabla de tramos se cumple por construcción y no por
+     * coincidencia entre dos implementaciones.
+     *
+     * De la fila se usan solo los datos de entrada —stock, bases, índices—, que no
+     * son editables salvo los índices. Los resultados que mandó el navegador no se
+     * copian.
+     */
+    private function totalesDesdeTramos($fila, $solapa, $fechaCalculo) {
+        $indiceVerano = (float)($fila['indice_verano_variacion'] ?? 1.0);
+        $indiceInvierno = (float)($fila['indice_invierno_variacion'] ?? $indiceVerano);
+        $stock = (float)($fila['stock_proyectado'] ?? 0);
+
+        $tramos = PresupuestoCalculos::calcularTramosDeFila(
+            $stock,
+            (float)($fila['venta_verano_anterior'] ?? 0),   $indiceVerano,
+            (float)($fila['venta_invierno_anterior'] ?? 0), $indiceInvierno,
+            $fechaCalculo,
+            $solapa
+        );
+
+        $ventaVerano = 0;
+        $ventaInvierno = 0;
+        foreach ($tramos as $t) {
+            if ($t['temporada_tipo'] === 'VERANO') {
+                $ventaVerano += $t['venta_proyectada'];
+            } else {
+                $ventaInvierno += $t['venta_proyectada'];
+            }
+        }
+
+        return [
+            'tramos' => $tramos,
+            'venta_proy_verano' => (int)$ventaVerano,
+            'venta_proy_invierno' => (int)$ventaInvierno,
+            'compra_proyectada' => (int)(round($stock) - $ventaVerano - $ventaInvierno)
+        ];
+    }
+
+    /** Escribe las filas de tramo ya calculadas. */
+    private function insertarTramos($idCabecera, $idDetalle, $rubro, $categoria, $tramos) {
+        $sql = "INSERT INTO RO_T_HISTORIAL_COMPRAS_PROYECTADAS_TRAMO (
+                    id_cabecera, id_detalle, rubro, categoria_padre, orden,
+                    temporada_codigo, temporada_tipo, temporada_desde, temporada_hasta,
+                    es_resto, es_objetivo, es_comprable,
+                    venta_proyectada, stock_aplicado, compra, compra_deficit_cobertura
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+
+        $guardados = 0;
+        foreach ($tramos as $t) {
+            $stmt = sqlsrv_query($this->cid, $sql, [
+                $idCabecera, $idDetalle, $rubro, $categoria, $t['orden'],
+                $t['temporada_codigo'], $t['temporada_tipo'], $t['temporada_desde'], $t['temporada_hasta'],
+                $t['es_resto'] ? 1 : 0, $t['es_objetivo'] ? 1 : 0, $t['es_comprable'] ? 1 : 0,
+                $t['venta_proyectada'], $t['stock_aplicado'], $t['compra'], $t['compra_deficit_cobertura']
+            ]);
+            if ($stmt === false) {
+                throw new Exception("Error al insertar el tramo {$t['temporada_codigo']}: " . print_r(sqlsrv_errors(), true));
+            }
+            sqlsrv_free_stmt($stmt);
+            $guardados++;
+        }
+
+        return $guardados;
+    }
+
+    /**
+     * Indica si la base ya tiene la tabla de tramos (script 03).
+     *
+     * Se consulta igual que detalleAmpliado() y por el mismo motivo: los scripts se
+     * corren por base y por país, y guardar tiene que seguir funcionando en la que
+     * todavía no se migró, solo que sin el reparto.
+     */
+    private function hayTramos() {
+        if ($this->cacheHayTramos !== null) {
+            return $this->cacheHayTramos;
+        }
+
+        $stmt = sqlsrv_query($this->cid,
+            "SELECT CASE WHEN OBJECT_ID('dbo.RO_T_HISTORIAL_COMPRAS_PROYECTADAS_TRAMO','U') IS NULL
+                         THEN 0 ELSE 1 END AS existe");
+        if ($stmt === false) {
+            return $this->cacheHayTramos = false;
+        }
+        $row = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC);
+        sqlsrv_free_stmt($stmt);
+
+        return $this->cacheHayTramos = (bool)$row['existe'];
+    }
+
+    /**
      * Indica si el detalle ya tiene las columnas de la fase 2.
      *
-     * Se cachea por instancia: sin esto se consultaba el catalogo una vez por
-     * fila insertada. Se toma id_cabecera como testigo porque las columnas se
-     * agregan todas juntas en el mismo bloque del script 01.
+     * Se cachea en la INSTANCIA y no en un static de funcion: sin cache se
+     * consultaba el catalogo una vez por fila insertada, pero un static lo habria
+     * compartido entre instancias, y esta clase esta pensada para poder apuntarse a
+     * otra base en las pruebas —donde la respuesta es distinta— sin duplicar la
+     * logica. Se toma id_cabecera como testigo porque las columnas se agregan todas
+     * juntas en el mismo bloque del script 01.
      */
     private function detalleAmpliado() {
-        static $ampliado = null;
-        if ($ampliado !== null) {
-            return $ampliado;
+        if ($this->cacheDetalleAmpliado !== null) {
+            return $this->cacheDetalleAmpliado;
         }
 
         $stmt = sqlsrv_query($this->cid,
             "SELECT CASE WHEN COL_LENGTH('dbo.RO_T_HISTORIAL_COMPRAS_PROYECTADAS_PRESUPUESTO','id_cabecera') IS NULL
                          THEN 0 ELSE 1 END AS existe");
         if ($stmt === false) {
-            return $ampliado = false;
+            return $this->cacheDetalleAmpliado = false;
         }
         $row = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC);
         sqlsrv_free_stmt($stmt);
 
-        return $ampliado = (bool)$row['existe'];
+        return $this->cacheDetalleAmpliado = (bool)$row['existe'];
     }
 
     /** Entero del payload, o NULL si el campo no vino (no 0: 0 es un valor real). */
@@ -361,6 +515,11 @@ class Historial {
                              c.es_completa, c.es_oficial, c.filas_guardadas, c.filas_totales,
                              c.periodo_venta_verano_etiqueta, c.periodo_venta_invierno_etiqueta,
                              c.usuario_guardado";
+                if ($this->cabeceraConEstadoTramos()) {
+                    // Sin esto, una versión sin reparto no se distingue en pantalla de
+                    // una que sí lo tiene pero cuyas filas todavía no se leyeron.
+                    $campos .= ", c.tramos_estado, c.tramos_observacion";
+                }
                 $sql = "SELECT $campos
                         FROM RO_T_HISTORIAL_COMPRAS_PROYECTADAS_PRESUPUESTO d
                         LEFT JOIN RO_T_HISTORIAL_COMPRAS_PROYECTADAS_CABECERA c ON c.id = d.id_cabecera";
@@ -436,12 +595,94 @@ class Historial {
             }
             sqlsrv_free_stmt($stmt);
 
+            $resultados = $this->adjuntarTramos($resultados);
+
             return ['success' => true, 'data' => $resultados];
 
         } catch (Exception $e) {
             error_log("Error en buscarHistorial: " . $e->getMessage());
             return ['success' => false, 'message' => 'Error al buscar en el historial: ' . $e->getMessage()];
         }
+    }
+
+    /**
+     * Agrega a cada fila del historial su reparto por tramo.
+     *
+     * En UNA consulta para todas las filas y no una por fila: el historial trae
+     * cientos de filas y consultarlas de a una multiplicaba los viajes a la base por
+     * el tamaño del resultado. Se filtra por los id de detalle que ya se leyeron, que
+     * es lo que mantiene la consulta acotada al mismo universo que se va a mostrar.
+     */
+    private function adjuntarTramos($filas) {
+        if (empty($filas) || !$this->hayTramos()) {
+            return $filas;
+        }
+
+        $ids = [];
+        foreach ($filas as $f) {
+            if (!empty($f['id'])) {
+                $ids[] = (int)$f['id'];
+            }
+        }
+        if (empty($ids)) {
+            return $filas;
+        }
+
+        // Los id son enteros propios, ya casteados: se interpolan porque un IN con
+        // parámetros necesita un placeholder por valor y acá pueden ser cientos.
+        $lista = implode(',', $ids);
+        $stmt = sqlsrv_query($this->cid,
+            "SELECT id_detalle, orden, temporada_codigo, temporada_tipo,
+                    temporada_desde, temporada_hasta, es_resto, es_objetivo, es_comprable,
+                    venta_proyectada, stock_aplicado, compra, compra_deficit_cobertura
+               FROM RO_T_HISTORIAL_COMPRAS_PROYECTADAS_TRAMO
+              WHERE id_detalle IN ($lista)
+              ORDER BY id_detalle, orden");
+        if ($stmt === false) {
+            // El historial sirve igual sin el desglose, así que no se aborta la
+            // búsqueda entera por esto: queda el log para poder detectarlo.
+            error_log('No se pudieron leer los tramos del historial: ' . print_r(sqlsrv_errors(), true));
+            return $filas;
+        }
+
+        $porDetalle = [];
+        while ($t = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC)) {
+            foreach (['temporada_desde', 'temporada_hasta'] as $k) {
+                if ($t[$k] instanceof DateTime) {
+                    $t[$k] = $t[$k]->format('Y-m-d');
+                }
+            }
+            foreach (['es_resto', 'es_objetivo', 'es_comprable'] as $k) {
+                $t[$k] = (bool)$t[$k];
+            }
+            $porDetalle[(int)$t['id_detalle']][] = $t;
+        }
+        sqlsrv_free_stmt($stmt);
+
+        foreach ($filas as &$f) {
+            $f['tramos'] = $porDetalle[(int)($f['id'] ?? 0)] ?? [];
+        }
+        unset($f);
+
+        return $filas;
+    }
+
+    /** Indica si la cabecera ya tiene las columnas de estado del reparto (script 03). */
+    private function cabeceraConEstadoTramos() {
+        if ($this->cacheEstadoTramos !== null) {
+            return $this->cacheEstadoTramos;
+        }
+
+        $stmt = sqlsrv_query($this->cid,
+            "SELECT CASE WHEN COL_LENGTH('dbo.RO_T_HISTORIAL_COMPRAS_PROYECTADAS_CABECERA','tramos_estado') IS NULL
+                         THEN 0 ELSE 1 END AS existe");
+        if ($stmt === false) {
+            return $this->cacheEstadoTramos = false;
+        }
+        $row = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC);
+        sqlsrv_free_stmt($stmt);
+
+        return $this->cacheEstadoTramos = (bool)$row['existe'];
     }
 
     /**
@@ -776,7 +1017,8 @@ class Historial {
                         'id' => (int)$anterior['id'],
                         'nombre' => $anterior['nombre_presupuesto'],
                         'fecha_guardado' => $anterior['fecha_guardado']
-                    ] : null
+                    ] : null,
+                    'discrepancias' => $this->compararTramosCompartidos($idCabecera, $version['pais'])
                 ];
             }
 
@@ -834,6 +1076,150 @@ class Historial {
             error_log("Error en marcarOficial: " . $e->getMessage());
             return ['success' => false, 'message' => 'Error al marcar la versión oficial: ' . $e->getMessage()];
         }
+    }
+
+    /**
+     * Compara los tramos que esta version comparte con las OTRAS oficiales del pais.
+     *
+     * POR QUE. Dos versiones oficiales de temporadas distintas describen tramos que se
+     * pisan: la de VER 27-28, guardada desde la solapa verano, tambien trae el tramo
+     * INV 27, que es la temporada objetivo de la otra oficial. Calculadas el mismo dia
+     * y sin tocar nada, los dos numeros son identicos por construccion, porque el
+     * stock se consume en el mismo orden y las dos solapas usan las mismas bases.
+     *
+     * Pero los indices se editan POR SOLAPA: IndiceEditor solo toca los datos de la
+     * solapa abierta. Si alguien corrige el indice de un rubro en verano y no en
+     * invierno, los tramos compartidos dejan de coincidir y el cashflow recibe dos
+     * versiones que se contradicen sobre la misma temporada, sin que nada lo diga.
+     *
+     * Se avisa antes de confirmar y no se bloquea: puede ser legitimo (las versiones
+     * se calcularon en dias distintos, o se corrigio a proposito en una sola solapa).
+     * La decision es de quien marca; lo que no puede pasar es que no se entere.
+     *
+     * @return array|null null si no hay nada que comparar
+     */
+    private function compararTramosCompartidos($idCabecera, $pais) {
+        if (!$this->hayTramos()) {
+            return null;
+        }
+
+        // Tramo contra tramo, por rubro/categoria y temporada, contra las otras
+        // oficiales del mismo pais. Se excluye la temporada objetivo de la version que
+        // se marca: esa no la comparte con nadie, es lo que aporta ella.
+        // Se agrupa por la CABECERA de la otra versión (cotra.id) y no por otra.id, que
+        // es el id de la fila de tramo: con ese, cada grupo era una sola fila y el
+        // aviso mostraba el desvío de un rubro suelto como si fuera el de la versión.
+        $sql = "SELECT cotra.id               AS id_otra,
+                       cotra.nombre_presupuesto AS nombre_otra,
+                       cotra.temporada_objetivo AS objetivo_otra,
+                       nueva.temporada_codigo,
+                       nueva.es_resto,
+                       COUNT(*)                        AS filas_comparadas,
+                       SUM(CASE WHEN nueva.compra <> otra.compra THEN 1 ELSE 0 END) AS filas_distintas,
+                       SUM(ABS(nueva.compra - otra.compra))                         AS unidades,
+                       SUM(nueva.compra)               AS total_nueva,
+                       SUM(otra.compra)                AS total_otra
+                  FROM RO_T_HISTORIAL_COMPRAS_PROYECTADAS_TRAMO nueva
+                  JOIN RO_T_HISTORIAL_COMPRAS_PROYECTADAS_TRAMO otra
+                    ON otra.rubro = nueva.rubro
+                   AND ISNULL(otra.categoria_padre,'') = ISNULL(nueva.categoria_padre,'')
+                   AND otra.temporada_codigo = nueva.temporada_codigo
+                   AND otra.es_resto = nueva.es_resto
+                  JOIN RO_T_HISTORIAL_COMPRAS_PROYECTADAS_CABECERA cotra
+                    ON cotra.id = otra.id_cabecera
+                 WHERE nueva.id_cabecera = ?
+                   AND cotra.es_oficial = 1
+                   AND cotra.pais = ?
+                   AND cotra.id <> nueva.id_cabecera
+                   AND nueva.es_objetivo = 0
+                 GROUP BY cotra.id, cotra.nombre_presupuesto, cotra.temporada_objetivo,
+                          nueva.temporada_codigo, nueva.es_resto
+                HAVING SUM(CASE WHEN nueva.compra <> otra.compra THEN 1 ELSE 0 END) > 0
+                 ORDER BY SUM(ABS(nueva.compra - otra.compra)) DESC";
+
+        $stmt = sqlsrv_query($this->cid, $sql, [(int)$idCabecera, $pais]);
+        if ($stmt === false) {
+            // El aviso es una ayuda, no un requisito para marcar: si falla se registra
+            // y se sigue, antes que impedir marcar la oficial por no poder compararla.
+            error_log('No se pudieron comparar los tramos compartidos: ' . print_r(sqlsrv_errors(), true));
+            return null;
+        }
+
+        $crudo = [];
+        while ($r = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC)) {
+            $crudo[] = $r;
+        }
+        sqlsrv_free_stmt($stmt);
+
+        $resumen = [];
+        foreach ($crudo as $r) {
+            $resumen[] = [
+                'id_otra'          => (int)$r['id_otra'],
+                'nombre_otra'      => $r['nombre_otra'],
+                'objetivo_otra'    => $r['objetivo_otra'],
+                'temporada'        => ((int)$r['es_resto'] === 1 ? 'Resto ' : '') . $r['temporada_codigo'],
+                'filas_comparadas' => (int)$r['filas_comparadas'],
+                'filas_distintas'  => (int)$r['filas_distintas'],
+                'unidades'         => (int)$r['unidades'],
+                'total_nueva'      => (int)$r['total_nueva'],
+                'total_otra'       => (int)$r['total_otra'],
+                // Qué filas, no solo cuántas: el resumen dice que hay 1 de 72 distinta,
+                // pero para decidir si marcarla hay que ver CUÁL. Van las de mayor
+                // desvío y en la misma respuesta, para no obligar a un segundo viaje
+                // desde un modal que ya está abierto.
+                'filas' => $this->detalleDiscrepancia(
+                    $idCabecera, (int)$r['id_otra'], $r['temporada_codigo'], (int)$r['es_resto'] === 1, 10
+                )['data']
+            ];
+        }
+
+        if (empty($resumen)) {
+            return null;
+        }
+
+        return [
+            'hay_diferencias' => true,
+            'detalle' => $resumen,
+            'explicacion' => 'Esta versión describe tramos que también describe otra versión oficial '
+                           . 'vigente, y no coinciden. Suele pasar cuando se editó el índice de un rubro '
+                           . 'en una sola de las dos solapas. Podés marcarla igual, pero el cashflow va a '
+                           . 'recibir dos números distintos para la misma temporada.'
+        ];
+    }
+
+    /** Detalle rubro por rubro de una discrepancia, para el modal de confirmación. */
+    private function detalleDiscrepancia($idCabecera, $idOtra, $temporada, $esResto = false, $limite = 50) {
+        if (!$this->cid || !$this->hayTramos()) {
+            return ['success' => true, 'data' => []];
+        }
+
+        $stmt = sqlsrv_query($this->cid,
+            "SELECT TOP (?) nueva.rubro, nueva.categoria_padre,
+                    nueva.compra AS compra_nueva, otra.compra AS compra_otra,
+                    nueva.compra - otra.compra AS diferencia
+               FROM RO_T_HISTORIAL_COMPRAS_PROYECTADAS_TRAMO nueva
+               JOIN RO_T_HISTORIAL_COMPRAS_PROYECTADAS_TRAMO otra
+                 ON otra.rubro = nueva.rubro
+                AND ISNULL(otra.categoria_padre,'') = ISNULL(nueva.categoria_padre,'')
+                AND otra.temporada_codigo = nueva.temporada_codigo
+                AND otra.es_resto = nueva.es_resto
+              WHERE nueva.id_cabecera = ? AND otra.id_cabecera = ?
+                AND nueva.temporada_codigo = ? AND nueva.es_resto = ?
+                AND nueva.compra <> otra.compra
+              ORDER BY ABS(nueva.compra - otra.compra) DESC",
+            [(int)$limite, (int)$idCabecera, (int)$idOtra, $temporada, $esResto ? 1 : 0]);
+
+        if ($stmt === false) {
+            return ['success' => false, 'message' => print_r(sqlsrv_errors(), true)];
+        }
+
+        $data = [];
+        while ($r = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC)) {
+            $data[] = $r;
+        }
+        sqlsrv_free_stmt($stmt);
+
+        return ['success' => true, 'data' => $data];
     }
 
     /** Una fila del log por cada marcado y cada desmarcado. */

@@ -276,6 +276,71 @@ class HistorialManager {
      * desmarcar, para poder confirmarlo con el dato real del servidor y no con
      * lo que el navegador tenía en pantalla.
      */
+    /**
+     * Aviso de que esta versión contradice a otra oficial vigente.
+     *
+     * Dos versiones oficiales de temporadas distintas describen tramos que se pisan:
+     * la de VER 27-28 también trae el tramo INV 27, que es el objetivo de la otra.
+     * Calculadas el mismo día y sin tocar nada dan idéntico; si no dan, lo más común
+     * es que se haya editado un índice en una sola de las dos solapas.
+     *
+     * Se avisa, no se bloquea: puede ser deliberado. Lo que no puede pasar es que el
+     * cashflow reciba dos números para la misma temporada sin que nadie se entere.
+     */
+    static avisoDiscrepancias(discrepancias) {
+        if (!discrepancias || !discrepancias.hay_diferencias) return '';
+
+        const filas = discrepancias.detalle.map(d => {
+            // Qué filas, no solo cuántas: sin el rubro concreto no hay forma de saber
+            // si la diferencia es la corrección que alguien hizo a propósito o un olvido.
+            const rubros = (d.filas || []).map(f => `
+                <tr class="small">
+                  <td class="ps-4 text-muted" colspan="2">${f.rubro || ''} · ${f.categoria_padre || ''}</td>
+                  <td></td>
+                  <td class="text-end text-muted">${FormatoUtils.formatearNumero(f.compra_nueva)}</td>
+                  <td class="text-end text-muted">${FormatoUtils.formatearNumero(f.compra_otra)}</td>
+                  <td class="text-end text-muted">${FormatoUtils.formatearNumero(f.diferencia)}</td>
+                </tr>`).join('');
+
+            const hayMas = d.filas_distintas > (d.filas || []).length
+                ? `<tr class="small"><td class="ps-4 fst-italic text-muted" colspan="6">
+                     y ${d.filas_distintas - d.filas.length} rubro(s) más</td></tr>`
+                : '';
+
+            return `
+                <tr>
+                  <td class="small fw-bold">${d.temporada}</td>
+                  <td class="small">${d.nombre_otra}<br>
+                      <span class="text-muted">oficial de ${d.objetivo_otra}</span></td>
+                  <td class="text-end small">${d.filas_distintas} de ${d.filas_comparadas}</td>
+                  <td class="text-end small">${FormatoUtils.formatearNumero(d.total_nueva)}</td>
+                  <td class="text-end small">${FormatoUtils.formatearNumero(d.total_otra)}</td>
+                  <td class="text-end small fw-bold">${FormatoUtils.formatearNumero(d.unidades)}</td>
+                </tr>${rubros}${hayMas}`;
+        }).join('');
+
+        return `
+            <div class="alert alert-warning mt-3 mb-0">
+              <div class="fw-bold mb-1">
+                <i class="fas fa-exclamation-triangle me-1"></i>
+                Esta versión no coincide con otra oficial vigente
+              </div>
+              <p class="small mb-2">${discrepancias.explicacion}</p>
+              <div class="table-responsive">
+                <table class="table table-sm table-borderless mb-0">
+                  <thead>
+                    <tr class="small text-muted">
+                      <th>Tramo</th><th>Contra</th><th class="text-end">Filas que difieren</th>
+                      <th class="text-end">Esta</th><th class="text-end">La otra</th>
+                      <th class="text-end">Diferencia</th>
+                    </tr>
+                  </thead>
+                  <tbody>${filas}</tbody>
+                </table>
+              </div>
+            </div>`;
+    }
+
     static async marcarOficial(idCabecera) {
         if (!idCabecera) return;
 
@@ -304,7 +369,8 @@ class HistorialManager {
             const confirmado = await UIUtils.confirmarAccion(
                 'Marcar versión oficial',
                 `<p>${detalle}</p>
-                 <p class="mb-0">Pasa a ser oficial: <strong>${previa.version.nombre}</strong></p>`,
+                 <p class="mb-0">Pasa a ser oficial: <strong>${previa.version.nombre}</strong></p>
+                 ${HistorialManager.avisoDiscrepancias(previa.discrepancias)}`,
                 'success'
             );
 

@@ -59,6 +59,11 @@ class TotalesCompra {
             // los encabezados de los años.
             const clavesDinamicas = TablaRendererUtils.extraerColumnasVentasHistoricas(datos);
 
+            // Tramos de la solapa, para sumar la compra de cada uno. Mismo origen que
+            // usan el encabezado y las filas, así que la fila de totales no puede
+            // quedar corrida respecto de las columnas que suma.
+            const tramos = TablaRendererUtils.tramosDeSolapa(datos);
+
             // 2. INICIALIZAR ACUMULADOR
             const acumuladorInicial = {
                 totalRegistros: 0,
@@ -71,10 +76,15 @@ class TotalesCompra {
                 totalNegativo: 0,
                 itemsNegativos: 0,
                 itemsPositivos: 0,
-                dinamicos: {} 
+                dinamicos: {},
+                // Indexado por `orden` y no por código de temporada: el orden es la
+                // posición de la columna, y es lo que mantiene alineada la fila de
+                // totales aunque dos tramos compartieran código.
+                tramos: {}
             };
 
             clavesDinamicas.forEach(k => acumuladorInicial.dinamicos[k] = 0);
+            tramos.forEach(t => acumuladorInicial.tramos[t.orden] = 0);
 
             // 3. REDUCE PARA SUMAR TODO
             const totales = datos.reduce((acc, item) => {
@@ -92,6 +102,12 @@ class TotalesCompra {
                     acc.dinamicos[k] += parseFloat(item[k] || 0);
                 });
 
+                (item.TRAMOS || []).forEach(t => {
+                    if (acc.tramos[t.orden] !== undefined) {
+                        acc.tramos[t.orden] += parseFloat(t.compra || 0);
+                    }
+                });
+
                 const compra = TotalesCompra.obtenerCompraProyectada(item);
                 if (compra < 0) {
                     acc.totalNegativo += Math.abs(compra);
@@ -104,8 +120,8 @@ class TotalesCompra {
             }, acumuladorInicial);
 
             // Mostrar resumen superior y fila inferior
-            TotalesCompra.mostrarResumenSuperior(solapa, totales);
-            TotalesCompra.agregarFilaTotales(solapa, totales, clavesDinamicas);
+            TotalesCompra.mostrarResumenSuperior(solapa, totales, tramos);
+            TotalesCompra.agregarFilaTotales(solapa, totales, clavesDinamicas, tramos);
             
         } catch (error) {
             console.error('Error calculando totales:', error);
@@ -196,7 +212,7 @@ class TotalesCompra {
         return 0;
     }
 
-    static mostrarResumenSuperior(solapa, totales) {
+    static mostrarResumenSuperior(solapa, totales, tramos = []) {
         const containerId = `total-compra-${solapa}-superior`;
         let container = document.getElementById(containerId);
 
@@ -230,7 +246,26 @@ class TotalesCompra {
                    + 'que tienen excedente: el neto de la columna Compra Proyectada es ' + neto + '.' },
             { label: 'Neto de la columna', valor: neto,
               ayuda: 'Faltantes menos excedentes. Es el total que muestra la fila TOTALES '
-                   + 'al pie de la tabla.' }
+                   + 'al pie de la tabla.' },
+
+            // La apertura por tramo, al lado del total. "Unidades a comprar" es la suma
+            // de TODOS los tramos, incluido el que ya no se puede comprar, así que sin
+            // esta apertura el número de arriba no se puede repartir entre contenedores.
+            ...tramos.map(t => {
+                const valor = TotalesCompra.formatearNumero(totales.tramos[t.orden] || 0);
+                const nombre = (t.es_resto ? 'Resto ' : '') + t.temporada_codigo;
+
+                if (!t.es_comprable) {
+                    return { label: 'Sin cubrir ' + nombre, valor: valor, tono: 'alerta',
+                             ayuda: 'Venta de la temporada en curso que el stock no alcanza a cubrir. '
+                                  + 'Está dentro de "Unidades a comprar" pero NO es mercadería a comprar: '
+                                  + 'un contenedor nuevo ya no llega a tiempo.' };
+                }
+                return { label: (t.es_objetivo ? '★ ' : '') + 'Compra ' + nombre, valor: valor,
+                         ayuda: t.es_objetivo
+                            ? 'Temporada objetivo de esta solapa: es lo que esta versión le aporta al cashflow.'
+                            : 'Tramo intermedio. Queda como control: esa temporada la aporta su propia versión oficial.' };
+            })
         ].filter(Boolean));
 
         container.classList.remove('d-none');
@@ -256,7 +291,7 @@ class TotalesCompra {
         searchContainer.parentNode.insertBefore(resumenContainer, searchContainer.nextSibling);
     }
 
-    static agregarFilaTotales(solapa, totales, clavesDinamicas = []) {
+    static agregarFilaTotales(solapa, totales, clavesDinamicas = [], tramos = []) {
         const tbody = document.getElementById(`tbody-${solapa}`);
         if (!tbody) return;
 
@@ -292,6 +327,18 @@ class TotalesCompra {
                 ${TotalesCompra.formatearNumero(totales.totalCompraProyectada)}
             </td>
         `;
+
+        // Compra por tramo, en el mismo orden que los encabezados y las filas.
+        // El tramo no comprable se muestra en rojo: no es parte de lo que hay que
+        // comprar, así que sumarlo con los otros daría un total que no existe.
+        tramos.forEach(tramo => {
+            const valor = totales.tramos[tramo.orden] || 0;
+            const clase = !tramo.es_comprable
+                ? 'text-danger'
+                : (tramo.es_objetivo ? 'text-success' : 'text-secondary');
+            html += `<td class="text-end ${clase} fw-bold" data-tramo-orden="${tramo.orden}">`
+                  + `${TotalesCompra.formatearNumero(valor)}</td>`;
+        });
 
         // Agregar columnas dinámicas (Años)
         clavesDinamicas.forEach(key => {

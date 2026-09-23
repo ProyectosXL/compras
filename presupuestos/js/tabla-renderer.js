@@ -58,7 +58,6 @@ const TablaRendererUtils = {
         tabla.setAttribute('data-limpia', 'true');
     },
 
-
     /**
      * Venta anterior que se usó como base de la proyección.
      *
@@ -66,76 +65,99 @@ const TablaRendererUtils = {
      * lista fija de las últimas dos temporadas y el reloj del navegador: cuando la
      * última venta con movimiento era más vieja (por ejemplo BILLETERAS DE CUERO,
      * con ventas solo en INV 24), la pantalla mostraba 0 mientras la proyección se
-     * había calculado sobre 335. La búsqueda vieja queda como respaldo por si algún
-     * camino de datos no pasa por ProcesadorDatos.
+     * había calculado sobre 335. Esa lista fija se reemplazó por el respaldo de
+     * TemporadaServidor.ventaAnteriorDe(), que aplica la misma regla que PHP en vez
+     * de adivinar los años a partir de `new Date()`.
      */
     buscarVentaHistoricaCorrecta(item, temporada) {
-        const campoServidor = temporada === 'VERANO' ? 'VENTA_VERANO_ANTERIOR' : 'VENTA_INVIERNO_ANTERIOR';
-        if (item[campoServidor] !== undefined && item[campoServidor] !== null) {
-            return parseFloat(item[campoServidor]) || 0;
+        return TemporadaServidor.ventaAnteriorDe(item, temporada);
+    },
+
+    /**
+     * Tramos en los que se abre la compra de esta solapa.
+     *
+     * Salen del reparto que ya calculó el servidor y viajan en cada fila, así que
+     * alcanza con mirar la primera: todas las filas de una solapa tienen los MISMOS
+     * tramos (el mismo período cubierto), lo que cambia son los números. Se busca la
+     * primera fila que los traiga y no `datos[0]` porque una versión vieja en caché
+     * puede no tenerlos.
+     */
+    tramosDeSolapa(datos) {
+        const fila = (datos || []).find(d => Array.isArray(d.TRAMOS) && d.TRAMOS.length > 0);
+        return fila ? fila.TRAMOS : [];
+    },
+
+    /**
+     * Encabezado de la columna de un tramo.
+     *
+     * El tramo objetivo se destaca porque es el único que el consumidor externo lee
+     * de esta versión: los intermedios quedan como control. El resto de la temporada
+     * en curso no se rotula "Compra" sino "Sin cubrir": esa mercadería ya no llega a
+     * tiempo, así que no es algo a comprar sino venta que va a quedar sin cobertura.
+     */
+    encabezadoDeTramo(tramo) {
+        const nombre = (tramo.es_resto ? 'Resto ' : '') + tramo.temporada_codigo;
+
+        if (!tramo.es_comprable) {
+            return {
+                titulo: 'Sin cubrir<br>' + nombre,
+                clase: 'text-center bg-danger-subtle text-danger-emphasis',
+                ayuda: 'Venta de ' + nombre + ' que el stock proyectado no alcanza a cubrir. '
+                     + 'No entra en lo que hay que comprar: es el resto de la temporada en curso '
+                     + '(' + UIUtils.formatearFechaCorta(tramo.temporada_desde) + ' a '
+                     + UIUtils.formatearFechaCorta(tramo.temporada_hasta) + ') y un contenedor '
+                     + 'nuevo ya no llega a tiempo.'
+            };
         }
 
-        const anoActual = new Date().getFullYear() % 100; // 2025 -> 25
-        const mesActual = new Date().getMonth() + 1; // 1-12
+        return {
+            titulo: (tramo.es_objetivo ? '★ Compra<br>' : 'Compra<br>') + nombre,
+            clase: tramo.es_objetivo
+                ? 'text-center bg-success text-white'
+                : 'text-center bg-success-subtle text-success-emphasis',
+            ayuda: 'Compra que hay que hacer para cubrir ' + nombre + ' ('
+                 + UIUtils.formatearFechaCorta(tramo.temporada_desde) + ' a '
+                 + UIUtils.formatearFechaCorta(tramo.temporada_hasta) + '). '
+                 + (tramo.es_objetivo
+                    ? 'Es la TEMPORADA OBJETIVO de esta solapa: lo que aporta esta versión al cashflow.'
+                    : 'Tramo intermedio: queda como control, porque esa temporada la aporta su propia versión oficial.')
+        };
+    },
 
-        if (temporada === 'VERANO') {
-            // Para verano, buscar el año actual o anterior
-            const posiblesColumnas = [
-                `VTA_VERANO_${anoActual}`,      // VERANO 25
-                `VTA_VERANO_${anoActual - 1}`,  // VERANO 24
-                'VERANO 24-25',
-                'VERANO 23-24'
-            ];
-            
-            for (const columna of posiblesColumnas) {
-                if (item[columna] && !isNaN(item[columna]) && parseFloat(item[columna]) > 0) {
-                    console.log(`✅ VERANO encontrado: ${columna} = ${item[columna]}`);
-                    return parseFloat(item[columna]);
-                }
-            }
-            
-        } else if (temporada === 'INVIERNO') {
-            // CORRECCIÓN: Determinar el último invierno según el mes actual
-            let anoInvierno;
-            
-            if (mesActual >= 8 || mesActual === 1) {
-                // Estamos en verano (Ago-Ene), el último invierno fue este año
-                anoInvierno = anoActual;
-            } else {
-                // Estamos en invierno (Feb-Jul), el último invierno completo fue el año pasado
-                anoInvierno = anoActual - 1;
-            }
-            
-            const posiblesColumnas = [
-                `VTA_INVIERNO_${anoInvierno}`,      // INVIERNO del último período
-                `INVIERNO ${anoInvierno}`,          // Formato alternativo
-                `VTA_INVIERNO_${anoInvierno - 1}`,  // Fallback año anterior
-                `INVIERNO ${anoInvierno - 1}`,      // Fallback formato alternativo
-            ];
-            
-            for (const columna of posiblesColumnas) {
-                if (item[columna] && !isNaN(item[columna]) && parseFloat(item[columna]) > 0) {
-                    console.log(`✅ INVIERNO encontrado: ${columna} = ${item[columna]}`);
-                    return parseFloat(item[columna]);
-                }
-            }
-            
-            // DEBUG: Mostrar todas las columnas disponibles si no encuentra
-            const columnasInvierno = Object.keys(item).filter(key => 
-                key.toLowerCase().includes('invierno')
-            );
-            console.warn(`❌ No se encontró venta INVIERNO. Columnas disponibles:`, columnasInvierno);
+    /** Celda de un tramo, con el desglose en el tooltip. */
+    celdaDeTramo(tramo) {
+        const td = document.createElement('td');
+        td.setAttribute('data-columna-dinamica', 'true');
+        td.setAttribute('data-tramo-orden', tramo.orden);
+        td.className = 'text-end fw-bold '
+            + (!tramo.es_comprable
+                ? 'bg-danger-subtle text-danger-emphasis'
+                : (tramo.es_objetivo ? 'bg-success-subtle text-success-emphasis' : 'bg-light'));
+
+        TablaRendererUtils.pintarCeldaTramo(td, tramo);
+        return td;
+    },
+
+    /**
+     * Escribe el valor y el tooltip de una celda de tramo.
+     * Separado de celdaDeTramo() porque al editar un índice se reusa la celda que ya
+     * está en el DOM en vez de rehacer la fila entera.
+     */
+    pintarCeldaTramo(td, tramo) {
+        td.textContent = FormatoUtils.formatearNumero(tramo.compra || 0);
+
+        const partes = [
+            (tramo.es_resto ? 'Resto ' : '') + tramo.temporada_codigo,
+            'Venta proyectada: ' + FormatoUtils.formatearNumero(tramo.venta_proyectada || 0),
+            'Cubierto con stock: ' + FormatoUtils.formatearNumero(tramo.stock_aplicado || 0),
+            (tramo.es_comprable ? 'A comprar: ' : 'Queda sin cubrir: ')
+                + FormatoUtils.formatearNumero(tramo.compra || 0)
+        ];
+        if (tramo.compra_deficit_cobertura > 0) {
+            partes.push('De eso, ' + FormatoUtils.formatearNumero(tramo.compra_deficit_cobertura)
+                      + ' es déficit de stock de cobertura, no venta proyectada.');
         }
-        
-        console.warn(`❌ No se encontró venta ${temporada} anterior para item:`, {
-            rubro: item.RUBRO,
-            categoria: item.CATEGORIA_PADRE,
-            columnas_disponibles: Object.keys(item).filter(key => 
-                key.toLowerCase().includes(temporada.toLowerCase())
-            )
-        });
-        
-        return 0;
+        td.title = partes.join('\n');
     },
 
     extraerColumnasVentasHistoricas(datos) {
@@ -334,15 +356,32 @@ class TablaRenderer {
             return;
         }
         
+        // Los tramos van PRIMERO, pegados a Compra Proyectada: son la apertura de esa
+        // misma columna, y ponerlos después de los años históricos los habría dejado
+        // al final de la tabla, lejos del total que abren.
+        const tramos = TablaRendererUtils.tramosDeSolapa(datos);
+        tramos.forEach(tramo => {
+            const info = TablaRendererUtils.encabezadoDeTramo(tramo);
+            const th = document.createElement('th');
+            th.className = info.clase;
+            th.innerHTML = info.titulo;
+            th.title = info.ayuda;
+            th.setAttribute('data-columna-dinamica', 'true');
+            th.setAttribute('data-tramo-orden', tramo.orden);
+            th.style.fontSize = '0.7rem';
+            th.style.whiteSpace = 'nowrap';
+            thead.appendChild(th);
+        });
+
         const columnasVentasHistoricas = TablaRendererUtils.extraerColumnasVentasHistoricas(datos);
-        
+
         if (columnasVentasHistoricas.length === 0) {
             tabla.setAttribute('data-columnas-procesadas', 'true');
             return;
         }
-        
+
         console.log(`Agregando ${columnasVentasHistoricas.length} columnas históricas a ${solapa}`);
-        
+
         columnasVentasHistoricas.forEach(columna => {
             const th = document.createElement('th');
             th.className = 'text-center bg-info-subtle text-dark';
@@ -421,7 +460,13 @@ class TablaRenderer {
         
         placeholderVerano.replaceWith(celdaIndiceVerano);
         placeholderInvierno.replaceWith(celdaIndiceInvierno);
-        
+
+        // Compra abierta por tramo, en el mismo orden que los encabezados: pegada a la
+        // compra total y antes de los años históricos.
+        (item.TRAMOS || []).forEach(tramo => {
+            tr.appendChild(TablaRendererUtils.celdaDeTramo(tramo));
+        });
+
         // Agregar columnas históricas dinámicas
         const columnasHistoricas = TablaRendererUtils.extraerColumnasVentasHistoricas(todosLosDatos);
         columnasHistoricas.forEach(columna => {
@@ -575,7 +620,7 @@ class TablaRenderer {
         }
 
         if (!datos || datos.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="14" class="text-center text-muted py-4">No se encontraron resultados para los filtros aplicados.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="15" class="text-center text-muted py-4">No se encontraron resultados para los filtros aplicados.</td></tr>`;
             return;
         }
 
@@ -598,11 +643,64 @@ class TablaRenderer {
                     <td class="text-end">${FormatoUtils.formatearNumero(item.venta_invierno_anterior)}</td>
                     <td class="text-center bg-primary-subtle">${FormatoUtils.formatearNumero(item.venta_proyectada_invierno)}</td>
                     <td class="text-center bg-success-subtle"><strong>${FormatoUtils.formatearNumero(item.compra_proyectada)}</strong></td>
+                    <td class="text-center bg-success-subtle">${TablaRenderer.desgloseTramos(item)}</td>
                 </tr>
             `;
         }).join('');
 
         tbody.innerHTML = html;
+    }
+
+    /**
+     * Compra por tramo de una fila del historial, como badges dentro de una celda.
+     *
+     * No se usan columnas fijas porque el historial mezcla versiones de distintas
+     * solapas y fechas: una versión de verano tiene tres tramos y una de invierno dos,
+     * y las temporadas cambian según cuándo se guardó. Con columnas, cada fila habría
+     * necesitado un encabezado distinto.
+     *
+     * Distingue los tres casos que importan: el tramo objetivo (lo que esta versión le
+     * aporta al cashflow), los intermedios (control) y el resto de la temporada en
+     * curso, que no es mercadería a comprar.
+     */
+    static desgloseTramos(item) {
+        const tramos = item.tramos || [];
+
+        if (tramos.length === 0) {
+            // Se distingue "esta versión no tiene reparto" de "todavía no se migró":
+            // la migración marca explícitamente a las que no pudo reconstruir.
+            if (item.tramos_estado === 'SIN_REPARTO') {
+                const motivo = item.tramos_observacion || 'No se pudo reconstruir el reparto.';
+                return `<span class="badge bg-secondary" title="${TablaRendererUtils.escaparComillas(motivo)}">sin reparto</span>`;
+            }
+            return '<span class="text-muted small" title="Esta versión es anterior al reparto por tramo, '
+                 + 'o todavía no se corrió la migración en esta base.">—</span>';
+        }
+
+        return tramos.map(t => {
+            const nombre = (t.es_resto ? 'Resto ' : '') + t.temporada_codigo;
+            const valor = FormatoUtils.formatearNumero(t.compra || 0);
+
+            let clase = 'bg-light text-dark border';
+            let ayuda = `Tramo intermedio. Queda como control: ${nombre} la aporta su propia versión oficial.`;
+
+            if (!t.es_comprable) {
+                clase = 'bg-danger-subtle text-danger-emphasis';
+                ayuda = `Venta de ${nombre} que quedó sin cubrir. No es mercadería a comprar: `
+                      + 'es el resto de la temporada que estaba en curso al guardar.';
+            } else if (t.es_objetivo) {
+                clase = 'bg-success text-white';
+                ayuda = `Temporada objetivo de esta versión: es lo que le aporta al cashflow.`;
+            }
+
+            if (t.compra_deficit_cobertura > 0) {
+                ayuda += ` Incluye ${FormatoUtils.formatearNumero(t.compra_deficit_cobertura)} `
+                       + 'de déficit de stock de cobertura.';
+            }
+
+            return `<span class="badge ${clase} me-1" title="${TablaRendererUtils.escaparComillas(ayuda)}">`
+                 + `${nombre}: ${valor}</span>`;
+        }).join('');
     }
 
     static actualizarHeadersEtiquetas(solapa, etiquetas) {

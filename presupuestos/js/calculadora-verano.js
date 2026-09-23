@@ -129,83 +129,16 @@ class CalculadoraVerano {
     }
 
     /**
-     * NUEVO: Extraer venta anterior directamente del registro de datos (DINÁMICO)
+     * Venta anterior sobre la que proyecta esta fila.
+     *
+     * Delega en TemporadaServidor: la regla de qué columna es una venta histórica y
+     * cuál es la más reciente la define el servidor y hay UNA sola implementación.
+     * Acá vivía una copia que aceptaba cualquier columna con VERANO/INVIERNO en el
+     * nombre y ordenaba por los dos primeros dígitos, así que en las filas sin
+     * ventas de la temporada terminaba proyectando sobre CANT_PEND_OC_*.
      */
     static extraerVentaAnteriorDeRegistro(registro, temporada) {
-        if (temporada === 'VERANO') {
-            // Buscar columnas de VERANO y ordenar por año (más reciente primero)
-            const columnasVerano = [];
-            for (const [columna, valor] of Object.entries(registro)) {
-                if ((columna.includes('VERANO') || columna.includes('VTA_VERANO')) && 
-                    !columna.includes('PROY') && 
-                    valor && !isNaN(valor) && parseFloat(valor) > 0) {
-                    
-                    // Extraer año de la columna
-                    const matchAno = columna.match(/\d{2}/);
-                    const ano = matchAno ? parseInt(matchAno[0]) : 0;
-                    
-                    columnasVerano.push({
-                        columna: columna,
-                        valor: parseFloat(valor),
-                        ano: ano
-                    });
-                }
-            }
-            
-            // Ordenar por año descendente (más reciente primero)
-            columnasVerano.sort((a, b) => b.ano - a.ano);
-            
-            // Tomar la primera (más reciente)
-            if (columnasVerano.length > 0) {
-                console.log(`✅ VERANO encontrado en datos: ${columnasVerano[0].columna} = ${columnasVerano[0].valor}`);
-                return columnasVerano[0].valor;
-            }
-            
-        } else if (temporada === 'INVIERNO') {
-            // Buscar columnas de INVIERNO y ordenar por año (más reciente primero)
-            const columnasInvierno = [];
-            for (const [columna, valor] of Object.entries(registro)) {
-                if ((columna.includes('INVIERNO') || columna.includes('VTA_INVIERNO')) && 
-                    !columna.includes('PROY') && 
-                    valor && !isNaN(valor) && parseFloat(valor) > 0) {
-                    
-                    // Extraer año de la columna
-                    const matchAno = columna.match(/\d{2}/);
-                    const ano = matchAno ? parseInt(matchAno[0]) : 0;
-                    
-                    columnasInvierno.push({
-                        columna: columna,
-                        valor: parseFloat(valor),
-                        ano: ano
-                    });
-                }
-            }
-            
-            // Ordenar por año descendente (más reciente primero)
-            columnasInvierno.sort((a, b) => b.ano - a.ano);
-            
-            // Tomar la primera (más reciente)
-            if (columnasInvierno.length > 0) {
-                console.log(`✅ INVIERNO encontrado en datos: ${columnasInvierno[0].columna} = ${columnasInvierno[0].valor}`);
-                return columnasInvierno[0].valor;
-            }
-            
-            // DEBUG: Mostrar todas las columnas disponibles si no encuentra
-            const columnasInviernoDisponibles = Object.keys(registro).filter(key => 
-                key.toLowerCase().includes('invierno')
-            );
-            console.warn(`❌ No se encontró venta INVIERNO en datos. Columnas disponibles:`, columnasInviernoDisponibles);
-        }
-        
-        console.warn(`❌ No se encontró venta ${temporada} en datos para:`, {
-            rubro: registro.RUBRO,
-            categoria: registro.CATEGORIA_PADRE,
-            columnas_disponibles: Object.keys(registro).filter(key => 
-                key.toLowerCase().includes(temporada.toLowerCase())
-            )
-        });
-        
-        return 0;
+        return TemporadaServidor.ventaAnteriorDe(registro, temporada);
     }
 
     /**

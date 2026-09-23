@@ -290,5 +290,108 @@
                 </div>
             </div>
         </div>
+
+        <!-- Compra por tramo -->
+        <div class="accordion-item">
+            <h2 class="accordion-header">
+                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseTramos">
+                    <i class="fas fa-layer-group me-2"></i>
+                    Compra por tramo
+                </button>
+            </h2>
+            <div id="collapseTramos" class="accordion-collapse collapse" data-bs-parent="#calculosAccordion">
+                <div class="accordion-body">
+
+                    <div class="alert alert-info p-2">
+                        <strong class="small">Por qué un solo número no alcanza</strong>
+                        <p class="small mb-0 mt-1">
+                            La compra proyectada cubre <strong>toda la ventana de la solapa</strong>.
+                            Transitando verano, la solapa verano cubre el resto de VER 26-27,
+                            INV 27 y VER 27-28 juntas. Eso sirve para decidir cuánto comprar, pero
+                            lo de cada temporada llega en <strong>contenedores distintos y en meses
+                            distintos</strong>, así que se paga en meses distintos. Las columnas de
+                            tramo abren ese total por temporada.
+                        </p>
+                    </div>
+
+                    <h6 class="small mt-3"><i class="fas fa-arrow-right-long me-2"></i>Cómo se reparte</h6>
+                    <p class="small">
+                        El stock proyectado es un <strong>pozo único</strong> que se consume en
+                        <strong>orden cronológico</strong>: cada tramo toma lo que puede del stock
+                        que quedó, y lo que no alcanza a cubrirse es la compra de ese tramo. El
+                        stock que hay hoy cubre primero lo que se vende primero.
+                    </p>
+                    <div class="alert alert-secondary p-2">
+                        <code class="small">
+                            suma de las compras por tramo = lo que muestra "Unidades a comprar"
+                        </code>
+                        <p class="small mb-0 mt-1">
+                            Los rubros con excedente dan <strong>cero en todos los tramos</strong>:
+                            un sobrante no se reparte.
+                        </p>
+                    </div>
+
+                    <h6 class="small mt-3"><i class="fas fa-tags me-2"></i>Los tres tipos de columna</h6>
+                    <div class="row g-2">
+                        <div class="col-12 col-md-4">
+                            <div class="card bg-success text-white h-100">
+                                <div class="card-body p-2">
+                                    <h6 class="small mb-1">★ Compra (objetivo)</h6>
+                                    <p class="mb-0 small">
+                                        La temporada que esta solapa tiene que cubrir. Es lo único
+                                        que esta versión le aporta al cashflow.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-12 col-md-4">
+                            <div class="card border h-100">
+                                <div class="card-body p-2">
+                                    <h6 class="small mb-1">Compra (intermedio)</h6>
+                                    <p class="mb-0 small">
+                                        Una temporada que queda en el medio. Queda como
+                                        <strong>control</strong>: esa temporada la aporta su propia
+                                        versión oficial, para que no se cuente dos veces.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-12 col-md-4">
+                            <div class="card bg-danger text-white h-100">
+                                <div class="card-body p-2">
+                                    <h6 class="small mb-1">Sin cubrir</h6>
+                                    <p class="mb-0 small">
+                                        El resto de la temporada en curso. <strong>No es mercadería
+                                        a comprar</strong>: un contenedor nuevo ya no llega a
+                                        tiempo. Es venta que va a quedar sin cobertura.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <h6 class="small mt-3"><i class="fas fa-shield-halved me-2"></i>Déficit de stock de cobertura</h6>
+                    <p class="small">
+                        Cuando el stock de seguridad supera a todo lo disponible, el stock
+                        proyectado arranca en negativo (por ejemplo <code>0 − 309 = −309</code>).
+                        Ese déficit <strong>no</strong> se le carga al resto de la temporada en
+                        curso, porque ahí no se puede comprar y se perdería: se imputa al
+                        <strong>primer tramo que todavía se puede comprar</strong>, que es el
+                        contenedor más cercano sobre el que se puede actuar. El tooltip de la celda
+                        aclara cuánto de esa compra es déficit y no venta proyectada.
+                    </p>
+
+                    <div class="alert alert-warning p-2 mb-0">
+                        <strong class="small">⚠️ Editar un índice en una sola solapa</strong>
+                        <p class="small mb-0 mt-1">
+                            Los índices se editan por solapa. Verano e invierno comparten tramos, y
+                            si se corrige un rubro en una sola, las dos versiones dejan de coincidir
+                            sobre la misma temporada. Al marcar una versión como oficial el sistema
+                            lo avisa y muestra qué rubros difieren.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 </div>

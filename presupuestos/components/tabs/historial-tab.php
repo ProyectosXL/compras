@@ -107,11 +107,15 @@
                     <th class="text-end">Venta Invierno Ant.</th>
                     <th class="text-center bg-primary-subtle text-dark">Venta Proy. Invierno</th>
                     <th class="text-center bg-success-subtle text-dark">Compra Proyectada</th>
+                    <!-- Una sola columna y no una por tramo: el historial mezcla
+                         versiones de distintas solapas y fechas, así que cada fila
+                         puede tener otros tramos. El desglose va dentro de la celda. -->
+                    <th class="text-center bg-success-subtle text-dark">Compra por tramo</th>
                 </tr>
             </thead>
             <tbody id="tbody-historial">
                 <tr>
-                    <td colspan="13" class="text-center text-muted py-4">
+                    <td colspan="15" class="text-center text-muted py-4">
                         <i class="fas fa-filter"></i>
                         Utilice los filtros y presione "Buscar" para ver el historial.
                     </td>
