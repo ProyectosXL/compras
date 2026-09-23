@@ -1017,7 +1017,8 @@ class Historial {
                         'id' => (int)$anterior['id'],
                         'nombre' => $anterior['nombre_presupuesto'],
                         'fecha_guardado' => $anterior['fecha_guardado']
-                    ] : null
+                    ] : null,
+                    'discrepancias' => $this->compararTramosCompartidos($idCabecera, $version['pais'])
                 ];
             }
 
@@ -1075,6 +1076,150 @@ class Historial {
             error_log("Error en marcarOficial: " . $e->getMessage());
             return ['success' => false, 'message' => 'Error al marcar la versión oficial: ' . $e->getMessage()];
         }
+    }
+
+    /**
+     * Compara los tramos que esta version comparte con las OTRAS oficiales del pais.
+     *
+     * POR QUE. Dos versiones oficiales de temporadas distintas describen tramos que se
+     * pisan: la de VER 27-28, guardada desde la solapa verano, tambien trae el tramo
+     * INV 27, que es la temporada objetivo de la otra oficial. Calculadas el mismo dia
+     * y sin tocar nada, los dos numeros son identicos por construccion, porque el
+     * stock se consume en el mismo orden y las dos solapas usan las mismas bases.
+     *
+     * Pero los indices se editan POR SOLAPA: IndiceEditor solo toca los datos de la
+     * solapa abierta. Si alguien corrige el indice de un rubro en verano y no en
+     * invierno, los tramos compartidos dejan de coincidir y el cashflow recibe dos
+     * versiones que se contradicen sobre la misma temporada, sin que nada lo diga.
+     *
+     * Se avisa antes de confirmar y no se bloquea: puede ser legitimo (las versiones
+     * se calcularon en dias distintos, o se corrigio a proposito en una sola solapa).
+     * La decision es de quien marca; lo que no puede pasar es que no se entere.
+     *
+     * @return array|null null si no hay nada que comparar
+     */
+    private function compararTramosCompartidos($idCabecera, $pais) {
+        if (!$this->hayTramos()) {
+            return null;
+        }
+
+        // Tramo contra tramo, por rubro/categoria y temporada, contra las otras
+        // oficiales del mismo pais. Se excluye la temporada objetivo de la version que
+        // se marca: esa no la comparte con nadie, es lo que aporta ella.
+        // Se agrupa por la CABECERA de la otra versión (cotra.id) y no por otra.id, que
+        // es el id de la fila de tramo: con ese, cada grupo era una sola fila y el
+        // aviso mostraba el desvío de un rubro suelto como si fuera el de la versión.
+        $sql = "SELECT cotra.id               AS id_otra,
+                       cotra.nombre_presupuesto AS nombre_otra,
+                       cotra.temporada_objetivo AS objetivo_otra,
+                       nueva.temporada_codigo,
+                       nueva.es_resto,
+                       COUNT(*)                        AS filas_comparadas,
+                       SUM(CASE WHEN nueva.compra <> otra.compra THEN 1 ELSE 0 END) AS filas_distintas,
+                       SUM(ABS(nueva.compra - otra.compra))                         AS unidades,
+                       SUM(nueva.compra)               AS total_nueva,
+                       SUM(otra.compra)                AS total_otra
+                  FROM RO_T_HISTORIAL_COMPRAS_PROYECTADAS_TRAMO nueva
+                  JOIN RO_T_HISTORIAL_COMPRAS_PROYECTADAS_TRAMO otra
+                    ON otra.rubro = nueva.rubro
+                   AND ISNULL(otra.categoria_padre,'') = ISNULL(nueva.categoria_padre,'')
+                   AND otra.temporada_codigo = nueva.temporada_codigo
+                   AND otra.es_resto = nueva.es_resto
+                  JOIN RO_T_HISTORIAL_COMPRAS_PROYECTADAS_CABECERA cotra
+                    ON cotra.id = otra.id_cabecera
+                 WHERE nueva.id_cabecera = ?
+                   AND cotra.es_oficial = 1
+                   AND cotra.pais = ?
+                   AND cotra.id <> nueva.id_cabecera
+                   AND nueva.es_objetivo = 0
+                 GROUP BY cotra.id, cotra.nombre_presupuesto, cotra.temporada_objetivo,
+                          nueva.temporada_codigo, nueva.es_resto
+                HAVING SUM(CASE WHEN nueva.compra <> otra.compra THEN 1 ELSE 0 END) > 0
+                 ORDER BY SUM(ABS(nueva.compra - otra.compra)) DESC";
+
+        $stmt = sqlsrv_query($this->cid, $sql, [(int)$idCabecera, $pais]);
+        if ($stmt === false) {
+            // El aviso es una ayuda, no un requisito para marcar: si falla se registra
+            // y se sigue, antes que impedir marcar la oficial por no poder compararla.
+            error_log('No se pudieron comparar los tramos compartidos: ' . print_r(sqlsrv_errors(), true));
+            return null;
+        }
+
+        $crudo = [];
+        while ($r = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC)) {
+            $crudo[] = $r;
+        }
+        sqlsrv_free_stmt($stmt);
+
+        $resumen = [];
+        foreach ($crudo as $r) {
+            $resumen[] = [
+                'id_otra'          => (int)$r['id_otra'],
+                'nombre_otra'      => $r['nombre_otra'],
+                'objetivo_otra'    => $r['objetivo_otra'],
+                'temporada'        => ((int)$r['es_resto'] === 1 ? 'Resto ' : '') . $r['temporada_codigo'],
+                'filas_comparadas' => (int)$r['filas_comparadas'],
+                'filas_distintas'  => (int)$r['filas_distintas'],
+                'unidades'         => (int)$r['unidades'],
+                'total_nueva'      => (int)$r['total_nueva'],
+                'total_otra'       => (int)$r['total_otra'],
+                // Qué filas, no solo cuántas: el resumen dice que hay 1 de 72 distinta,
+                // pero para decidir si marcarla hay que ver CUÁL. Van las de mayor
+                // desvío y en la misma respuesta, para no obligar a un segundo viaje
+                // desde un modal que ya está abierto.
+                'filas' => $this->detalleDiscrepancia(
+                    $idCabecera, (int)$r['id_otra'], $r['temporada_codigo'], (int)$r['es_resto'] === 1, 10
+                )['data']
+            ];
+        }
+
+        if (empty($resumen)) {
+            return null;
+        }
+
+        return [
+            'hay_diferencias' => true,
+            'detalle' => $resumen,
+            'explicacion' => 'Esta versión describe tramos que también describe otra versión oficial '
+                           . 'vigente, y no coinciden. Suele pasar cuando se editó el índice de un rubro '
+                           . 'en una sola de las dos solapas. Podés marcarla igual, pero el cashflow va a '
+                           . 'recibir dos números distintos para la misma temporada.'
+        ];
+    }
+
+    /** Detalle rubro por rubro de una discrepancia, para el modal de confirmación. */
+    private function detalleDiscrepancia($idCabecera, $idOtra, $temporada, $esResto = false, $limite = 50) {
+        if (!$this->cid || !$this->hayTramos()) {
+            return ['success' => true, 'data' => []];
+        }
+
+        $stmt = sqlsrv_query($this->cid,
+            "SELECT TOP (?) nueva.rubro, nueva.categoria_padre,
+                    nueva.compra AS compra_nueva, otra.compra AS compra_otra,
+                    nueva.compra - otra.compra AS diferencia
+               FROM RO_T_HISTORIAL_COMPRAS_PROYECTADAS_TRAMO nueva
+               JOIN RO_T_HISTORIAL_COMPRAS_PROYECTADAS_TRAMO otra
+                 ON otra.rubro = nueva.rubro
+                AND ISNULL(otra.categoria_padre,'') = ISNULL(nueva.categoria_padre,'')
+                AND otra.temporada_codigo = nueva.temporada_codigo
+                AND otra.es_resto = nueva.es_resto
+              WHERE nueva.id_cabecera = ? AND otra.id_cabecera = ?
+                AND nueva.temporada_codigo = ? AND nueva.es_resto = ?
+                AND nueva.compra <> otra.compra
+              ORDER BY ABS(nueva.compra - otra.compra) DESC",
+            [(int)$limite, (int)$idCabecera, (int)$idOtra, $temporada, $esResto ? 1 : 0]);
+
+        if ($stmt === false) {
+            return ['success' => false, 'message' => print_r(sqlsrv_errors(), true)];
+        }
+
+        $data = [];
+        while ($r = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC)) {
+            $data[] = $r;
+        }
+        sqlsrv_free_stmt($stmt);
+
+        return ['success' => true, 'data' => $data];
     }
 
     /** Una fila del log por cada marcado y cada desmarcado. */
