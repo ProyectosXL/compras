@@ -109,7 +109,17 @@
                         <li>Cada oficial aporta <strong>solo la compra de su temporada objetivo</strong>.
                             Los tramos intermedios quedan como control: si no, una temporada quedaría
                             cubierta dos veces, por su propia versión y por el tramo intermedio de otra.</li>
+                        <li>La versión oficial <strong>no se puede eliminar</strong>. Si de verdad hay que
+                            sacarla, primero se la <strong>desmarca</strong> con el botón de la columna
+                            <em>Oficial</em>, y eso deja la temporada sin ninguna versión vigente.</li>
                     </ul>
+                    <div class="alert alert-danger">
+                        <i class="fas fa-flag-checkered me-2"></i>
+                        <strong>Desmarcar sin reemplazo:</strong> deja esa temporada <strong>sin versión
+                        vigente</strong>, así que los sistemas que proyectan las compras del exterior van
+                        a dejar de encontrar presupuesto para ella. El sistema lo avisa antes y el
+                        desmarcado queda en el historial de oficiales como cualquier otro.
+                    </div>
                     <div class="alert alert-warning">
                         <i class="fas fa-exclamation-triangle me-2"></i>
                         <strong>Aviso al marcar:</strong> antes de confirmar, el sistema compara los tramos
@@ -137,14 +147,27 @@
                         Eliminar una versión
                     </h5>
                     <p>
-                        El botón <i class="fas fa-trash text-danger"></i> de cada fila borra esa versión
-                        completa: su cabecera y todas sus filas de detalle. Antes de borrar, el sistema
-                        muestra cuántas filas se va a llevar y avisa si es la versión oficial.
+                        El botón <i class="fas fa-trash text-danger"></i> de cada fila da de baja esa
+                        versión. <strong>No borra nada:</strong> la versión deja de listarse acá y en el
+                        panel de versiones, pero el detalle, la compra por tramo y el historial de
+                        oficiales se conservan enteros. Se puede dejar anotado el motivo.
                     </p>
+                    <p>
+                        Se hizo así porque el historial de oficiales no se borra nunca, y como está
+                        atado a la versión, borrarla de verdad se lo llevaría puesto. Con la baja las
+                        dos cosas conviven: la versión desaparece de la vista y la auditoría queda.
+                    </p>
+                    <div class="alert alert-warning">
+                        <i class="fas fa-flag me-2"></i>
+                        <strong>La versión oficial no se puede dar de baja.</strong> Dejaría una
+                        temporada sin presupuesto sin que nadie se entere. Hay que
+                        <strong>desmarcarla primero</strong>, y esa decisión queda registrada.
+                    </div>
                     <div class="alert alert-danger mb-0">
                         <i class="fas fa-exclamation-triangle me-2"></i>
-                        <strong>No se puede deshacer.</strong> Si borra la versión oficial, esa temporada
-                        queda sin ninguna versión vigente hasta que marque otra.
+                        <strong>Desde el sistema no se puede deshacer.</strong> No hay botón para
+                        restaurar una versión dada de baja: los datos siguen estando, pero recuperarla
+                        requiere que la toque alguien de sistemas.
                     </div>
                     <div class="alert alert-warning">
                         <i class="fas fa-info-circle me-2"></i>

@@ -30,6 +30,7 @@ class Historial {
     private $cacheDetalleAmpliado = null;
     private $cacheHayTramos = null;
     private $cacheEstadoTramos = null;
+    private $cacheBajaLogica = null;
 
     public function __construct() {
         if (session_status() === PHP_SESSION_NONE) {
@@ -578,6 +579,17 @@ class Historial {
                 $where[] = "c.es_oficial = 1";
             }
 
+            // Las dadas de baja no se listan. El JOIN es LEFT, así que las filas sin
+            // cabecera traen NULL y no tienen que perderse por este filtro: son las
+            // versiones viejas, que no pueden estar dadas de baja porque no tienen
+            // dónde marcarlo.
+            if ($conCabecera) {
+                $baja = $this->filtroNoEliminada('c', true);
+                if ($baja !== '') {
+                    $where[] = $baja;
+                }
+            }
+
             if (!empty($where)) {
                 $sql .= " WHERE " . implode(" AND ", $where);
             }
@@ -715,6 +727,13 @@ class Historial {
             if (!empty($filtros['solo_oficiales'])) {
                 $where[] = "c.es_oficial = 1";
             }
+
+            // El panel de versiones no lista las dadas de baja: es lo que hace que la
+            // baja se vea como una eliminación, aunque la fila siga estando.
+            $baja = $this->filtroNoEliminada('c');
+            if ($baja !== '') {
+                $where[] = $baja;
+            }
             if (!empty($where)) {
                 $sql .= " WHERE " . implode(" AND ", $where);
             }
@@ -824,17 +843,22 @@ class Historial {
      * —y las de una base donde todavia no se corrieron los scripts— no tienen
      * cabecera y solo se pueden identificar por nombre.
      */
-    public function eliminarVersion($idCabecera = null, $nombrePresupuesto = null, $confirmado = false) {
+    public function eliminarVersion($idCabecera = null, $nombrePresupuesto = null, $confirmado = false,
+                                    $motivo = null) {
         if (!$this->cid) {
             return ['success' => false, 'message' => 'Error de conexión a la base de datos.'];
         }
 
         $conCabecera = $this->hayCabecera();
         $cabecera = null;
+        $motivo = trim((string)$motivo);
 
         if ($conCabecera && $idCabecera) {
+            // `eliminada` solo se pide si la base ya tiene la columna: los scripts se
+            // corren por base, y esto tiene que seguir andando en la que falte.
+            $campoBaja = $this->hayBajaLogica() ? ', eliminada' : '';
             $stmt = sqlsrv_query($this->cid,
-                "SELECT id, nombre_presupuesto, temporada_objetivo, es_oficial, pais
+                "SELECT id, nombre_presupuesto, temporada_objetivo, es_oficial, pais{$campoBaja}
                    FROM RO_T_HISTORIAL_COMPRAS_PROYECTADAS_CABECERA WHERE id = ?", [(int)$idCabecera]);
             if ($stmt === false) {
                 return ['success' => false, 'message' => print_r(sqlsrv_errors(), true)];
@@ -875,17 +899,88 @@ class Historial {
 
         $esOficial = $cabecera ? ((int)$cabecera['es_oficial'] === 1) : false;
 
+        if ($cabecera && isset($cabecera['eliminada']) && (int)$cabecera['eliminada'] === 1) {
+            return ['success' => false, 'message' => 'Esa versión ya estaba dada de baja.'];
+        }
+
+        // LA VERSIÓN OFICIAL NO SE ELIMINA.
+        //
+        // Con un consumidor externo leyendo esta tabla, borrar la oficial deja una
+        // temporada sin presupuesto sin que nadie se entere: el cashflow simplemente
+        // deja de encontrarla. Hay que desmarcarla primero, y ese desmarcado queda en
+        // el log como cualquier otro, así que la temporada nunca se queda sin vigente
+        // por accidente, solo por una decisión explícita y registrada.
+        if ($esOficial) {
+            return [
+                'success' => false,
+                'bloqueada' => 'oficial',
+                'message' => "'{$nombrePresupuesto}' es la versión oficial de "
+                           . "{$cabecera['temporada_objetivo']}. Para eliminarla hay que desmarcarla "
+                           . "primero; el desmarcado queda registrado en el historial de oficiales."
+            ];
+        }
+
+        // Con baja lógica el log ya no corre peligro: la cabecera sigue existiendo, así
+        // que la clave foránea del log sigue apuntando a algo. Por eso desapareció el
+        // rechazo por "tiene historial de marcado" que hacía falta con borrado físico.
+
+        $filasTramo = $this->contarTramos($cabecera ? (int)$cabecera['id'] : null);
+        $logica = $cabecera && $this->hayBajaLogica();
+
         if (!$confirmado) {
             return [
                 'success' => true,
                 'requiere_confirmacion' => true,
+                'baja_logica' => $logica,
                 'version' => [
                     'id_cabecera' => $cabecera ? (int)$cabecera['id'] : null,
                     'nombre' => $nombrePresupuesto,
                     'filas' => $filas,
+                    'filas_tramo' => $filasTramo,
                     'es_oficial' => $esOficial,
                     'temporada_objetivo' => $cabecera['temporada_objetivo'] ?? null
                 ]
+            ];
+        }
+
+        /* BAJA LÓGICA: la versión deja de listarse pero sigue existiendo.
+         *
+         * Con borrado físico, conservar el log obligaba a conservar la cabecera —el log
+         * la referencia por clave foránea—, así que una versión que alguna vez fue
+         * oficial no se podía eliminar nunca más, ni siquiera desmarcada. Las dos reglas
+         * pedidas no podían cumplirse a la vez. Con baja lógica sí: no se destruye nada,
+         * el log conserva su ancla y la versión igual desaparece de la vista.
+         *
+         * No hay restaurar, por decisión explícita: desde la aplicación la baja sigue
+         * siendo definitiva. Lo que cambia es que los datos siguen ahí, así que una baja
+         * por error se revierte con un UPDATE puntual en vez de con un backup.
+         */
+        if ($logica) {
+            $stmt = sqlsrv_query($this->cid,
+                "UPDATE RO_T_HISTORIAL_COMPRAS_PROYECTADAS_CABECERA
+                    SET eliminada = 1, eliminada_fecha = GETDATE(),
+                        eliminada_usuario = ?, eliminada_motivo = ?
+                  WHERE id = ? AND eliminada = 0",
+                [$this->usuarioActual(), $motivo !== '' ? $motivo : null, (int)$cabecera['id']]);
+
+            if ($stmt === false) {
+                error_log("Error al dar de baja la versión: " . print_r(sqlsrv_errors(), true));
+                return ['success' => false, 'message' => 'Error al dar de baja la versión.'];
+            }
+            $afectadas = sqlsrv_rows_affected($stmt);
+            sqlsrv_free_stmt($stmt);
+
+            if ($afectadas === 0) {
+                return ['success' => false, 'message' => 'Esa versión ya estaba dada de baja.'];
+            }
+
+            return [
+                'success' => true,
+                'baja_logica' => true,
+                'message' => "Se dio de baja '{$nombrePresupuesto}' ({$filas} fila"
+                           . ($filas === 1 ? '' : 's')
+                           . ($filasTramo ? " y {$filasTramo} de tramo" : '')
+                           . "). Deja de listarse, pero los datos se conservan."
             ];
         }
 
@@ -894,13 +989,28 @@ class Historial {
                 throw new Exception("No se pudo iniciar la transacción: " . print_r(sqlsrv_errors(), true));
             }
 
-            // Orden obligado por las claves foráneas: primero lo que apunta a la
-            // cabecera, después la cabecera.
+            // BORRADO FÍSICO. A este punto solo se llega en dos casos:
+            //   - la versión no tiene cabecera (las anteriores a la fase 2): no hay
+            //     dónde marcar la baja, así que se borra por nombre;
+            //   - la base todavía no tiene la columna `eliminada` (falta correr el 05).
+            // Una vez aplicado el 05, las versiones con cabecera nunca pasan por acá.
+            //
+            // Orden obligado por las claves foráneas: primero lo que apunta al detalle,
+            // después el detalle, y al final la cabecera. Los TRAMOS van primeros de
+            // todo: apuntan al detalle y a la cabecera, así que sin borrarlos el DELETE
+            // del detalle fallaba entero.
+            //
+            // El log NO se borra nunca, ni acá. Se deja dicho para que no se lo agregue
+            // de nuevo pensando que falta: si una versión con log llegara a este camino,
+            // el DELETE de la cabecera falla por la clave foránea, que es justamente la
+            // protección que se quiere.
             if ($cabecera) {
+                if ($this->hayTramos()) {
+                    $this->ejecutar("DELETE FROM RO_T_HISTORIAL_COMPRAS_PROYECTADAS_TRAMO WHERE id_cabecera = ?",
+                        [(int)$cabecera['id']], 'tramos');
+                }
                 $this->ejecutar("DELETE FROM RO_T_HISTORIAL_COMPRAS_PROYECTADAS_PRESUPUESTO WHERE id_cabecera = ?",
                     [(int)$cabecera['id']], 'detalle');
-                $this->ejecutar("DELETE FROM RO_T_HISTORIAL_COMPRAS_PROYECTADAS_OFICIAL_LOG WHERE id_cabecera = ?",
-                    [(int)$cabecera['id']], 'log de oficial');
                 $this->ejecutar("DELETE FROM RO_T_HISTORIAL_COMPRAS_PROYECTADAS_CABECERA WHERE id = ?",
                     [(int)$cabecera['id']], 'cabecera');
             } else {
@@ -908,6 +1018,19 @@ class Historial {
                 // versiones viejas. Se excluyen las filas que ya tienen cabecera
                 // para no llevarse por delante otra versión del mismo nombre.
                 $where = $conCabecera ? " AND id_cabecera IS NULL" : "";
+
+                // Por construcción una fila sin cabecera no puede tener tramos (se
+                // escriben siempre con su id_cabecera). Se limpia igual, por id de
+                // detalle: si alguna vez quedara una, el DELETE de abajo fallaría
+                // entero por la clave foránea y el borrado se trabaría sin explicación.
+                if ($this->hayTramos()) {
+                    $this->ejecutar("DELETE FROM RO_T_HISTORIAL_COMPRAS_PROYECTADAS_TRAMO
+                                      WHERE id_detalle IN (
+                                          SELECT id FROM RO_T_HISTORIAL_COMPRAS_PROYECTADAS_PRESUPUESTO
+                                           WHERE nombre_presupuesto = ?" . $where . ")",
+                        [$nombrePresupuesto], 'tramos');
+                }
+
                 $this->ejecutar("DELETE FROM RO_T_HISTORIAL_COMPRAS_PROYECTADAS_PRESUPUESTO
                                   WHERE nombre_presupuesto = ?" . $where,
                     [$nombrePresupuesto], 'detalle');
@@ -918,14 +1041,174 @@ class Historial {
             return [
                 'success' => true,
                 'message' => "Se eliminó '{$nombrePresupuesto}' ({$filas} fila"
-                           . ($filas === 1 ? '' : 's') . ")."
-                           . ($esOficial ? ' Era la versión oficial: no quedó ninguna vigente para esa temporada.' : '')
+                           . ($filas === 1 ? '' : 's')
+                           . ($filasTramo ? " y {$filasTramo} de tramo" : '') . ")."
             ];
 
         } catch (Exception $e) {
             @sqlsrv_rollback($this->cid);
             error_log("Error en eliminarVersion: " . $e->getMessage());
             return ['success' => false, 'message' => 'Error al eliminar la versión: ' . $e->getMessage()];
+        }
+    }
+
+    /**
+     * Indica si la base ya tiene la baja lógica (script 05).
+     *
+     * Mientras falte, eliminar sigue borrando físicamente, que es lo que hacía antes:
+     * los scripts se corren por base y por país, y la aplicación tiene que seguir
+     * funcionando en la que todavía no se migró.
+     *
+     * Es también el interruptor de todos los filtros `eliminada = 0` de las consultas:
+     * agregarlos sin la columna las rompería enteras.
+     */
+    private function hayBajaLogica() {
+        if ($this->cacheBajaLogica !== null) {
+            return $this->cacheBajaLogica;
+        }
+
+        $stmt = sqlsrv_query($this->cid,
+            "SELECT CASE WHEN COL_LENGTH('dbo.RO_T_HISTORIAL_COMPRAS_PROYECTADAS_CABECERA','eliminada') IS NULL
+                         THEN 0 ELSE 1 END AS existe");
+        if ($stmt === false) {
+            return $this->cacheBajaLogica = false;
+        }
+        $row = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC);
+        sqlsrv_free_stmt($stmt);
+
+        return $this->cacheBajaLogica = (bool)$row['existe'];
+    }
+
+    /**
+     * Condición SQL para dejar afuera las versiones dadas de baja.
+     *
+     * Devuelve una cadena vacía si la base todavía no tiene la columna, así que los
+     * llamadores la concatenan sin preguntar. Está centralizada a propósito: el riesgo
+     * real de la baja lógica es olvidarse el filtro en UNA consulta, y ese olvido no
+     * falla, simplemente muestra de más.
+     *
+     * @param string $alias alias de la cabecera en la consulta
+     * @param bool   $puedeSerNull true en los LEFT JOIN: una fila sin cabecera trae
+     *                             NULL y no tiene que perderse por el filtro
+     */
+    private function filtroNoEliminada($alias = 'c', $puedeSerNull = false) {
+        if (!$this->hayBajaLogica()) {
+            return '';
+        }
+        return $puedeSerNull
+            ? "ISNULL({$alias}.eliminada, 0) = 0"
+            : "{$alias}.eliminada = 0";
+    }
+
+    /** Cuántas filas de tramo tiene una cabecera. */
+    private function contarTramos($idCabecera) {
+        if (!$idCabecera || !$this->hayTramos()) {
+            return 0;
+        }
+        $stmt = sqlsrv_query($this->cid,
+            "SELECT COUNT(*) AS n FROM RO_T_HISTORIAL_COMPRAS_PROYECTADAS_TRAMO
+              WHERE id_cabecera = ?", [(int)$idCabecera]);
+        if ($stmt === false) {
+            return 0;
+        }
+        $n = (int)sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC)['n'];
+        sqlsrv_free_stmt($stmt);
+        return $n;
+    }
+
+    /**
+     * Desmarca la versión oficial de una combinación, sin poner otra en su lugar.
+     *
+     * Hasta ahora desmarcar solo pasaba como efecto secundario de marcar otra: no
+     * había forma de dejar una temporada SIN versión vigente. Hace falta porque la
+     * oficial ya no se puede eliminar, y sin un desmarcado explícito la regla dejaba
+     * la versión atrapada para siempre.
+     *
+     * Deja la temporada sin vigente, así que es una decisión fuerte: el consumidor
+     * externo va a dejar de encontrar presupuesto para esa combinación. Por eso va en
+     * dos pasos, igual que marcar, y queda en el log como cualquier otro desmarcado.
+     *
+     * @param int  $idCabecera version a desmarcar
+     * @param bool $confirmado la UI ya avisó que la temporada queda sin vigente
+     */
+    public function desmarcarOficial($idCabecera, $confirmado = false) {
+        if (!$this->cid) {
+            return ['success' => false, 'message' => 'Error de conexión a la base de datos.'];
+        }
+        if (!$this->hayCabecera()) {
+            return ['success' => false, 'message' => 'Esta base todavía no tiene la cabecera de versiones.'];
+        }
+
+        $idCabecera = (int)$idCabecera;
+
+        try {
+            $stmt = sqlsrv_query($this->cid,
+                "SELECT id, nombre_presupuesto, pais, temporada_objetivo, es_oficial
+                   FROM RO_T_HISTORIAL_COMPRAS_PROYECTADAS_CABECERA WHERE id = ?", [$idCabecera]);
+            if ($stmt === false) {
+                throw new Exception(print_r(sqlsrv_errors(), true));
+            }
+            $version = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC);
+            sqlsrv_free_stmt($stmt);
+
+            if (!$version) {
+                return ['success' => false, 'message' => 'No existe la versión indicada.'];
+            }
+            if ((int)$version['es_oficial'] !== 1) {
+                return ['success' => true, 'message' => 'Esa versión no es la oficial.', 'sin_cambios' => true];
+            }
+
+            if (!$confirmado) {
+                return [
+                    'success' => true,
+                    'requiere_confirmacion' => true,
+                    'version' => [
+                        'id' => (int)$version['id'],
+                        'nombre' => $version['nombre_presupuesto'],
+                        'temporada_objetivo' => $version['temporada_objetivo'],
+                        'pais' => $version['pais']
+                    ]
+                ];
+            }
+
+            if (sqlsrv_begin_transaction($this->cid) === false) {
+                throw new Exception("No se pudo iniciar la transacción: " . print_r(sqlsrv_errors(), true));
+            }
+
+            $usuario = $this->usuarioActual();
+
+            $up = sqlsrv_query($this->cid,
+                "UPDATE RO_T_HISTORIAL_COMPRAS_PROYECTADAS_CABECERA
+                    SET es_oficial = 0, oficial_usuario = NULL, oficial_fecha = NULL
+                  WHERE id = ?", [$idCabecera]);
+            if ($up === false) {
+                throw new Exception("Al desmarcar: " . print_r(sqlsrv_errors(), true));
+            }
+            sqlsrv_free_stmt($up);
+
+            // Sin reemplazo: id_cabecera_reemplazada va NULL porque no hay ninguna que
+            // ocupe el lugar. Es lo que distingue en el log un desmarcado suelto de
+            // uno que fue parte de un reemplazo.
+            $this->registrarLogOficial(
+                $idCabecera, 'DESMARCAR', $version['pais'], $version['temporada_objetivo'],
+                null, $usuario,
+                'Desmarcada sin reemplazo: la temporada queda sin versión vigente'
+            );
+
+            sqlsrv_commit($this->cid);
+
+            return [
+                'success' => true,
+                'message' => "'{$version['nombre_presupuesto']}' ya no es la versión oficial de "
+                           . "{$version['temporada_objetivo']} ({$version['pais']}). "
+                           . "Esa temporada quedó SIN versión vigente.",
+                'id_cabecera' => $idCabecera
+            ];
+
+        } catch (Exception $e) {
+            @sqlsrv_rollback($this->cid);
+            error_log("Error en desmarcarOficial: " . $e->getMessage());
+            return ['success' => false, 'message' => 'Error al desmarcar la versión: ' . $e->getMessage()];
         }
     }
 
@@ -960,8 +1243,12 @@ class Historial {
         $idCabecera = (int)$idCabecera;
 
         try {
+            // Una versión dada de baja no puede marcarse oficial. Lo impide también un
+            // CHECK en la base; acá se rechaza antes para poder explicar el motivo en
+            // vez de devolver un error de constraint.
+            $campoBaja = $this->hayBajaLogica() ? ', eliminada' : '';
             $stmt = sqlsrv_query($this->cid,
-                "SELECT id, nombre_presupuesto, pais, temporada_objetivo, es_completa, es_oficial
+                "SELECT id, nombre_presupuesto, pais, temporada_objetivo, es_completa, es_oficial{$campoBaja}
                    FROM RO_T_HISTORIAL_COMPRAS_PROYECTADAS_CABECERA WHERE id = ?", [$idCabecera]);
             if ($stmt === false) {
                 throw new Exception(print_r(sqlsrv_errors(), true));
@@ -974,6 +1261,12 @@ class Historial {
             }
             if ((int)$version['es_oficial'] === 1) {
                 return ['success' => true, 'message' => 'Esa versión ya es la oficial.', 'sin_cambios' => true];
+            }
+            if (isset($version['eliminada']) && (int)$version['eliminada'] === 1) {
+                return [
+                    'success' => false,
+                    'message' => 'Esa versión está dada de baja: no puede ser la oficial.'
+                ];
             }
             // Se rechaza en la aplicacion ademas del CHECK de la base, para poder
             // explicar el motivo en lugar de devolver un error de constraint.
@@ -1131,7 +1424,12 @@ class Historial {
                    AND cotra.es_oficial = 1
                    AND cotra.pais = ?
                    AND cotra.id <> nueva.id_cabecera
-                   AND nueva.es_objetivo = 0
+                   AND nueva.es_objetivo = 0"
+                   /* Redundante mientras el CHECK impida que una dada de baja sea
+                      oficial, pero se escribe igual: si el CHECK no estuviera aplicado
+                      todavía en esta base, comparar contra una versión dada de baja
+                      daría un aviso sobre algo que ya no existe para nadie. */
+                 . ($this->hayBajaLogica() ? " AND cotra.eliminada = 0" : "") . "
                  GROUP BY cotra.id, cotra.nombre_presupuesto, cotra.temporada_objetivo,
                           nueva.temporada_codigo, nueva.es_resto
                 HAVING SUM(CASE WHEN nueva.compra <> otra.compra THEN 1 ELSE 0 END) > 0
