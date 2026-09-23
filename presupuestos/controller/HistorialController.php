@@ -156,7 +156,8 @@ class HistorialController {
         }
 
         try {
-            $resultado = $this->historial->eliminarVersion($idCabecera, $nombre, !empty($datos['confirmado']));
+            $resultado = $this->historial->eliminarVersion(
+                $idCabecera, $nombre, !empty($datos['confirmado']), $datos['motivo'] ?? null);
             $this->jsonResponse($resultado, $resultado['success'] ? 200 : 400);
         } catch (Exception $e) {
             $this->jsonResponse(['success' => false, 'message' => 'Error del servidor: ' . $e->getMessage()], 500);

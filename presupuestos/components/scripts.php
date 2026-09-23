@@ -15,7 +15,7 @@
 
 <!-- Gestor de filtros persistentes -->
 <script src="js/filtros-manager.js"></script>
-<script src="js/historial-manager.js?v=4.0"></script>
+<script src="js/historial-manager.js?v=5.0"></script>
 
 <!-- Calculadoras específicas (CARGAR ANTES del indice-editor) -->
 <script src="js/calculadora-verano.js?v=3.0"></script>

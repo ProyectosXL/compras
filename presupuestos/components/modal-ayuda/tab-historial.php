@@ -147,29 +147,27 @@
                         Eliminar una versión
                     </h5>
                     <p>
-                        El botón <i class="fas fa-trash text-danger"></i> de cada fila borra esa versión
-                        completa: su cabecera, todas sus filas de detalle y su compra por tramo. Antes de
-                        borrar, el sistema muestra cuántas filas se va a llevar.
+                        El botón <i class="fas fa-trash text-danger"></i> de cada fila da de baja esa
+                        versión. <strong>No borra nada:</strong> la versión deja de listarse acá y en el
+                        panel de versiones, pero el detalle, la compra por tramo y el historial de
+                        oficiales se conservan enteros. Se puede dejar anotado el motivo.
                     </p>
-                    <p><strong>Hay dos casos en los que el sistema se niega a borrar:</strong></p>
-                    <ul>
-                        <li>
-                            <strong>Es la versión oficial.</strong> Borrarla dejaría una temporada sin
-                            presupuesto sin que nadie se entere: el cashflow simplemente dejaría de
-                            encontrarla. Hay que <strong>desmarcarla primero</strong>, y esa decisión
-                            queda registrada.
-                        </li>
-                        <li>
-                            <strong>Tiene historial de marcado.</strong> Si alguna vez fue marcada o
-                            desmarcada como oficial, tiene filas en el historial de oficiales. Ese
-                            historial es auditoría y <strong>no se borra</strong>, así que la versión
-                            tampoco: borrarla se lo llevaría puesto.
-                        </li>
-                    </ul>
+                    <p>
+                        Se hizo así porque el historial de oficiales no se borra nunca, y como está
+                        atado a la versión, borrarla de verdad se lo llevaría puesto. Con la baja las
+                        dos cosas conviven: la versión desaparece de la vista y la auditoría queda.
+                    </p>
+                    <div class="alert alert-warning">
+                        <i class="fas fa-flag me-2"></i>
+                        <strong>La versión oficial no se puede dar de baja.</strong> Dejaría una
+                        temporada sin presupuesto sin que nadie se entere. Hay que
+                        <strong>desmarcarla primero</strong>, y esa decisión queda registrada.
+                    </div>
                     <div class="alert alert-danger mb-0">
                         <i class="fas fa-exclamation-triangle me-2"></i>
-                        <strong>Lo que sí se borra, no se puede deshacer.</strong> Una versión que nunca
-                        fue oficial se elimina por completo y no hay forma de recuperarla.
+                        <strong>Desde el sistema no se puede deshacer.</strong> No hay botón para
+                        restaurar una versión dada de baja: los datos siguen estando, pero recuperarla
+                        requiere que la toque alguien de sistemas.
                     </div>
                     <div class="alert alert-warning">
                         <i class="fas fa-info-circle me-2"></i>

@@ -117,12 +117,17 @@ En `presupuestos/sql/`, en orden. Hay que correrlos **en las dos bases**:
                               php 04_migracion_tramos.php                 -> preview
                               php 04_migracion_tramos.php --aplicar       -> escribe
                               php 04_migracion_tramos.php --pais=uruguay
+
+05_baja_logica_versiones.sql  Baja lógica: eliminar una versión deja de borrarla.
+                              Los 4 bloques vienen en @CONFIRMAR_* = 0.
+                              El bloque 4 (la vista para el consumidor externo)
+                              es OPCIONAL y se puede dejar para después.
 ```
 
-Los cuatro son **reejecutables** y ninguno borra datos. La aplicación funciona con o sin
+Los cinco son **reejecutables** y ninguno borra datos. La aplicación funciona con o sin
 ellos aplicados: mientras falten, el panel de versiones avisa que hay que correrlos y
 el resto sigue andando igual (sin el 03, se guarda y se muestra todo salvo el reparto
-por tramo).
+por tramo; sin el 05, eliminar una versión sigue borrándola físicamente).
 
 El `04` **no inventa nada**: solo reconstruye las versiones cuyo reparto se puede
 reproducir exacto, y verifica fila por fila antes de escribir. La que no cierra queda
@@ -246,26 +251,51 @@ por tramo cuántas filas difieren, los dos totales, la diferencia y **qué rubro
 Avisa, no bloquea: la diferencia puede ser deliberada. Lo que no puede pasar es que el
 cashflow reciba dos números para la misma temporada sin que nadie se entere.
 
-### Qué versiones se pueden eliminar, y cuáles no
+### Eliminar una versión es una baja lógica
 
-`eliminarVersion()` borra la cabecera, el detalle y la compra por tramo, y **no se puede
-deshacer**. Se niega a hacerlo en dos casos:
+Eliminar **no borra nada**: marca `eliminada = 1` en la cabecera. La versión deja de
+listarse en el historial y en el panel de versiones, pero el detalle, la compra por tramo
+y el log siguen enteros.
+
+Se hizo así porque con borrado físico dos reglas no podían cumplirse a la vez: *el log de
+oficial no se borra nunca* y *la oficial se puede eliminar después de desmarcarla*. El log
+referencia a la cabecera por clave foránea, así que conservarlo obliga a conservarla — y
+una versión que alguna vez fue oficial no se podía eliminar nunca más. Con baja lógica las
+dos se cumplen.
+
+**No hay restaurar**, por decisión explícita: desde la aplicación la baja sigue siendo
+definitiva. Lo que cambia es que los datos siguen ahí, así que una baja por error se
+revierte con un `UPDATE` puntual y no con un backup.
+
+Sigue habiendo un solo caso bloqueado:
 
 | Caso | Por qué | Salida |
 | --- | --- | --- |
-| Es la **oficial** | Borrarla deja una temporada sin presupuesto sin que nadie se entere: el cashflow deja de encontrarla | Desmarcarla primero (`desmarcar-oficial`), lo que queda registrado |
-| Tiene **historial de marcado** | El log apunta a la cabecera; borrar la versión se llevaría la auditoría de quién marcó qué y cuándo | Ninguna — hoy esa versión ya no se elimina |
+| Es la **oficial** | Darla de baja deja una temporada sin presupuesto sin que nadie se entere: el cashflow deja de encontrarla | Desmarcarla primero (`desmarcar-oficial`), lo que queda registrado |
 
 **Desmarcar sin reemplazo** deja la temporada sin ninguna versión vigente. Es una decisión
 fuerte y va en dos pasos, pero hace falta: sin ella, la regla de arriba dejaba a la oficial
 atrapada sin salida, porque hasta ahora desmarcar solo ocurría como efecto secundario de
 marcar otra.
 
-> **Pendiente de decisión.** Las dos reglas están en tensión: si el log no se borra nunca y
-> la clave foránea lo ata a la cabecera, una versión que alguna vez fue oficial **nunca**
-> se puede eliminar, ni siquiera después de desmarcarla. La **baja lógica** —la versión
-> deja de listarse pero sigue existiendo— resuelve las dos a la vez. Ver la propuesta antes
-> de implementarla.
+Queda borrado **físico** en dos casos residuales: las versiones anteriores a la fase 2, que
+no tienen cabecera donde marcar la baja, y las bases donde todavía no se corrió el `05`.
+
+### ⚠️ El consumidor externo y las versiones dadas de baja
+
+Una versión dada de baja **sigue en las tablas**. Cualquier consulta que no filtre
+`eliminada = 0` la va a seguir viendo.
+
+El riesgo está acotado: una versión dada de baja **no puede ser oficial** —lo garantiza
+`CK_RO_T_HCP_CAB_oficial_no_eliminada`, en la base— así que todo lo que filtre
+`es_oficial = 1`, que es lo que corresponde para el cashflow, queda cubierto solo.
+
+Para lo demás está la vista **`RO_V_COMPRA_PROYECTADA_VIGENTE`** (bloque 4 del script
+`05`, opcional): devuelve únicamente la compra por tramo de las versiones oficiales
+vigentes, con el costo de cada fila, y no hay que conocer ni `eliminada` ni `es_oficial`.
+Se prefirió darles una vista antes que pedirles que agreguen un `WHERE`: un filtro que hay
+que acordarse de escribir es un filtro que alguna vez no se escribe, y el error sería
+silencioso.
 
 ### Guardado completo
 

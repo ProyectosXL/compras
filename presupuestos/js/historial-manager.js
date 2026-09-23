@@ -3,6 +3,11 @@
 
 class HistorialManager {
 
+    // Motivo de la baja que se está escribiendo en el modal de confirmación. Vive
+    // acá y no en el DOM porque el modal se destruye al cerrarse, y leer el input
+    // después de confirmar dependía de ganarle a la animación de Bootstrap.
+    static _motivoBaja = null;
+
     /**
      * Inicializa el gestor, añadiendo event listeners delegados.
      */
@@ -289,21 +294,15 @@ class HistorialManager {
             const cuerpo = { id_cabecera: idCabecera || null, nombre_presupuesto: nombre || null };
             const previa = await APIClient.llamarAPI('eliminar-version-presupuesto', {}, 'POST', cuerpo);
 
-            // El servidor puede negarse a borrar por dos motivos distintos, y cada uno
-            // tiene una salida distinta: la oficial se desmarca primero, la que tiene
-            // historial de marcado no se borra. Se muestran como aviso y no como error
-            // rojo genérico, porque no es una falla sino una regla.
-            if (!previa.success && previa.bloqueada) {
+            // La oficial no se elimina. Se muestra como aviso y no como error rojo
+            // genérico: no es una falla, es una regla, y tiene una salida concreta.
+            if (!previa.success && previa.bloqueada === 'oficial') {
                 UIUtils.mostrarLoading(false);
                 await UIUtils.informar(
-                    previa.bloqueada === 'oficial' ? 'No se puede eliminar la versión oficial'
-                                                   : 'No se puede eliminar: tiene historial',
-                    `<p>${previa.message}</p>`
-                    + (previa.bloqueada === 'oficial'
-                        ? '<p class="mb-0 small text-muted">Usá el botón <em>Desmarcar</em> de la '
-                          + 'columna Oficial y volvé a intentarlo.</p>'
-                        : '<p class="mb-0 small text-muted">El historial de quién marcó qué versión '
-                          + 'como oficial es auditoría: no se borra.</p>'),
+                    'No se puede eliminar la versión oficial',
+                    `<p>${previa.message}</p>
+                     <p class="mb-0 small text-muted">Usá el botón <em>Desmarcar</em> de la
+                        columna Oficial y volvé a intentarlo.</p>`,
                     'warning'
                 );
                 return;
@@ -316,13 +315,34 @@ class HistorialManager {
             UIUtils.mostrarLoading(false);
 
             const v = previa.version;
+            const detalle = `<strong>${v.filas}</strong> fila${v.filas === 1 ? '' : 's'} de detalle`
+                          + (v.filas_tramo ? ` y <strong>${v.filas_tramo}</strong> de compra por tramo` : '');
+
+            // Con baja lógica la versión deja de listarse pero se conserva; sin ella
+            // (base sin el script 05, o versión vieja sin cabecera) el borrado sigue
+            // siendo físico. Se dice cuál de las dos cosas va a pasar: el botón es el
+            // mismo pero las consecuencias no.
+            //
+            // El motivo se guarda en la clase a medida que se escribe, y no se lee del
+            // DOM al confirmar: el modal se destruye en hidden.bs.modal, así que leerlo
+            // después dependía de ganarle a la animación de Bootstrap.
+            HistorialManager._motivoBaja = null;
+
+            const cuerpoModal = previa.baja_logica
+                ? `<p>Se va a dar de baja <strong>${v.nombre}</strong>: ${detalle}.</p>
+                   <p>Deja de listarse en el historial y en el panel de versiones.
+                      <strong>Los datos se conservan</strong>, pero desde acá
+                      <strong>no se puede volver atrás</strong>.</p>
+                   <label class="form-label small mb-1" for="motivo-baja">Motivo (opcional)</label>
+                   <input type="text" class="form-control form-control-sm" id="motivo-baja"
+                          maxlength="500" placeholder="Por qué se da de baja"
+                          oninput="HistorialManager._motivoBaja = this.value">`
+                : `<p>Se va a <strong>borrar</strong> <strong>${v.nombre}</strong>: ${detalle}.</p>
+                   <p class="mb-0 text-danger"><strong>No se puede deshacer.</strong></p>`;
 
             const confirmado = await UIUtils.confirmarAccion(
-                'Eliminar versión guardada',
-                `<p>Se va a borrar <strong>${v.nombre}</strong>:
-                    <strong>${v.filas}</strong> fila${v.filas === 1 ? '' : 's'} de detalle
-                    ${v.filas_tramo ? ` y <strong>${v.filas_tramo}</strong> de compra por tramo` : ''}.</p>
-                 <p class="mb-0 text-danger"><strong>No se puede deshacer.</strong></p>`,
+                previa.baja_logica ? 'Dar de baja una versión' : 'Eliminar versión guardada',
+                cuerpoModal,
                 'danger'
             );
 
@@ -330,7 +350,7 @@ class HistorialManager {
 
             UIUtils.mostrarLoading(true);
             const respuesta = await APIClient.llamarAPI('eliminar-version-presupuesto', {}, 'POST',
-                Object.assign({ confirmado: true }, cuerpo));
+                Object.assign({ confirmado: true, motivo: HistorialManager._motivoBaja || null }, cuerpo));
 
             if (!respuesta.success) {
                 throw new Error(respuesta.message || 'No se pudo eliminar la versión.');
