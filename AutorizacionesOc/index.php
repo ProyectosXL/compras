@@ -9,7 +9,18 @@
 </head>
 <body>
     <?php
-        $usuario_externo = isset($_GET['usuario']) ? htmlspecialchars($_GET['usuario'], ENT_QUOTES, 'UTF-8') : '';
+        if (session_status() === PHP_SESSION_NONE) {
+            session_start();
+        }
+
+        // Si el usuario está autenticado en la plataforma corporativa / Hub, usamos su identidad validada:
+        if (!empty($_SESSION['fp_auth_user'])) {
+            $uAuth = $_SESSION['fp_auth_user'];
+            $usuario_externo = !empty($uAuth['usuario_tango']) ? $uAuth['usuario_tango'] : ($uAuth['username'] ?? '');
+        } else {
+            // Compatibilidad histórica: si accede por parámetro directo sin sesión
+            $usuario_externo = isset($_GET['usuario']) ? htmlspecialchars($_GET['usuario'], ENT_QUOTES, 'UTF-8') : '';
+        }
     ?>
 
     <main class="container">
