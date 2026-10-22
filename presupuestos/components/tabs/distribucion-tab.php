@@ -52,9 +52,14 @@
                 </select>
             </div>
             <div class="col-auto">
-                <select class="form-select form-select-sm" id="filtro-temporada-distribucion" onchange="DistribucionManager.inicializarVersiones(true)">
+                <select class="form-select form-select-sm" id="filtro-temporada-distribucion" onchange="DistribucionManager.alCambiarTemporada()">
                     <option value="VERANO">Presupuesto: Verano</option>
                     <option value="INVIERNO">Presupuesto: Invierno</option>
+                </select>
+            </div>
+            <div class="col-auto">
+                <select class="form-select form-select-sm border-primary text-primary fw-bold" id="filtro-version-oficial-distribucion" onchange="DistribucionManager.alCambiarVersionOficial(this.value)" title="Versión Oficial Guardada (Fuente de Venta Proyectada)" style="min-width: 220px;">
+                    <option value="">Cargando versión oficial...</option>
                 </select>
             </div>
             <div class="col-auto">

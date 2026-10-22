@@ -1,4 +1,4 @@
-
+﻿
 // Cliente API para comunicación con el backend
 // Archivo: presupuestos/js/api-client.js
 
@@ -409,13 +409,19 @@ class APIClient {
         return await APIClient.llamarAPI('cambiar_pais', { pais: pais });
     }
 
-    static async obtenerDistribucionPorCanal(temporada = '', fechaDesde = '', fechaHasta = '', proyeccionesMemoria = [], nombreDistribucion = 'Por defecto') {
+    static async obtenerDistribucionPorCanal(temporada = '', fechaDesde = '', fechaHasta = '', proyeccionesMemoria = [], nombreDistribucion = 'Por defecto', versionOficial = '') {
+        const payload = { proyecciones: proyeccionesMemoria, nombre_distribucion: nombreDistribucion };
+        if (versionOficial && versionOficial.startsWith('id:')) {
+            payload.id_cabecera_oficial = versionOficial.slice(3);
+        } else if (versionOficial && versionOficial.startsWith('nombre:')) {
+            payload.nombre_version_oficial = versionOficial.slice(7);
+        }
         return await APIClient.llamarAPI('distribucion-canal', { 
             temporada: temporada, 
             fecha_desde: fechaDesde, 
             fecha_hasta: fechaHasta,
             nombre_distribucion: nombreDistribucion
-        }, 'POST', { proyecciones: proyeccionesMemoria, nombre_distribucion: nombreDistribucion });
+        }, 'POST', payload);
     }
 
     /**

@@ -724,6 +724,10 @@ class Historial {
                 $where[] = "c.temporada_objetivo = ?";
                 $params[] = $filtros['temporada_objetivo'];
             }
+            if (!empty($filtros['solapa'])) {
+                $where[] = "c.solapa = ?";
+                $params[] = strtolower($filtros['solapa']);
+            }
             if (!empty($filtros['solo_oficiales'])) {
                 $where[] = "c.es_oficial = 1";
             }

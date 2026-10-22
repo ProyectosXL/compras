@@ -1,4 +1,4 @@
-
+﻿
 // Sistema de Presupuesto de Compras - JavaScript Principal
 // Archivo: presupuestos/js/main.js
 
@@ -467,6 +467,7 @@ class PresupuestoApp {
         // Inicializar filtros de fechas y versiones en distribución si se selecciona
         if (solapa === 'distribucion' && typeof DistribucionManager !== 'undefined') {
             DistribucionManager.inicializarFiltrosFechas();
+            DistribucionManager.inicializarVersionesOficiales();
             DistribucionManager.inicializarVersiones();
         }
 

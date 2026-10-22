@@ -4,6 +4,7 @@ class DistribucionController {
     private $distribucion;
     private $presupuesto;
     private $procesador;
+    private $historial;
 
     public function __construct() {
         require_once __DIR__ . '/../class/distribucion.php';
@@ -11,8 +12,10 @@ class DistribucionController {
         require_once __DIR__ . '/../class/PresupuestoCalculos.php';
         require_once __DIR__ . '/../class/CostoProyeccion.php';
         require_once __DIR__ . '/ProcesadorDatos.php';
+        require_once __DIR__ . '/../class/historial.php';
 
         $this->distribucion = new Distribucion();
+        $this->historial = new Historial();
         $this->presupuesto = new Presupuesto();
         $this->procesador = new ProcesadorDatos();
     }
@@ -49,27 +52,60 @@ class DistribucionController {
                 $temporadaFiltro = $infoTemp['temporada'];
             }
 
-            $datosBase = [];
             $rawBody = file_get_contents('php://input');
             $postData = json_decode($rawBody, true);
-            $proyecciones = $postData['proyecciones'] ?? null;
-            
-            if ($proyecciones && is_array($proyecciones)) {
-                $datosBase = $proyecciones;
-            } else {
+            $idCabeceraOficial = $postData['id_cabecera_oficial'] ?? $_GET['id_cabecera_oficial'] ?? null;
+            $nombreVersionOficial = $postData['nombre_version_oficial'] ?? $_GET['nombre_version_oficial'] ?? null;
+
+            // Determinar origen de datos de venta proyectada: desde el historial oficial guardado
+            $comprasProcesadas = [];
+            $filtrosHistorial = ['solo_oficiales' => 1];
+            if (!empty($idCabeceraOficial)) {
+                $filtrosHistorial['id_cabecera'] = (int)$idCabeceraOficial;
+                unset($filtrosHistorial['solo_oficiales']);
+            } elseif (!empty($nombreVersionOficial)) {
+                $filtrosHistorial['nombre_presupuesto'] = $nombreVersionOficial;
+                unset($filtrosHistorial['solo_oficiales']);
+            }
+
+            $respHistorial = $this->historial->buscarHistorial($filtrosHistorial);
+            $filasHistorial = ($respHistorial && !empty($respHistorial['success']) && !empty($respHistorial['data']))
+                ? $respHistorial['data']
+                : [];
+
+            // Filtrar filas del historial que correspondan a la solapa/temporada seleccionada
+            if (!empty($filasHistorial)) {
+                $filasHistorialTemporada = array_filter($filasHistorial, function($f) use ($temporadaFiltro) {
+                    $tempFila = strtoupper(trim($f['temporada'] ?? ''));
+                    return $tempFila === strtoupper(trim($temporadaFiltro));
+                });
+
+                if (!empty($filasHistorialTemporada)) {
+                    $filasHistorial = array_values($filasHistorialTemporada);
+                }
+
+                foreach ($filasHistorial as $fh) {
+                    $comprasProcesadas[] = [
+                        'RUBRO' => $fh['rubro'],
+                        'CATEGORIA_PADRE' => $fh['categoria_padre'],
+                        'VENTA_PROY_VERANO' => (float)($fh['venta_proyectada_verano'] ?? 0),
+                        'VENTA_PROY_INVIERNO' => (float)($fh['venta_proyectada_invierno'] ?? 0)
+                    ];
+                }
+            }
+
+            // Fallback de contingencia si no hubiera ninguna versión guardada aún
+            if (empty($comprasProcesadas)) {
                 $datosBase = $this->presupuesto->obtenerPresupuestoCompras();
                 if (isset($datosBase['error'])) {
                     $this->jsonResponse(['success' => false, 'message' => $datosBase['mensaje']], 500);
                     return;
                 }
-            }
-
-            // Procesar compras proyectadas basadas en la temporada
-            $comprasProcesadas = [];
-            if (strtoupper($temporadaFiltro) === 'VERANO') {
-                $comprasProcesadas = $this->procesador->procesarDatosCompraVerano($datosBase);
-            } else {
-                $comprasProcesadas = $this->procesador->procesarDatosCompraInvierno($datosBase);
+                if (strtoupper($temporadaFiltro) === 'VERANO') {
+                    $comprasProcesadas = $this->procesador->procesarDatosCompraVerano($datosBase);
+                } else {
+                    $comprasProcesadas = $this->procesador->procesarDatosCompraInvierno($datosBase);
+                }
             }
 
             // Obtener canales dinámicos

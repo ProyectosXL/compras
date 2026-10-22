@@ -1,4 +1,4 @@
-// Gestor de la solapa Distribución por Canal
+﻿﻿// Gestor de la solapa Distribución por Canal
 // Archivo: presupuestos/js/distribucion-manager.js
 
 class DistribucionManager {
@@ -59,7 +59,74 @@ class DistribucionManager {
         }
     }
 
-    static async inicializarVersiones(resetSelection = false) {
+        static async alCambiarTemporada() {
+        await DistribucionManager.inicializarVersionesOficiales(true);
+        await DistribucionManager.inicializarVersiones(true);
+        DistribucionManager.cargarDatos();
+    }
+
+    static async alCambiarVersionOficial(value) {
+        DistribucionManager.cargarDatos();
+    }
+
+    static async inicializarVersionesOficiales(resetSelection = false) {
+        try {
+            const temporadaSelect = document.getElementById('filtro-temporada-distribucion');
+            const temporada = temporadaSelect ? temporadaSelect.value : 'VERANO';
+            const oficialSelect = document.getElementById('filtro-version-oficial-distribucion');
+            if (!oficialSelect) return;
+
+            const respuesta = await APIClient.llamarAPI('versiones-presupuesto', {
+                solapa: temporada.toLowerCase()
+            }, 'GET');
+
+            if (respuesta.success && Array.isArray(respuesta.data)) {
+                const versiones = respuesta.data;
+                const oficiales = versiones.filter(v => parseInt(v.es_oficial, 10) === 1);
+                const noOficiales = versiones.filter(v => parseInt(v.es_oficial, 10) !== 1);
+
+                let html = '';
+                if (oficiales.length > 0) {
+                    html += '<optgroup label="Versiones Oficiales (Vigentes)">';
+                    oficiales.forEach(v => {
+                        const clave = v.id ? ('id:' + v.id) : ('nombre:' + v.nombre_presupuesto);
+                        const fecha = FormatoUtils.formatearFechaHora(v.fecha_guardado);
+                        html += '<option value="' + clave + '" selected>★ Oficial: ' + v.nombre_presupuesto + ' (' + fecha + ')</option>';
+                    });
+                    html += '</optgroup>';
+                }
+
+                if (noOficiales.length > 0) {
+                    html += '<optgroup label="Otras Versiones Guardadas">';
+                    noOficiales.forEach((v, idx) => {
+                        const clave = v.id ? ('id:' + v.id) : ('nombre:' + v.nombre_presupuesto);
+                        const fecha = FormatoUtils.formatearFechaHora(v.fecha_guardado);
+                        const sel = (oficiales.length === 0 && idx === 0) ? ' selected' : '';
+                        html += '<option value="' + clave + '"' + sel + '>' + v.nombre_presupuesto + ' (' + fecha + ')</option>';
+                    });
+                    html += '</optgroup>';
+                }
+
+                if (!html) {
+                    html = '<option value="">Sin versiones guardadas</option>';
+                }
+
+                const prevVal = oficialSelect.value;
+                oficialSelect.innerHTML = html;
+                if (!resetSelection && prevVal && Array.from(oficialSelect.options).some(o => o.value === prevVal)) {
+                    oficialSelect.value = prevVal;
+                }
+            } else {
+                oficialSelect.innerHTML = '<option value="">Sin versiones disponibles</option>';
+            }
+        } catch (error) {
+            console.error('Error al inicializar versiones oficiales:', error);
+            const oficialSelect = document.getElementById('filtro-version-oficial-distribucion');
+            if (oficialSelect) oficialSelect.innerHTML = '<option value="">Error cargando versiones</option>';
+        }
+    }
+
+        static async inicializarVersiones(resetSelection = false) {
         try {
             const temporadaSelect = document.getElementById('filtro-temporada-distribucion');
             const temporada = temporadaSelect ? temporadaSelect.value : 'VERANO';
@@ -83,14 +150,15 @@ class DistribucionManager {
                     const periodo = typeof v === 'object' ? v.periodo : '';
                     DistribucionManager.periodosVersiones[nombre] = periodo;
                     
-                    selectHtml += `<option value="${nombre}" ${nombre === activeVer ? 'selected' : ''}>Versión: ${nombre}</option>`;
+                    const sel = (nombre === activeVer) ? ' selected' : '';
+                    selectHtml += '<option value="' + nombre + '"' + sel + '>Versión: ' + nombre + '</option>';
                 });
                 
                 const tieneActive = typeof response.versiones[0] === 'object'
                     ? response.versiones.some(v => v.nombre === activeVer)
                     : response.versiones.includes(activeVer);
                 if (!tieneActive) {
-                    selectHtml += `<option value="${activeVer}" selected>Versión: ${activeVer}</option>`;
+                    selectHtml += '<option value="' + activeVer + '" selected>Versión: ' + activeVer + '</option>';
                 }
                 versionSelect.innerHTML = selectHtml;
             }
@@ -136,16 +204,16 @@ class DistribucionManager {
                 temporada = defaultTemporada;
             }
             
-            // Obtener versión seleccionada
+            // Obtener versión seleccionada de distribución
             const versionSelect = document.getElementById('filtro-version-distribucion');
             const version = versionSelect ? versionSelect.value : 'Por defecto';
-            
-            // Obtener proyecciones en memoria desde la solapa activa
-            const solapaOrigen = temporada.toLowerCase(); // 'verano' o 'invierno'
-            const proyeccionesMemoria = window.presupuestoApp?.datos?.[solapaOrigen] || [];
 
-            // Llamar API
-            const response = await APIClient.obtenerDistribucionPorCanal(temporada, fechaDesde, fechaHasta, proyeccionesMemoria, version);
+            // Obtener versión oficial seleccionada como fuente de venta proyectada
+            const oficialSelect = document.getElementById('filtro-version-oficial-distribucion');
+            const versionOficial = oficialSelect ? oficialSelect.value : '';
+
+            // Llamar API enviando la versión oficial seleccionada
+            const response = await APIClient.obtenerDistribucionPorCanal(temporada, fechaDesde, fechaHasta, [], version, versionOficial);
 
             if (response.success && response.data) {
                 DistribucionManager.datos = response.data;

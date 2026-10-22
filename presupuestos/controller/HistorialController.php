@@ -64,6 +64,7 @@ class HistorialController {
         try {
             $filtros = [
                 'temporada_objetivo' => $_GET['temporada_objetivo'] ?? null,
+                'solapa'             => $_GET['solapa'] ?? null,
                 'solo_oficiales'     => !empty($_GET['solo_oficiales'])
             ];
             $resultado = $this->historial->listarVersiones($filtros);
