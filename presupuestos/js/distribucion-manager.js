@@ -1,4 +1,4 @@
-﻿﻿// Gestor de la solapa Distribución por Canal
+// Gestor de la solapa Distribución por Canal
 // Archivo: presupuestos/js/distribucion-manager.js
 
 class DistribucionManager {
@@ -59,14 +59,14 @@ class DistribucionManager {
         }
     }
 
-        static async alCambiarTemporada() {
+    static async alCambiarTemporada() {
         await DistribucionManager.inicializarVersionesOficiales(true);
         await DistribucionManager.inicializarVersiones(true);
-        DistribucionManager.cargarDatos();
+        // No dispara carga automática, espera a que el usuario presione "Cargar / Recalcular"
     }
 
     static async alCambiarVersionOficial(value) {
-        DistribucionManager.cargarDatos();
+        // No dispara carga automática, espera a que el usuario presione "Cargar / Recalcular"
     }
 
     static async inicializarVersionesOficiales(resetSelection = false) {
@@ -427,11 +427,11 @@ class DistribucionManager {
             let canalHtml = item.CANAL;
             let rowClass = '';
 
-            if (item.CANAL === 'LOCALES PROPIOS' && item.SUCURSALES_DETALLE && item.SUCURSALES_DETALLE.length > 0) {
+            if (item.SUCURSALES_DETALLE && item.SUCURSALES_DETALLE.length > 0) {
                 canalHtml = `<span class="toggle-sucursales fw-bold" style="cursor: pointer; color: #0d6efd;" onclick="DistribucionManager.toggleSucursales(${originalIndex}, this)">
-                                <i class="fas fa-chevron-right me-2"></i>LOCALES PROPIOS
+                                <i class="fas fa-chevron-right me-2"></i>${item.CANAL}
                              </span>`;
-                rowClass = 'locales-propios-row';
+                rowClass = 'sucursales-desglose-row';
             }
 
             const inputStyle = item.MODIFICADO 
@@ -1190,8 +1190,7 @@ class DistribucionManager {
                 hastaInput.value = partes[1].trim();
             }
         }
-        // Cargar los datos de la versión seleccionada
-        DistribucionManager.cargarDatos();
+        // No dispara carga automática, espera a que el usuario presione "Cargar / Recalcular"
     }
 
     /**
@@ -2119,7 +2118,7 @@ class DistribucionManager {
                     );
 
                     let sucursalesConsolidadas = [];
-                    if (canalNormalizado.includes('LOCAL') && itemsPaso1.length > 0) {
+                    if (itemsPaso1.length > 0) {
                         itemsPaso1.forEach(p1 => {
                             if (p1.SUCURSALES_DETALLE && p1.SUCURSALES_DETALLE.length > 0) {
                                 p1.SUCURSALES_DETALLE.forEach(suc => {
@@ -2216,7 +2215,7 @@ class DistribucionManager {
                     );
 
                     let sucursalesConsolidadas = [];
-                    if (canalNormalizado.includes('LOCAL') && itemsPaso1.length > 0) {
+                    if (itemsPaso1.length > 0) {
                         itemsPaso1.forEach(p1 => {
                             if (p1.SUCURSALES_DETALLE && p1.SUCURSALES_DETALLE.length > 0) {
                                 p1.SUCURSALES_DETALLE.forEach(suc => {
@@ -2607,14 +2606,31 @@ class DistribucionManager {
     }
 
     /**
-     * Renderiza la tabla de Análisis 2B: Presupuesto de Venta de Locales Propios desglosado por Sucursal / Local
-     * Nivel 1 (Principal): Sucursal (Summarizado con total por mes)
-     * Nivel 2 (Desplegable): Rubros y Categorías que pertenecen a dicha sucursal
+     * Canal actualmente seleccionado en el filtro de la solapa 2B ('TODOS', 'LOCALES PROPIOS', 'FRANQUICIAS', etc.)
+     */
+    static canalSeleccionadoAnalisis2B = 'TODOS';
+
+    /**
+     * Filtra los datos mostrados en la solapa de Análisis 2B por canal
+     */
+    static filtrarCanalAnalisis2B(canal) {
+        DistribucionManager.canalSeleccionadoAnalisis2B = canal || 'TODOS';
+        DistribucionManager.renderizarTablaAnalisis2B();
+    }
+
+    /**
+     * Renderiza la tabla de Análisis 2B: Presupuesto de Venta con apertura:
+     * CANAL -> CLIENTE / SUCURSAL -> RUBRO -> CATEGORÍA
      */
     static async renderizarTablaAnalisis2B() {
         const theadRow = document.getElementById('thead-analisis-locales-row');
         const tbody = document.getElementById('tbody-analisis-locales');
         if (!theadRow || !tbody) return;
+
+        // Si los datos del Paso 1 no están cargados, cargarlos para tener las sucursales
+        if (!DistribucionManager.datos || DistribucionManager.datos.length === 0) {
+            await DistribucionManager.cargarDatos();
+        }
 
         // Si los datos del Paso 2 no están cargados, cargarlos
         if (!DistribucionManager.datosCostos || DistribucionManager.datosCostos.length === 0) {
@@ -2631,9 +2647,10 @@ class DistribucionManager {
             return FormatoUtils.formatearNumero(Math.round(valorFinal));
         };
 
-        // 1. Reconstruir cabecera con meses (Sucursal | Rubro | Categoría | ...)
+        // 1. Cabecera dinámica de columnas (CANAL | CLIENTE / SUCURSAL | RUBRO | CATEGORÍA)
         let headHtml = `
-            <th style="min-width:200px;">Sucursal / Local Propio</th>
+            <th style="min-width:180px;">Canal</th>
+            <th style="min-width:200px;">Cliente / Sucursal</th>
             <th>Rubro</th>
             <th>Categoría</th>
             <th class="text-end bg-secondary text-white" style="width: 140px;">Venta Proyectada (U.)</th>
@@ -2652,42 +2669,108 @@ class DistribucionManager {
         const datosPaso1 = DistribucionManager.datos || [];
         const datosPaso2 = DistribucionManager.datosCostos || [];
 
-        // Filtrar datosPaso2 solo para Locales Propios
-        const datosLocalesPropios = datosPaso2.filter(row => (row.CANAL || '').toUpperCase().includes('LOCAL'));
+        // Filtro de Canal para 2B
+        const filtroCanal = (DistribucionManager.canalSeleccionadoAnalisis2B || 'TODOS').toUpperCase().trim();
+        const datosFiltradosPaso2 = datosPaso2.filter(row => {
+            if (filtroCanal === 'TODOS') return true;
+            return (row.CANAL || '').toUpperCase().trim() === filtroCanal;
+        });
 
-        if (datosLocalesPropios.length === 0) {
+        if (datosFiltradosPaso2.length === 0) {
+            const textoFiltro = filtroCanal === 'TODOS' ? 'el presupuesto' : `el canal ${filtroCanal}`;
             tbody.innerHTML = `
                 <tr>
-                    <td colspan="${5 + DistribucionManager.mesesCostos.length}" class="text-center text-muted py-4">
+                    <td colspan="${6 + DistribucionManager.mesesCostos.length}" class="text-center text-muted py-4">
                         <i class="fas fa-store-slash mb-2"></i><br>
-                        No hay datos cargados para el canal Locales Propios
+                        No hay datos cargados para ${textoFiltro}
                     </td>
                 </tr>`;
             return;
         }
 
-        // Agrupar por SUCURSAL / LOCAL
-        const mapaSucursales = {}; // { 'ALTO PALERMO': { sucursal: 'ALTO PALERMO', totalUnidades: 0, totalVentaUSD: 0, mesesUSD: {}, items: [] } }
+        // Estructura jerárquica: Canales -> Clientes/Sucursales -> Rubros/Categorías
+        // {
+        //   'LOCALES PROPIOS': { canal, totalUnidades, totalVentaUSD, mesesUSD, clientes: { 'ALTO PALERMO': { nombre, totalUnidades, totalVentaUSD, mesesUSD, items: [] } } }
+        // }
+        const mapaCanales = {};
 
-        datosLocalesPropios.forEach(row => {
+        // Precomputar sucursales por defecto por canal a partir de todos los items del Paso 1
+        // para asegurar que ninguna categoría de Locales Propios o Franquicias quede sin sucursal
+        const sucursalesGlobalesPorCanal = {};
+        datosPaso1.forEach(p1 => {
+            const cName = (p1.CANAL || '').trim().toUpperCase();
+            if (!sucursalesGlobalesPorCanal[cName]) {
+                sucursalesGlobalesPorCanal[cName] = {};
+            }
+            if (p1.SUCURSALES_DETALLE && p1.SUCURSALES_DETALLE.length > 0) {
+                p1.SUCURSALES_DETALLE.forEach(s => {
+                    const sName = (s.SUCURSAL || '').trim().toUpperCase();
+                    if (sName !== '' && sName !== cName) {
+                        if (!sucursalesGlobalesPorCanal[cName][sName]) {
+                            sucursalesGlobalesPorCanal[cName][sName] = {
+                                SUCURSAL: s.SUCURSAL.trim(),
+                                VENTA_TOTAL: 0
+                            };
+                        }
+                        sucursalesGlobalesPorCanal[cName][sName].VENTA_TOTAL += (parseFloat(s.VENTA_HISTORICA) || 0);
+                    }
+                });
+            }
+        });
+
+        // Convertir mapa de sucursales globales a listas con participación porcentual normalizada
+        const sucursalesFallbackPorCanal = {};
+        Object.keys(sucursalesGlobalesPorCanal).forEach(cName => {
+            const arr = Object.values(sucursalesGlobalesPorCanal[cName]);
+            const ventaTotalCanal = arr.reduce((acc, curr) => acc + curr.VENTA_TOTAL, 0);
+            sucursalesFallbackPorCanal[cName] = arr.map(s => ({
+                SUCURSAL: s.SUCURSAL,
+                PARTICIPACION: ventaTotalCanal > 0 ? (s.VENTA_TOTAL / ventaTotalCanal) * 100 : (100 / (arr.length || 1)),
+                MESES: {}
+            }));
+        });
+
+        datosFiltradosPaso2.forEach(row => {
             const vcosto = row.COSTO_PROM * (1 + row.INC_FOB / 100);
             const markup = DistribucionManager.obtenerMarkupFila(row);
             const vventaUnit = vcosto * markup;
+            const canalRow = (row.CANAL || '').trim().toUpperCase();
 
-            // Buscar coincidencia en Paso 1 para traer las sucursales
+            if (!mapaCanales[canalRow]) {
+                mapaCanales[canalRow] = {
+                    canal: row.CANAL,
+                    totalUnidades: 0,
+                    totalVentaUSD: 0,
+                    mesesUSD: {},
+                    clientes: {}
+                };
+                DistribucionManager.mesesCostosClaves.forEach(m => mapaCanales[canalRow].mesesUSD[m] = 0);
+            }
+
+            // Buscar si en Paso 1 hay sucursales/clientes para esta combinación
             const itemPaso1 = datosPaso1.find(p1 =>
                 (p1.RUBRO || '').trim().toUpperCase() === (row.RUBRO || '').trim().toUpperCase() &&
                 (p1.CATEGORIA_PADRE || '').trim().toUpperCase() === (row.CATEGORIA_PADRE || '').trim().toUpperCase() &&
-                (p1.CANAL || '').trim().toUpperCase().includes('LOCAL')
+                (p1.CANAL || '').trim().toUpperCase() === canalRow
             );
 
-            const sucursales = (itemPaso1 && itemPaso1.SUCURSALES_DETALLE && itemPaso1.SUCURSALES_DETALLE.length > 0)
-                ? itemPaso1.SUCURSALES_DETALLE
+            // Filtrar sucursales reales (descartando si la sucursal se llama igual que el canal genérico)
+            let sucursales = (itemPaso1 && itemPaso1.SUCURSALES_DETALLE && itemPaso1.SUCURSALES_DETALLE.length > 0)
+                ? itemPaso1.SUCURSALES_DETALLE.filter(s => {
+                    const sName = (s.SUCURSAL || '').trim().toUpperCase();
+                    return sName !== '' && sName !== canalRow;
+                })
                 : [];
 
+            // Si es un canal de sucursales (LOCALES PROPIOS o FRANQUICIAS) y esta categoría específica no tuvo ventas en sucursales,
+            // usar la distribución de sucursales globales del canal para no crear una fila ficticia "(Directo)"
+            const esCanalConSucursales = canalRow.includes('LOCAL') || canalRow.includes('FRANQ');
+            if (sucursales.length === 0 && esCanalConSucursales && sucursalesFallbackPorCanal[canalRow] && sucursalesFallbackPorCanal[canalRow].length > 0) {
+                sucursales = sucursalesFallbackPorCanal[canalRow];
+            }
+
             if (sucursales.length > 0) {
-                // Para garantizar coincidencia exacta con 2A (que multiplica directamente row.MESES_UNIDADES[m] * vventaUnit),
-                // calculamos primero la venta mensual exacta de esta categoría para Locales Propios
+                // Hay desglose por sucursal / cliente
                 const ventaCategoriaMesUSD = {};
                 DistribucionManager.mesesCostosClaves.forEach((m, mIdx) => {
                     const unidadesTotalCatMes = row.MESES_UNIDADES[m] || 0;
@@ -2695,19 +2778,19 @@ class DistribucionManager {
                 });
 
                 sucursales.forEach(suc => {
-                    const nombreSuc = suc.SUCURSAL || 'LOCAL SIN NOMBRE';
+                    const nombreSuc = (suc.SUCURSAL || 'SIN NOMBRE').trim();
                     const partSucDecimal = (parseFloat(suc.PARTICIPACION) || 0) / 100;
 
-                    if (!mapaSucursales[nombreSuc]) {
-                        mapaSucursales[nombreSuc] = {
-                            sucursal: nombreSuc,
-                            participacionPromedio: suc.PARTICIPACION || 0,
+                    if (!mapaCanales[canalRow].clientes[nombreSuc]) {
+                        mapaCanales[canalRow].clientes[nombreSuc] = {
+                            nombre: nombreSuc,
+                            participacion: suc.PARTICIPACION || 0,
                             totalUnidades: 0,
                             totalVentaUSD: 0,
                             mesesUSD: {},
                             items: []
                         };
-                        DistribucionManager.mesesCostosClaves.forEach(m => mapaSucursales[nombreSuc].mesesUSD[m] = 0);
+                        DistribucionManager.mesesCostosClaves.forEach(m => mapaCanales[canalRow].clientes[nombreSuc].mesesUSD[m] = 0);
                     }
 
                     let itemUnidadesTotal = 0;
@@ -2716,13 +2799,10 @@ class DistribucionManager {
 
                     DistribucionManager.mesesCostosClaves.forEach((m, mIdx) => {
                         const labelMes = DistribucionManager.mesesCostos[mIdx];
-                        
-                        // Si la sucursal tiene unidades explícitas guardadas, usarlas; de lo contrario prorratear de row.MESES_UNIDADES[m]
                         const unidadesSucMes = (suc.MESES && suc.MESES[labelMes] && suc.MESES[labelMes].unidades !== undefined)
                             ? (suc.MESES[labelMes].unidades || 0)
                             : (row.MESES_UNIDADES[m] || 0) * partSucDecimal;
 
-                        // La venta en USD se prorratea del total exacto de la categoría en 2A para prevenir descalces por redondeo
                         const ventaSucMesUSD = (suc.MESES && suc.MESES[labelMes] && suc.MESES[labelMes].unidades !== undefined)
                             ? vventaUnit * unidadesSucMes
                             : ventaCategoriaMesUSD[m] * partSucDecimal;
@@ -2731,13 +2811,16 @@ class DistribucionManager {
                         itemVentaTotalUSD += ventaSucMesUSD;
                         itemMesesUSD[m] = ventaSucMesUSD;
 
-                        mapaSucursales[nombreSuc].mesesUSD[m] += ventaSucMesUSD;
+                        mapaCanales[canalRow].clientes[nombreSuc].mesesUSD[m] += ventaSucMesUSD;
+                        mapaCanales[canalRow].mesesUSD[m] += ventaSucMesUSD;
                     });
 
-                    mapaSucursales[nombreSuc].totalUnidades += itemUnidadesTotal;
-                    mapaSucursales[nombreSuc].totalVentaUSD += itemVentaTotalUSD;
+                    mapaCanales[canalRow].clientes[nombreSuc].totalUnidades += itemUnidadesTotal;
+                    mapaCanales[canalRow].clientes[nombreSuc].totalVentaUSD += itemVentaTotalUSD;
+                    mapaCanales[canalRow].totalUnidades += itemUnidadesTotal;
+                    mapaCanales[canalRow].totalVentaUSD += itemVentaTotalUSD;
 
-                    mapaSucursales[nombreSuc].items.push({
+                    mapaCanales[canalRow].clientes[nombreSuc].items.push({
                         rubro: row.RUBRO,
                         categoria: row.CATEGORIA_PADRE,
                         vcosto: vcosto,
@@ -2746,120 +2829,210 @@ class DistribucionManager {
                         mesesUSD: itemMesesUSD
                     });
                 });
+            } else {
+                // Canal sin sucursales detalladas (como ECOMMERCE o MAYORISTAS centralizados)
+                // Se muestra directamente el canal limpio, sin "(Directo)"
+                const nombreCliente = row.CANAL;
+                if (!mapaCanales[canalRow].clientes[nombreCliente]) {
+                    mapaCanales[canalRow].clientes[nombreCliente] = {
+                        nombre: nombreCliente,
+                        participacion: 100,
+                        totalUnidades: 0,
+                        totalVentaUSD: 0,
+                        mesesUSD: {},
+                        items: []
+                    };
+                    DistribucionManager.mesesCostosClaves.forEach(m => mapaCanales[canalRow].clientes[nombreCliente].mesesUSD[m] = 0);
+                }
+
+                let itemUnidadesTotal = 0;
+                let itemVentaTotalUSD = 0;
+                const itemMesesUSD = {};
+
+                DistribucionManager.mesesCostosClaves.forEach((m, mIdx) => {
+                    const labelMes = DistribucionManager.mesesCostos[mIdx];
+                    const unidadesMes = row.MESES_UNIDADES[m] || 0;
+                    const ventaMesUSD = vventaUnit * unidadesMes;
+
+                    itemUnidadesTotal += unidadesMes;
+                    itemVentaTotalUSD += ventaMesUSD;
+                    itemMesesUSD[m] = ventaMesUSD;
+
+                    mapaCanales[canalRow].clientes[nombreCliente].mesesUSD[m] += ventaMesUSD;
+                    mapaCanales[canalRow].mesesUSD[m] += ventaMesUSD;
+                });
+
+                mapaCanales[canalRow].clientes[nombreCliente].totalUnidades += itemUnidadesTotal;
+                mapaCanales[canalRow].clientes[nombreCliente].totalVentaUSD += itemVentaTotalUSD;
+                mapaCanales[canalRow].totalUnidades += itemUnidadesTotal;
+                mapaCanales[canalRow].totalVentaUSD += itemVentaTotalUSD;
+
+                mapaCanales[canalRow].clientes[nombreCliente].items.push({
+                    rubro: row.RUBRO,
+                    categoria: row.CATEGORIA_PADRE,
+                    vcosto: vcosto,
+                    unidadesTotal: itemUnidadesTotal,
+                    ventaTotalUSD: itemVentaTotalUSD,
+                    mesesUSD: itemMesesUSD
+                });
             }
         });
 
-        const listaSucursales = Object.values(mapaSucursales);
-        // Ordenar sucursales por mayor venta total acumulada
-        listaSucursales.sort((a, b) => b.totalVentaUSD - a.totalVentaUSD);
+        const ordenCanalesMap = { 'LOCALES PROPIOS': 0, 'FRANQUICIAS': 1, 'MAYORISTAS': 2, 'ECOMMERCE': 3 };
+        const listaCanales = Object.values(mapaCanales);
+        listaCanales.sort((a, b) => {
+            const posA = ordenCanalesMap[(a.canal || '').trim().toUpperCase()] ?? 99;
+            const posB = ordenCanalesMap[(b.canal || '').trim().toUpperCase()] ?? 99;
+            return posA - posB;
+        });
 
-        if (listaSucursales.length === 0) {
-            tbody.innerHTML = `
-                <tr>
-                    <td colspan="${5 + DistribucionManager.mesesCostos.length}" class="text-center text-muted py-4">
-                        <i class="fas fa-info-circle mb-2"></i><br>
-                        No se encontraron sucursales desglosadas para Locales Propios
-                    </td>
-                </tr>`;
-            return;
-        }
+        // Gran total exacto del subconjunto filtrado para cuadre 100% con 2A
+        const totalExactoMesUSD = {};
+        let totalExactoVentaUSD = 0;
+        let totalExactoUnidades = 0;
 
-        // Si hay sucursales agrupadas, ajustar el gran total mensual sumando directamente desde los totales exactos de cada categoría en 2A
-        const totalExactoLocalesPropiosMesUSD = {};
-        let totalExactoLocalesPropiosVentaUSD = 0;
-        let totalExactoLocalesPropiosUnidades = 0;
+        DistribucionManager.mesesCostosClaves.forEach(m => totalExactoMesUSD[m] = 0);
 
-        DistribucionManager.mesesCostosClaves.forEach(m => totalExactoLocalesPropiosMesUSD[m] = 0);
-
-        datosLocalesPropios.forEach(row => {
+        datosFiltradosPaso2.forEach(row => {
             const vcosto = row.COSTO_PROM * (1 + row.INC_FOB / 100);
             const markup = DistribucionManager.obtenerMarkupFila(row);
             const vventaUnit = vcosto * markup;
-            totalExactoLocalesPropiosUnidades += (row.COMPRA_DISTRIBUIDA || 0);
+            totalExactoUnidades += (row.COMPRA_DISTRIBUIDA || 0);
 
             DistribucionManager.mesesCostosClaves.forEach(m => {
                 const unidadesCatMes = row.MESES_UNIDADES[m] || 0;
                 const vUSD = vventaUnit * unidadesCatMes;
-                totalExactoLocalesPropiosMesUSD[m] += vUSD;
-                totalExactoLocalesPropiosVentaUSD += vUSD;
+                totalExactoMesUSD[m] += vUSD;
+                totalExactoVentaUSD += vUSD;
             });
         });
 
+        const colorBadgeCanal = (canal) => {
+            const c = (canal || '').toUpperCase().trim();
+            if (c.includes('LOCAL')) return 'bg-primary text-white';
+            if (c.includes('FRANQ')) return 'bg-success text-white';
+            if (c.includes('MAYOR')) return 'bg-info text-dark';
+            if (c.includes('ECOM') || c.includes('WEB')) return 'bg-warning text-dark';
+            return 'bg-secondary text-white';
+        };
+
+        const iconoCanal = (canal) => {
+            const c = (canal || '').toUpperCase().trim();
+            if (c.includes('LOCAL')) return 'fa-store';
+            if (c.includes('FRANQ')) return 'fa-handshake';
+            if (c.includes('MAYOR')) return 'fa-boxes';
+            if (c.includes('ECOM') || c.includes('WEB')) return 'fa-shopping-cart';
+            return 'fa-building';
+        };
+
         let htmlBody = '';
-        let totalEmpresaUnidades = 0;
-        let totalEmpresaVentaUSD = 0;
-        const totalEmpresaMesesUSD = {};
-        DistribucionManager.mesesCostosClaves.forEach(m => totalEmpresaMesesUSD[m] = 0);
+        let canalCounter = 0;
+        let clienteCounter = 0;
 
-        listaSucursales.forEach((sucData, sucIdx) => {
-            totalEmpresaUnidades += sucData.totalUnidades;
-            totalEmpresaVentaUSD += sucData.totalVentaUSD;
+        listaCanales.forEach(canalData => {
+            const cIdx = canalCounter++;
+            const canalNombre = canalData.canal;
+            const badgeClass = colorBadgeCanal(canalNombre);
+            const iconClass = iconoCanal(canalNombre);
+            const clientesLista = Object.values(canalData.clientes);
+            clientesLista.sort((a, b) => b.totalVentaUSD - a.totalVentaUSD);
 
-            let mesesSucRowHtml = '';
+            let mesesCanalRowHtml = '';
             DistribucionManager.mesesCostosClaves.forEach((m, mIdx) => {
                 const labelMes = DistribucionManager.mesesCostos[mIdx];
                 const tasaMes = esARS ? DistribucionManager.tasaParaMes(labelMes) : 1;
-                const mUSD = sucData.mesesUSD[m] || 0;
-                totalEmpresaMesesUSD[m] += mUSD;
-
-                mesesSucRowHtml += `<td class="text-end font-monospace fw-bold">${fmtDinero(mUSD, tasaMes)}</td>`;
+                const mUSD = canalData.mesesUSD[m] || 0;
+                mesesCanalRowHtml += `<td class="text-end font-monospace fw-bold" style="color: #0f172a !important; background-color: #f1f5f9 !important;">${fmtDinero(mUSD, tasaMes)}</td>`;
             });
 
-            // Fila Nivel 1: SUCURSAL / LOCAL PROPIO (Consolidadora)
+            // NIVEL 1: CANAL (Fila Cabecera de Canal - fondo claro/blanco con texto negro)
             htmlBody += `
-                <tr id="row-suc-2b-${sucIdx}" class="table-group-header align-middle" style="background:#eef2f7; border-top: 2px solid #90caf9;">
-                    <td class="fw-bold text-primary fs-6">
-                        <button class="btn btn-xs btn-primary me-2 py-0 px-2 rounded-circle" onclick="DistribucionManager.toggleSucursales2B(${sucIdx}, this)">
-                            <i class="fas fa-chevron-right" style="font-size:0.75rem;"></i>
+                <tr id="row-canal-2b-${cIdx}" class="align-middle" style="background-color: #f8fafc !important; color: #0f172a !important; border-top: 3px solid #0d6efd; border-bottom: 2px solid #cbd5e1;">
+                    <td class="fw-bold fs-6" colspan="4" style="color: #0f172a !important; padding: 10px 12px;">
+                        <button class="btn btn-xs btn-outline-dark me-2 py-0 px-2 rounded-circle" onclick="DistribucionManager.toggleCanal2B(${cIdx}, this)" style="border-color: #64748b; color: #0f172a;">
+                            <i class="fas fa-chevron-down" style="font-size:0.75rem;"></i>
                         </button>
-                        <i class="fas fa-store me-1 text-warning"></i>${sucData.sucursal}
-                        <small class="text-muted font-monospace fw-normal ms-1">(${sucData.items.length} categorías)</small>
+                        <span class="badge ${badgeClass} me-2" style="font-size:0.85rem;">${canalNombre}</span>
+                        <i class="fas ${iconClass} me-2 text-primary"></i><span style="color: #0f172a !important; font-size: 1rem; font-weight: 800;">${canalNombre}</span>
+                        <span class="badge bg-secondary bg-opacity-25 text-dark font-monospace ms-2">${clientesLista.length} clientes/sucursales</span>
                     </td>
-                    <td class="text-muted font-monospace fs-7">Venta Sucursal</td>
-                    <td class="text-muted font-monospace fs-7">Consolidado</td>
-                    <td class="text-end font-monospace fw-bold bg-secondary bg-opacity-10 fs-6">${FormatoUtils.formatearNumero(sucData.totalUnidades)}</td>
-                    ${mesesSucRowHtml}
-                    <td class="text-end font-monospace fw-bold text-success bg-success bg-opacity-10 fs-6">${fmtDinero(sucData.totalVentaUSD)}</td>
+                    <td class="text-end font-monospace fw-bold fs-6" style="background-color: #e2e8f0 !important; color: #0f172a !important;">${FormatoUtils.formatearNumero(canalData.totalUnidades)}</td>
+                    ${mesesCanalRowHtml}
+                    <td class="text-end font-monospace fw-bold fs-6" style="background-color: #eab308 !important; color: #000000 !important; font-weight: 800 !important;">${fmtDinero(canalData.totalVentaUSD)}</td>
                 </tr>`;
 
-            // Filas Nivel 2: Rubros y Categorías pertenecientes a la Sucursal
-            sucData.items.forEach(item => {
-                let mesesItemHtml = '';
+            // NIVEL 2: CLIENTES / SUCURSALES DENTRO DEL CANAL
+            clientesLista.forEach(cliData => {
+                const clIdx = clienteCounter++;
+                let mesesCliRowHtml = '';
                 DistribucionManager.mesesCostosClaves.forEach((m, mIdx) => {
                     const labelMes = DistribucionManager.mesesCostos[mIdx];
                     const tasaMes = esARS ? DistribucionManager.tasaParaMes(labelMes) : 1;
-                    const itemMUSD = item.mesesUSD[m] || 0;
-                    mesesItemHtml += `<td class="text-end font-monospace text-muted" style="font-size:0.85rem;">${fmtDinero(itemMUSD, tasaMes)}</td>`;
+                    const mUSD = cliData.mesesUSD[m] || 0;
+                    mesesCliRowHtml += `<td class="text-end font-monospace fw-bold">${fmtDinero(mUSD, tasaMes)}</td>`;
                 });
 
                 htmlBody += `
-                    <tr class="table-light child-2b-row-${sucIdx} bg-light-subtle" style="display: none; font-size: 0.85rem; border-left: 4px solid #ffc107; vertical-align: middle;">
-                        <td class="ps-4 text-muted font-monospace"><i class="fas fa-level-up-alt fa-rotate-90 me-2 text-warning"></i>${sucData.sucursal}</td>
-                        <td class="fw-bold text-dark">${item.rubro}</td>
-                        <td class="text-secondary fw-semibold">${item.categoria}</td>
-                        <td class="text-end font-monospace text-muted">${FormatoUtils.formatearNumero(item.unidadesTotal)}</td>
-                        ${mesesItemHtml}
-                        <td class="text-end font-monospace text-success fw-bold" style="background:#e8f5e9;">${fmtDinero(item.ventaTotalUSD)}</td>
+                    <tr id="row-cli-2b-${clIdx}" class="table-group-header align-middle child-canal-2b-${cIdx}" style="background:#f1f5f9; border-top: 1px solid #cbd5e1;">
+                        <td class="ps-3 text-muted font-monospace"><span class="badge ${badgeClass} text-opacity-75" style="font-size:0.7rem;">${canalNombre}</span></td>
+                        <td class="fw-bold fs-6">
+                            <button class="btn btn-xs btn-primary me-2 py-0 px-2 rounded-circle" onclick="DistribucionManager.toggleCliente2B(${clIdx}, this)">
+                                <i class="fas fa-chevron-right" style="font-size:0.75rem;"></i>
+                            </button>
+                            <i class="fas fa-map-marker-alt me-1 text-danger"></i>${cliData.nombre}
+                            <small class="text-muted font-monospace fw-normal ms-1">(${cliData.items.length} cat.)</small>
+                        </td>
+                        <td class="text-muted font-monospace fs-7">Venta Cliente</td>
+                        <td class="text-muted font-monospace fs-7">Consolidado</td>
+                        <td class="text-end font-monospace fw-bold bg-secondary bg-opacity-10 fs-6">${FormatoUtils.formatearNumero(cliData.totalUnidades)}</td>
+                        ${mesesCliRowHtml}
+                        <td class="text-end font-monospace fw-bold text-success bg-success bg-opacity-10 fs-6">${fmtDinero(cliData.totalVentaUSD)}</td>
                     </tr>`;
+
+                // NIVEL 3: RUBROS Y CATEGORÍAS DEL CLIENTE
+                cliData.items.forEach(item => {
+                    let mesesItemHtml = '';
+                    DistribucionManager.mesesCostosClaves.forEach((m, mIdx) => {
+                        const labelMes = DistribucionManager.mesesCostos[mIdx];
+                        const tasaMes = esARS ? DistribucionManager.tasaParaMes(labelMes) : 1;
+                        const itemMUSD = item.mesesUSD[m] || 0;
+                        mesesItemHtml += `<td class="text-end font-monospace text-muted" style="font-size:0.85rem;">${fmtDinero(itemMUSD, tasaMes)}</td>`;
+                    });
+
+                    htmlBody += `
+                        <tr class="table-light child-canal-2b-${cIdx} child-cli-2b-${clIdx} bg-light-subtle" style="display: none; font-size: 0.85rem; border-left: 4px solid #ffc107; vertical-align: middle;">
+                            <td class="ps-3 text-muted font-monospace small">${canalNombre}</td>
+                            <td class="ps-4 text-muted font-monospace"><i class="fas fa-level-up-alt fa-rotate-90 me-2 text-warning"></i>${cliData.nombre}</td>
+                            <td class="fw-bold text-dark">${item.rubro}</td>
+                            <td class="text-secondary fw-semibold">${item.categoria}</td>
+                            <td class="text-end font-monospace text-muted">${FormatoUtils.formatearNumero(item.unidadesTotal)}</td>
+                            ${mesesItemHtml}
+                            <td class="text-end font-monospace text-success fw-bold" style="background:#e8f5e9;">${fmtDinero(item.ventaTotalUSD)}</td>
+                        </tr>`;
+                });
             });
         });
 
-        // Fila Total General para 2B (coincidente al 100% con 2A)
+        // Fila Total General para 2B (coincidente al 100% con 2A) con estilo bien contrastado
         let mesesTotalEmpresaHtml = '';
         DistribucionManager.mesesCostosClaves.forEach((m, mIdx) => {
             const labelMes = DistribucionManager.mesesCostos[mIdx];
             const tasaMes = esARS ? DistribucionManager.tasaParaMes(labelMes) : 1;
-            mesesTotalEmpresaHtml += `<td class="text-end fw-bold font-monospace bg-dark text-white" style="font-size:0.85rem;">${fmtDinero(totalExactoLocalesPropiosMesUSD[m], tasaMes)}</td>`;
+            mesesTotalEmpresaHtml += `<td class="text-end fw-bold font-monospace" style="font-size:0.88rem; background-color: #0f172a !important; color: #ffffff !important;">${fmtDinero(totalExactoMesUSD[m], tasaMes)}</td>`;
         });
 
+        const etiquetaTotal = filtroCanal === 'TODOS'
+            ? `TOTAL GENERAL (TODOS LOS CANALES)`
+            : `TOTAL GENERAL (${filtroCanal})`;
+
         const totalAnalisisRowHtml = `
-            <tr style="border-top: 3px double #000; border-bottom: 3px double #000; vertical-align: middle;" class="table-dark">
-                <td colspan="3" class="fw-bold text-uppercase" style="font-size:0.85rem; padding: 8px;">
-                    <i class="fas fa-calculator me-1"></i>TOTAL LOCALES PROPIOS (${listaSucursales.length} LOCALES)
+            <tr style="border-top: 3px double #000; border-bottom: 3px double #000; vertical-align: middle; background-color: #0f172a !important;" class="text-white">
+                <td colspan="4" class="fw-bold text-uppercase" style="font-size:0.88rem; padding: 12px 10px; background-color: #0f172a !important; color: #ffffff !important;">
+                    <i class="fas fa-calculator me-2 text-warning"></i><span style="color: #ffffff !important; font-weight: 800;">${etiquetaTotal}</span>
                 </td>
-                <td class="text-end fw-bold font-monospace bg-secondary text-white" style="font-size:0.85rem;">${FormatoUtils.formatearNumero(totalExactoLocalesPropiosUnidades)}</td>
+                <td class="text-end fw-bold font-monospace" style="font-size:0.88rem; background-color: #334155 !important; color: #ffffff !important;">${FormatoUtils.formatearNumero(totalExactoUnidades)}</td>
                 ${mesesTotalEmpresaHtml}
-                <td class="text-end fw-bold font-monospace bg-warning text-dark" style="font-size:0.85rem;">${fmtDinero(totalExactoLocalesPropiosVentaUSD)}</td>
+                <td class="text-end fw-bold font-monospace" style="font-size:0.92rem; background-color: #eab308 !important; color: #000000 !important; font-weight: 800 !important;">${fmtDinero(totalExactoVentaUSD)}</td>
             </tr>
         `;
         htmlBody += totalAnalisisRowHtml;
@@ -2869,20 +3042,44 @@ class DistribucionManager {
         // Actualizar badge total en header
         const headerIndicator = document.getElementById('indicador-locales-propios-totales-header');
         if (headerIndicator) {
+            const etiquetaBadge = filtroCanal === 'TODOS' ? 'Total Canales' : `Total ${filtroCanal}`;
             headerIndicator.innerHTML = `
                 <span class="badge bg-warning text-dark fs-6 font-monospace shadow-sm">
-                    Total Locales: ${fmtDinero(totalExactoLocalesPropiosVentaUSD)}
+                    ${etiquetaBadge}: ${fmtDinero(totalExactoVentaUSD)}
                 </span>
             `;
         }
     }
 
     /**
-     * Alterna la expansión de sucursales para una fila específica en la tabla de Análisis 2B
+     * Alterna la expansión de clientes para un canal específico en la tabla de Análisis 2B
      */
-    static toggleSucursales2B(index, btn) {
+    static toggleCanal2B(index, btn) {
         const icon = btn.querySelector('i');
-        const childRows = document.querySelectorAll(`.child-2b-row-${index}`);
+        const childRows = document.querySelectorAll(`.child-canal-2b-${index}`);
+        const isCollapsed = icon.classList.contains('fa-chevron-right');
+
+        if (isCollapsed) {
+            icon.classList.remove('fa-chevron-right');
+            icon.classList.add('fa-chevron-down');
+            childRows.forEach(row => {
+                if (row.id && row.id.startsWith('row-cli-2b-')) {
+                    row.style.display = '';
+                }
+            });
+        } else {
+            icon.classList.remove('fa-chevron-down');
+            icon.classList.add('fa-chevron-right');
+            childRows.forEach(row => row.style.display = 'none');
+        }
+    }
+
+    /**
+     * Alterna la expansión de rubros/categorías para un cliente específico en la tabla de Análisis 2B
+     */
+    static toggleCliente2B(index, btn) {
+        const icon = btn.querySelector('i');
+        const childRows = document.querySelectorAll(`.child-cli-2b-${index}`);
         const isCollapsed = icon.classList.contains('fa-chevron-right');
 
         if (isCollapsed) {
@@ -2897,20 +3094,22 @@ class DistribucionManager {
     }
 
     /**
-     * Expande o colapsa todas las sucursales en la pestaña de Análisis 2B
+     * Expande o colapsa todo en la pestaña de Análisis 2B
      */
     static toggleExpandirTodasSucursales2B(btn) {
         const isExpanding = btn.innerHTML.includes('Expandir');
-        const allChildRows = document.querySelectorAll('#tbody-analisis-locales tr[class*="child-2b-row-"]');
+        const allClientRows = document.querySelectorAll('#tbody-analisis-locales tr[class*="child-canal-2b-"]');
+        const allCategoryRows = document.querySelectorAll('#tbody-analisis-locales tr[class*="child-cli-2b-"]');
         const allIcons = document.querySelectorAll('#tbody-analisis-locales button i.fa-chevron-right, #tbody-analisis-locales button i.fa-chevron-down');
 
         if (isExpanding) {
             btn.innerHTML = `<i class="fas fa-compress-alt me-1"></i>Colapsar Todo`;
-            allChildRows.forEach(r => r.style.display = '');
+            allClientRows.forEach(r => r.style.display = '');
+            allCategoryRows.forEach(r => r.style.display = '');
             allIcons.forEach(i => { i.classList.remove('fa-chevron-right'); i.classList.add('fa-chevron-down'); });
         } else {
             btn.innerHTML = `<i class="fas fa-expand-alt me-1"></i>Expandir Todo`;
-            allChildRows.forEach(r => r.style.display = 'none');
+            allCategoryRows.forEach(r => r.style.display = 'none');
             allIcons.forEach(i => { i.classList.remove('fa-chevron-down'); i.classList.add('fa-chevron-right'); });
         }
     }

@@ -360,10 +360,10 @@ class DistribucionController {
                         $mesesDistribuidos[$mesMayorPorcentaje]['unidades'] += $diferenciaMes;
                     }
 
-                    // Recopilar información detallada de sucursales para LOCALES PROPIOS
+                    // Recopilar información detallada de sucursales/clientes para todos los canales que tengan sucursales
                     $sucursalesDetalle = [];
                     $canalClave = trim($canal);
-                    if ($canalClave === 'LOCALES PROPIOS' && isset($ventasCanal[$canalClave]['sucursales'])) {
+                    if (isset($ventasCanal[$canalClave]['sucursales']) && count($ventasCanal[$canalClave]['sucursales']) > 0) {
                         foreach ($ventasCanal[$canalClave]['sucursales'] as $sucName => $sucData) {
                             $sucVentaTotal = $sucData['total'];
                             // Participación de la sucursal respecto a la venta del canal completo

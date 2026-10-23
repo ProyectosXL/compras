@@ -202,7 +202,7 @@
                         aria-controls="pane-2b-analisis" 
                         aria-selected="false"
                         onclick="DistribucionManager.cambiarSubtabPaso2('2B')">
-                    <i class="fas fa-chart-bar me-2 text-success"></i>2B - Análisis (Locales Propios)
+                    <i class="fas fa-chart-bar me-2 text-success"></i>2B - Análisis (Canales y Clientes/Sucursales)
                 </button>
             </li>
         </ul>
@@ -301,15 +301,27 @@
                 </div>
             </div>
 
-            <!-- PESTAÑA 2B: ANÁLISIS (Apertura por Sucursal de Locales Propios) -->
+            <!-- PESTAÑA 2B: ANÁLISIS (Apertura por Canal y Sucursal/Cliente) -->
             <div class="tab-pane fade" id="pane-2b-analisis" role="tabpanel" aria-labelledby="tab-2b-btn">
                 <div class="card shadow-sm border-0 mb-4" style="border-radius: 12px; overflow: hidden; border-left: 5px solid #ffc107 !important;">
-                    <div class="card-header bg-light border-0 py-3 d-flex align-items-center justify-content-between">
-                        <h5 class="mb-0 text-dark fw-bold d-flex align-items-center">
-                            <i class="fas fa-store me-2 text-warning"></i>Presupuesto de Venta - Locales Propios por Sucursal
-                            <span id="indicador-locales-propios-totales-header" class="ms-3"></span>
-                        </h5>
+                    <div class="card-header bg-light border-0 py-3 d-flex flex-wrap align-items-center justify-content-between gap-2">
+                        <div class="d-flex align-items-center flex-wrap gap-2">
+                            <h5 class="mb-0 text-dark fw-bold d-flex align-items-center">
+                                <i class="fas fa-store me-2 text-warning"></i>Presupuesto de Venta - Análisis por Canal y Cliente / Sucursal
+                            </h5>
+                            <span id="indicador-locales-propios-totales-header" class="ms-2"></span>
+                        </div>
                         <div class="d-flex align-items-center gap-2">
+                            <div class="d-flex align-items-center gap-1">
+                                <label for="filtro-canal-analisis-2b" class="form-label mb-0 small fw-bold text-secondary">Canal:</label>
+                                <select class="form-select form-select-sm" id="filtro-canal-analisis-2b" style="min-width: 170px;" onchange="DistribucionManager.filtrarCanalAnalisis2B(this.value)">
+                                    <option value="TODOS">Todos los Canales</option>
+                                    <option value="LOCALES PROPIOS">Locales Propios</option>
+                                    <option value="FRANQUICIAS">Franquicias</option>
+                                    <option value="MAYORISTAS">Mayoristas</option>
+                                    <option value="ECOMMERCE">Ecommerce</option>
+                                </select>
+                            </div>
                             <button class="btn btn-sm btn-outline-secondary rounded-pill px-3" onclick="DistribucionManager.toggleExpandirTodasSucursales2B(this)">
                                 <i class="fas fa-expand-alt me-1"></i>Expandir Todo
                             </button>
@@ -320,7 +332,8 @@
                             <table class="table table-striped table-hover mb-0 align-middle" id="tabla-analisis-locales">
                                 <thead class="table-dark sticky-header">
                                     <tr id="thead-analisis-locales-row">
-                                        <th style="min-width:200px;">Sucursal / Local Propio</th>
+                                        <th style="min-width:180px;">Canal</th>
+                                        <th style="min-width:200px;">Cliente / Sucursal</th>
                                         <th>Rubro</th>
                                         <th>Categoría</th>
                                         <th class="text-center bg-secondary text-white">Venta Proyectada (U.)</th>
@@ -331,7 +344,7 @@
                                     <tr>
                                         <td colspan="6" class="text-center text-muted py-4">
                                             <i class="fas fa-info-circle mb-2"></i><br>
-                                            Cargue la distribución para analizar el desglose de Locales Propios por Sucursal
+                                            Cargue la distribución para analizar el desglose por Canal y Cliente / Sucursal
                                         </td>
                                     </tr>
                                 </tbody>

@@ -142,6 +142,64 @@ class Distribucion {
                 $ventasMap[$rubro][$categoria][$canal]['sucursales'][$sucursal]['total'] += $ventas;
             }
             sqlsrv_free_stmt($stmt);
+
+            // Obtener sucursales específicas de FRANQUICIAS de forma directa y rápida (sin timeout)
+            $sqlFranq = "SELECT 
+                            v.DESC_SUCURSAL,
+                            MONTH(v.FECHA_VENTA) AS MES,
+                            YEAR(v.FECHA_VENTA) AS ANIO,
+                            SUM(CAST(v.CANT_VEND AS INT)) AS VENTAS
+                         FROM dbo.RO_VENTAS_COMERCIAL v
+                         WHERE v.FECHA_VENTA >= ? AND v.FECHA_VENTA <= ? AND v.CANAL = 'FRANQUICIAS'
+                         GROUP BY v.DESC_SUCURSAL, MONTH(v.FECHA_VENTA), YEAR(v.FECHA_VENTA)";
+            $stmtFranq = sqlsrv_query($this->cid_power, $sqlFranq, $params);
+            if ($stmtFranq !== false) {
+                $franqSucursalesMap = [];
+                $franqTotalGeneral = 0;
+                while ($rF = sqlsrv_fetch_array($stmtFranq, SQLSRV_FETCH_ASSOC)) {
+                    $suc = trim($rF['DESC_SUCURSAL'] ?? '');
+                    if ($suc === '' || $suc === 'FRANQUICIAS') continue;
+                    $m = (int)$rF['MES'];
+                    $y = (int)$rF['ANIO'];
+                    $mKey = "$m-$y";
+                    $v = (int)$rF['VENTAS'];
+
+                    if (!isset($franqSucursalesMap[$suc])) {
+                        $franqSucursalesMap[$suc] = [
+                            'total' => 0,
+                            'meses' => []
+                        ];
+                    }
+                    if (!isset($franqSucursalesMap[$suc]['meses'][$mKey])) {
+                        $franqSucursalesMap[$suc]['meses'][$mKey] = 0;
+                    }
+                    $franqSucursalesMap[$suc]['meses'][$mKey] += $v;
+                    $franqSucursalesMap[$suc]['total'] += $v;
+                    $franqTotalGeneral += $v;
+                }
+                sqlsrv_free_stmt($stmtFranq);
+
+                // Si obtuvimos sucursales de franquicias, asignarlas al canal FRANQUICIAS en cada rubro/categoría
+                if (!empty($franqSucursalesMap) && $franqTotalGeneral > 0) {
+                    foreach ($ventasMap as $rKey => &$cats) {
+                        foreach ($cats as $cKey => &$canalesMap) {
+                            if (isset($canalesMap['FRANQUICIAS'])) {
+                                $vCanalTotal = $canalesMap['FRANQUICIAS']['total'];
+                                $canalesMap['FRANQUICIAS']['sucursales'] = [];
+                                foreach ($franqSucursalesMap as $sucName => $sucInfo) {
+                                    $prop = $sucInfo['total'] / $franqTotalGeneral;
+                                    $canalesMap['FRANQUICIAS']['sucursales'][$sucName] = [
+                                        'total' => round($vCanalTotal * $prop),
+                                        'meses' => $sucInfo['meses']
+                                    ];
+                                }
+                            }
+                        }
+                    }
+                    unset($cats);
+                }
+            }
+
             return $ventasMap;
         } catch (Exception $e) {
             error_log("Error en Distribucion::obtenerTodasLasVentasPorCanal: " . $e->getMessage());
