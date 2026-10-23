@@ -125,6 +125,144 @@ class CostoProyeccion {
     }
 
     /**
+     * Obtener el tipo de cambio oficial vendedor actual (hoy)
+     */
+    public function obtenerTipoCambioHoy() {
+        try {
+            if (!$this->cid_sistemas) {
+                return 1500.0; // Fallback prudencial
+            }
+            // Buscar última cotización vendedora del BCRA
+            $sql = "SELECT TOP 1 Vendedor FROM dbo.dolar_oficial_bcra ORDER BY Fecha DESC";
+            $stmt = sqlsrv_query($this->cid_sistemas, $sql);
+            if ($stmt !== false) {
+                $row = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC);
+                sqlsrv_free_stmt($stmt);
+                if (!empty($row['Vendedor']) && (float)$row['Vendedor'] > 0) {
+                    return (float)$row['Vendedor'];
+                }
+            }
+            return 1500.0;
+        } catch (Exception $e) {
+            error_log("Error en CostoProyeccion::obtenerTipoCambioHoy: " . $e->getMessage());
+            return 1500.0;
+        }
+    }
+
+    /**
+     * Calcular y sincronizar automáticamente COSTO PROM (U$D) ejecutando
+     * RO_SP_COSTO_MEDIANA_RUBRO_CATEGORIA en XL-TANGO -> LAKER_SA (últimos 90 días).
+     * Convierte los costos de ARS a USD con la cotización de hoy y actualiza FP_T_COSTOS_PARAMETROS.
+     */
+    public function sincronizarCostoMediana90Dias() {
+        try {
+            $conexion = new Conexion();
+            $cidCentral = $conexion->conectar('central'); // XL-TANGO -> LAKER_SA
+
+            if (!$cidCentral) {
+                throw new Exception("No se pudo conectar a la base central (XL-TANGO -> LAKER_SA).");
+            }
+
+            $tcHoy = $this->obtenerTipoCambioHoy();
+            if ($tcHoy <= 0) {
+                $tcHoy = 1500.0;
+            }
+
+            $desde = date('Y-m-d', strtotime('-90 days'));
+            $hasta = date('Y-m-d');
+
+            // Ejecutar el SP de mediana
+            $sql = "EXEC dbo.RO_SP_COSTO_MEDIANA_RUBRO_CATEGORIA @DESDE = ?, @HASTA = ?, @DETALLE = 0";
+            $params = [$desde, $hasta];
+            $stmt = sqlsrv_query($cidCentral, $sql, $params);
+
+            if ($stmt === false) {
+                throw new Exception("Error al ejecutar RO_SP_COSTO_MEDIANA_RUBRO_CATEGORIA: " . print_r(sqlsrv_errors(), true));
+            }
+
+            // Agrupar filas por Rubro y Categoría
+            // Para cada combinación rubro|categoría, recolectar las medianas de cada canal/mes
+            $agrupado = [];
+            while ($row = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC)) {
+                $rubro = trim($row['RUBRO'] ?? '');
+                $cat = trim($row['CATEGORIA'] ?? '');
+                $costoARS = (float)($row['COSTO'] ?? 0);
+                if ($rubro === '' || $cat === '' || $costoARS <= 0) continue;
+
+                $clave = "$rubro|$cat";
+                if (!isset($agrupado[$clave])) {
+                    $agrupado[$clave] = [
+                        'rubro' => $rubro,
+                        'categoria_padre' => $cat,
+                        'costos' => []
+                    ];
+                }
+                $agrupado[$clave]['costos'][] = $costoARS;
+            }
+            sqlsrv_free_stmt($stmt);
+            sqlsrv_close($cidCentral);
+
+            if (empty($agrupado)) {
+                throw new Exception("El procedimiento de mediana no devolvió datos para los últimos 90 días.");
+            }
+
+            // Obtener los parámetros globales actuales para conservar INC_FOB y Markups existentes
+            $paramsActuales = $this->obtenerParametrosGlobales();
+
+            $filasParaGuardar = [];
+            foreach ($agrupado as $clave => $item) {
+                $rubro = $item['rubro'];
+                $cat = $item['categoria_padre'];
+                $costosLista = $item['costos'];
+                sort($costosLista);
+                $n = count($costosLista);
+                $medianaARS = ($n % 2 === 0) 
+                    ? ($costosLista[$n / 2 - 1] + $costosLista[$n / 2]) / 2 
+                    : $costosLista[floor($n / 2)];
+
+                // Conversión a Dólares con el tipo de cambio de hoy
+                $costoUSD = round($medianaARS / $tcHoy, 2);
+
+                // Conservar inc_fob y markups existentes si los tiene
+                $existente = $paramsActuales[$clave] ?? null;
+                $incFob = $existente ? (float)$existente['inc_fob'] : 0.0;
+                $vcosto = round($costoUSD * (1 + $incFob / 100), 2);
+
+                $filasParaGuardar[] = [
+                    'rubro' => $rubro,
+                    'categoria_padre' => $cat,
+                    'costo_prom' => $costoUSD,
+                    'inc_fob' => $incFob,
+                    'vcosto' => $vcosto,
+                    'markup_locales_propios' => $existente ? (float)$existente['markup_locales_propios'] : 0.0,
+                    'markup_franquicias' => $existente ? (float)$existente['markup_franquicias'] : 0.0,
+                    'markup_mayoristas' => $existente ? (float)$existente['markup_mayoristas'] : 0.0,
+                    'markup_ecommerce' => $existente ? (float)$existente['markup_ecommerce'] : 0.0
+                ];
+            }
+
+            // Guardar en la tabla FP_T_COSTOS_PARAMETROS
+            $resGuardar = $this->guardarParametrosGlobales($filasParaGuardar);
+            if ($resGuardar !== true) {
+                throw new Exception($resGuardar['mensaje'] ?? 'Error al guardar parámetros calculados.');
+            }
+
+            return [
+                'success' => true,
+                'total_actualizados' => count($filasParaGuardar),
+                'tc_utilizado' => $tcHoy,
+                'periodo' => "$desde a $hasta"
+            ];
+        } catch (Exception $e) {
+            error_log("Error en CostoProyeccion::sincronizarCostoMediana90Dias: " . $e->getMessage());
+            return [
+                'success' => false,
+                'message' => $e->getMessage()
+            ];
+        }
+    }
+
+    /**
      * Obtener parámetros globales de costo por rubro y categoría
      */
     public function obtenerParametrosGlobales() {

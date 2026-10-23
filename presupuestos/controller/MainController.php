@@ -458,6 +458,7 @@ class MainController {
             case 'guardar-distribucion':
             case 'guardar-costos':
             case 'guardar-parametros-costos':
+            case 'calcular-costo-mediana':
             case 'eliminar-version':
                 $this->delegarDistribucion($accion);
                 break;
@@ -686,6 +687,7 @@ class MainController {
                 $distribucionController->obtenerParametrosGlobales();
                 break;
             case 'guardar-parametros-costos':
+            case 'calcular-costo-mediana':
                 $distribucionController->guardarParametrosGlobales();
                 break;
             case 'eliminar-version':

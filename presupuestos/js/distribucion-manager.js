@@ -1991,6 +1991,50 @@ class DistribucionManager {
     /**
      * Guardar los parámetros globales editados
      */
+    /**
+     * Calcular costos mediana ejecutando SP RO_SP_COSTO_MEDIANA_RUBRO_CATEGORIA con últimos 90 días
+     * y convertir a USD con el dólar oficial de hoy
+     */
+    static async calcularCostoMedianaModal() {
+        try {
+            const confirmar = await UIUtils.confirmar(
+                '¿Desea calcular y actualizar automáticamente el COSTO PROM (U) por Rubro y Categoría ejecutando la mediana de los últimos 90 días en Tango?',
+                'Calcular Costo Mediana (90 Días)'
+            );
+            if (!confirmar) return;
+
+            UIUtils.mostrarLoading(true);
+            const res = await APIClient.calcularCostoMedianaParametros();
+            if (res.success) {
+                UIUtils.mostrarAlerta(res.message || 'Costos mediana calculados y guardados con éxito.', 'success');
+                // Recargar el modal con los nuevos parámetros globales guardados en la BD
+                const response = await APIClient.obtenerParametrosCostos();
+                if (response.success && response.parametros) {
+                    const mapa = {};
+                    response.parametros.forEach(p => mapa[`${p.rubro}|${p.categoria_padre}`] = p);
+                    DistribucionManager.parametrosGlobalesModal.forEach(item => {
+                        const k = `${item.rubro}|${item.categoria_padre}`;
+                        if (mapa[k]) {
+                            item.costo_prom = mapa[k].costo_prom;
+                            item.vcosto = mapa[k].vcosto;
+                            item.inc_fob = mapa[k].inc_fob;
+                        }
+                    });
+                    DistribucionManager.renderizarParametrosModal();
+                }
+                // Recargar costos generales del paso 2
+                await DistribucionManager.cargarCostos();
+            } else {
+                throw new Error(res.message || 'No se pudo calcular la mediana de costos.');
+            }
+        } catch (e) {
+            console.error(e);
+            UIUtils.mostrarAlerta('Error al calcular mediana de costos: ' + e.message, 'error');
+        } finally {
+            UIUtils.mostrarLoading(false);
+        }
+    }
+
     static async guardarParametrosModal() {
         try {
             UIUtils.mostrarLoading(true);

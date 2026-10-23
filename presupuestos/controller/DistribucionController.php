@@ -751,6 +751,29 @@ class DistribucionController {
     }
 
     /**
+     * Calcular y sincronizar automáticamente COSTO PROM (U$D) ejecutando
+     * RO_SP_COSTO_MEDIANA_RUBRO_CATEGORIA en XL-TANGO -> LAKER_SA (últimos 90 días).
+     */
+    public function calcularCostoMedianaParametros() {
+        try {
+            $costosModel = new CostoProyeccion();
+            $res = $costosModel->sincronizarCostoMediana90Dias();
+
+            if ($res['success']) {
+                $this->jsonResponse([
+                    'success' => true,
+                    'message' => "Costos mediana calculados y guardados correctamente en base a los últimos 90 días (TC Dólar Oficial: $" . number_format($res['tc_utilizado'], 2) . ").",
+                    'detalle' => $res
+                ]);
+            } else {
+                $this->jsonResponse(['success' => false, 'message' => $res['message'] ?? 'Error desconocido al calcular mediana'], 500);
+            }
+        } catch (Exception $e) {
+            $this->jsonResponse(['success' => false, 'message' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
      * Guardar costos de proyección (Mantenido por compatibilidad de firma o auditoría)
      */
     public function guardarCostos() {

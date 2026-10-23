@@ -484,6 +484,13 @@ class APIClient {
     }
 
     /**
+     * Calcular y sincronizar automáticamente costos mediana por Rubro y Categoría (últimos 90 días)
+     */
+    static async calcularCostoMedianaParametros() {
+        return await APIClient.llamarAPI('calcular-costo-mediana', {}, 'POST');
+    }
+
+    /**
      * Eliminar una versión guardada
      */
     static async eliminarVersion(nombreVersion, temporada = 'VERANO') {

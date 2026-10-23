@@ -477,10 +477,13 @@
             </div>
             <div class="modal-body p-3">
                 <div class="mb-3 d-flex align-items-center gap-3">
-                    <div class="input-group input-group-sm">
+                    <div class="input-group input-group-sm flex-grow-1">
                         <span class="input-group-text bg-white"><i class="fas fa-filter"></i></span>
                         <input type="text" class="form-control" id="buscar-parametro-modal" placeholder="Filtrar parámetros por rubro o categoría..." onkeyup="DistribucionManager.filtrarParametrosModal(this.value)">
                     </div>
+                    <button type="button" class="btn btn-sm btn-primary text-nowrap fw-bold rounded-pill px-3 shadow-sm" id="btn-calcular-mediana-modal" onclick="DistribucionManager.calcularCostoMedianaModal()" title="Ejecuta RO_SP_COSTO_MEDIANA_RUBRO_CATEGORIA con los últimos 90 días y convierte a U$D">
+                        <i class="fas fa-calculator me-1"></i>Calcular Costos Mediana (Últimos 90 días)
+                    </button>
                 </div>
 
                 <!-- Pestañas internas del Modal -->
@@ -571,6 +574,9 @@
                 </div>
             </div>
             <div class="modal-footer bg-light border-0 py-3" style="border-bottom-left-radius: 16px; border-bottom-right-radius: 16px;">
+                <button type="button" class="btn btn-outline-primary btn-sm rounded-pill px-3 me-auto" onclick="DistribucionManager.calcularCostoMedianaModal()">
+                    <i class="fas fa-magic me-1"></i>Calcular Costo Mediana (90 días)
+                </button>
                 <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill px-3" data-bs-dismiss="modal">Cancelar</button>
                 <button type="button" class="btn btn-warning btn-sm fw-bold text-dark rounded-pill px-4" onclick="DistribucionManager.guardarParametrosModal()">
                     <i class="fas fa-save me-1"></i>Guardar Parámetros
