@@ -608,3 +608,41 @@ td.tramo-desactualizado {
     opacity: 0.6;
     cursor: help;
 }
+
+
+/* OC pendientes en las solapas de compra: las cuatro columnas existen siempre y la
+   vista de la tabla decide cuáles se ven. Va por data-col para que alcance a la
+   vez al encabezado, a las filas y a la fila de totales. */
+table[data-vista-oc="abierto"] [data-col="oc-total"],
+table:not([data-vista-oc="abierto"]) [data-col="oc-ver"],
+table:not([data-vista-oc="abierto"]) [data-col="oc-inv"],
+table:not([data-vista-oc="abierto"]) [data-col="oc-atemp"] {
+    display: none;
+}
+
+/* Columnas ocultas desde el botón "Columnas" (tabla-columnas.js). */
+.col-oculta {
+    display: none !important;
+}
+
+/* Encabezados que ordenan al hacer clic. */
+th.th-ordenable {
+    cursor: pointer;
+    user-select: none;
+}
+th.th-ordenable:hover {
+    filter: brightness(1.1);
+}
+.orden-indicador {
+    font-size: 0.75em;
+    white-space: nowrap;
+}
+
+/* Checklist de columnas: con scroll para las tablas con muchas columnas dinámicas. */
+.menu-columnas {
+    min-width: 220px;
+}
+.menu-columnas__lista {
+    max-height: 50vh;
+    overflow-y: auto;
+}
