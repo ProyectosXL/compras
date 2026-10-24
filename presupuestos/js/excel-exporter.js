@@ -364,25 +364,61 @@ class ExcelExporter {
         };
     }
 
+    /**
+     * Venta anterior de una fila: la misma que muestra la pantalla y la que usó el
+     * servidor para proyectar. Antes acá se buscaba por su cuenta con el año del
+     * navegador y, si no encontraba, tomaba la PRIMERA columna VTA_VERANO_* del
+     * registro, que es la más vieja: en esos casos el Excel mostraba otra base que
+     * la pantalla.
+     */
     static buscarVentaHistorica(item, temporada) {
-        // Misma lógica que TotalesCompra para consistencia
-        const anoActual = new Date().getFullYear().toString().substr(-2);
-        const anoAnterior = (parseInt(anoActual) - 1).toString();
-        
-        const posibles = temporada === 'VERANO' 
-            ? ['VENTA_VER_ANT', 'VTA_VERANO_ANT', `VTA_VERANO_${anoActual}`, `VTA_VERANO_${anoAnterior}`]
-            : ['VENTA_INV_ANT', 'VTA_INVIERNO_ANT', `VTA_INVIERNO_${anoActual}`, `VTA_INVIERNO_${anoAnterior}`];
+        return TemporadaServidor.ventaAnteriorDe(item, temporada);
+    }
 
-        for (const k of posibles) {
-            if (item[k] !== undefined) return parseFloat(item[k]);
-        }
-        
-        // Búsqueda genérica
-        const patron = temporada === 'VERANO' ? 'VTA_VERANO_' : 'VTA_INVIERNO_';
-        const keys = Object.keys(item).filter(k => k.startsWith(patron));
-        if (keys.length > 0) return parseFloat(item[keys[0]]);
-        
-        return 0;
+    /**
+     * Fila TOTALES de una hoja de compra, al final.
+     *
+     * Suma las columnas numéricas de las filas exportadas. Los índices no se suman:
+     * debajo de los LP y TE va el índice general de cada universo, ponderado por
+     * venta, igual que en la pantalla (TotalesCompra.indiceGeneral). Los índices
+     * originales y las columnas de texto quedan vacíos.
+     */
+    static filaTotalesPresupuesto(filas, datos) {
+        if (!filas.length) return null;
+
+        const totales = { ventas60: { lp: 0, lpAnt: 0, te: 0, teAnt: 0, hayLp: false, hayTe: false } };
+        datos.forEach(item => {
+            if (item.VTA_60D_LP !== null && item.VTA_60D_LP !== undefined) {
+                totales.ventas60.hayLp = true;
+                totales.ventas60.lp += parseFloat(item.VTA_60D_LP || 0);
+                totales.ventas60.lpAnt += parseFloat(item.VTA_60D_ANT_LP || 0);
+            }
+            if (item.VTA_60D_TE !== null && item.VTA_60D_TE !== undefined) {
+                totales.ventas60.hayTe = true;
+                totales.ventas60.te += parseFloat(item.VTA_60D_TE || 0);
+                totales.ventas60.teAnt += parseFloat(item.VTA_60D_ANT_TE || 0);
+            }
+        });
+        const general = (tipo) => {
+            const g = TotalesCompra.indiceGeneral(totales, tipo);
+            return g.valor === null ? '—' : `General ${g.texto}`;
+        };
+
+        const fila = {};
+        Object.keys(filas[0]).forEach(col => {
+            if (col === 'Rubro') { fila[col] = 'TOTALES'; return; }
+            if (/^Índice .* LP$/.test(col)) { fila[col] = general('lp'); return; }
+            if (/^Índice .* Total Empresa$/.test(col)) { fila[col] = general('te'); return; }
+            if (col.startsWith('Índice')) { fila[col] = ''; return; }
+
+            // Una columna se suma si todos sus valores son números: así quedan afuera
+            // las de texto (temporada base, nota) y las que traen "—".
+            const valores = filas.map(f => f[col]);
+            fila[col] = valores.every(v => typeof v === 'number' || (v !== '' && v !== null && !isNaN(v) && typeof v !== 'boolean'))
+                ? valores.reduce((a, v) => a + (parseFloat(v) || 0), 0)
+                : '';
+        });
+        return fila;
     }
 
     static prepararDatosCompras(datos) {
@@ -434,6 +470,8 @@ class ExcelExporter {
                 case 'verano':
                     datosCrudos = ExcelExporter.obtenerDatosFiltradosOCompletos('verano');
                     datosPreparados = ExcelExporter.prepararDatosPresupuesto(datosCrudos, 'verano');
+                    const totalesVerano = ExcelExporter.filaTotalesPresupuesto(datosPreparados, datosCrudos);
+                    if (totalesVerano) datosPreparados.push(totalesVerano);
                     nombreHoja = 'Compra Verano';
                     nombreArchivo = `compra_verano_${ExcelExporter.obtenerFechaHora()}.xlsx`;
                     break;
@@ -441,6 +479,8 @@ class ExcelExporter {
                 case 'invierno':
                     datosCrudos = ExcelExporter.obtenerDatosFiltradosOCompletos('invierno');
                     datosPreparados = ExcelExporter.prepararDatosPresupuesto(datosCrudos, 'invierno');
+                    const totalesInvierno = ExcelExporter.filaTotalesPresupuesto(datosPreparados, datosCrudos);
+                    if (totalesInvierno) datosPreparados.push(totalesInvierno);
                     nombreHoja = 'Compra Invierno';
                     nombreArchivo = `compra_invierno_${ExcelExporter.obtenerFechaHora()}.xlsx`;
                     break;

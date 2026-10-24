@@ -29,7 +29,7 @@
 <script src="js/contenedores-manager.js?v=2.0"></script>
 <script src="js/totales-compra.js?v=3.1"></script>
 <script src="js/totales-stock.js?v=2.0"></script>
-<script src="js/excel-exporter.js?v=14.2"></script>
+<script src="js/excel-exporter.js?v=14.3"></script>
 <script src="js/ventas-manager.js?v=2.0"></script>
 <script src="js/distribucion-manager.js?v=21.0"></script>
 

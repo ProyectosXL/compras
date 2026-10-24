@@ -51,6 +51,124 @@
             </div>
         </div>
 
+        <!-- Índice LP vs. Total Empresa -->
+        <div class="accordion-item">
+            <h2 class="accordion-header">
+                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseIndices">
+                    <i class="fas fa-percent me-2"></i>
+                    Índice Locales Propios e índice Total Empresa
+                </button>
+            </h2>
+            <div id="collapseIndices" class="accordion-collapse collapse" data-bs-parent="#calculosAccordion">
+                <div class="accordion-body">
+                    <p class="small">
+                        La venta proyectada es la <strong>venta histórica</strong> de la temporada multiplicada
+                        por un <strong>índice de variación</strong>. Los dos índices comparan los últimos 60 días
+                        (hasta ayer) contra los mismos 60 días del año anterior; cambia el universo:
+                    </p>
+                    <div class="row g-2 mb-2">
+                        <div class="col-12 col-md-6">
+                            <div class="card bg-secondary-subtle h-100">
+                                <div class="card-body p-2">
+                                    <h6 class="small">Índice LP <span class="text-muted">(Locales Propios)</span></h6>
+                                    <p class="small mb-0">Solo el canal Locales Propios. Queda como <strong>termómetro</strong>:
+                                       se ve pero no mueve la proyección y no se edita.</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-12 col-md-6">
+                            <div class="card bg-warning-subtle h-100">
+                                <div class="card-body p-2">
+                                    <h6 class="small">Índice Total Empresa</h6>
+                                    <p class="small mb-0">Locales Propios + Central, el <strong>mismo universo que la venta
+                                       histórica</strong>. Es el que mueve la venta proyectada, la compra y los tramos, y el que se edita.
+                                       Verano e invierno arrancan con el mismo valor y se editan por separado.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <p class="small">
+                        <strong>Índice Var. Original</strong> es el valor del índice editable tal como vino, antes de
+                        tocarlo: es el valor al que vuelve "restaurar" (la ×). Arranca oculta; se muestra desde el
+                        botón <em>Columnas</em>. Cuando el año anterior no tuvo venta el índice viene en 0 y la
+                        proyección usa 1,00.
+                    </p>
+                    <h6 class="small"><i class="fas fa-calculator me-2"></i>Índice general</h6>
+                    <p class="small">
+                        En la fila TOTALES, debajo de cada columna de índice, va el índice <strong>general</strong> de
+                        las filas visibles: <code>suma venta 60 días ÷ suma venta mismos 60 días del año anterior</code>.
+                        Es ponderado por venta (no un promedio de índices), se recalcula al filtrar o buscar y
+                        <strong>no cambia al editar índices</strong>: refleja la venta real y sirve de referencia para
+                        comparar lo que se editó.
+                    </p>
+                    <div class="alert alert-info p-2 mb-0">
+                        <span class="small">
+                            En <strong>Uruguay</strong> (y en Argentina mientras no se haya corrido el script 06 del SP)
+                            no hay índice Total Empresa: la columna muestra "—", el índice LP sigue siendo el editable y
+                            mueve la proyección como siempre.
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Temporada en curso: real + proyectada -->
+        <div class="accordion-item">
+            <h2 class="accordion-header">
+                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseEnCurso">
+                    <i class="fas fa-hourglass-half me-2"></i>
+                    Venta de la temporada en curso: real + proyectada
+                </button>
+            </h2>
+            <div id="collapseEnCurso" class="accordion-collapse collapse" data-bs-parent="#calculosAccordion">
+                <div class="accordion-body">
+                    <p class="small">
+                        Al lado de la <em>Venta Proy.</em> del tipo de la temporada que se está transitando hay tres columnas:
+                    </p>
+                    <ul class="small">
+                        <li><strong>Vendido</strong> (celeste): venta <strong>real</strong> desde el primer día de la temporada
+                            hasta la fecha que dice el encabezado ("al dd/mm"), que es el día anterior a la última corrida del SP.</li>
+                        <li><strong>Resto</strong> (azul): venta <strong>proyectada</strong> desde hoy hasta el fin de la temporada,
+                            con el índice de esa temporada. Es el mismo tramo "Resto" que ya está dentro de la venta proyectada y de la compra.</li>
+                        <li><strong>Total</strong>: Vendido + Resto.</li>
+                    </ul>
+                    <p class="small mb-2">
+                        Es <strong>informativo</strong>: no entra en la compra ni en los tramos. Se actualiza al editar el índice de esa temporada.
+                    </p>
+                    <div class="alert alert-warning p-2 mb-0">
+                        <span class="small">
+                            <i class="fas fa-exclamation-triangle text-warning"></i> Si el SP no corrió hoy, entre la fecha de corte
+                            y hoy quedan días que no están ni en Vendido ni en Resto: el encabezado lo avisa con la cantidad de días.
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- OC pendientes y columnas -->
+        <div class="accordion-item">
+            <h2 class="accordion-header">
+                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseColumnas">
+                    <i class="fas fa-columns me-2"></i>
+                    OC pendientes, ordenar y ocultar columnas
+                </button>
+            </h2>
+            <div id="collapseColumnas" class="accordion-collapse collapse" data-bs-parent="#calculosAccordion">
+                <div class="accordion-body">
+                    <p class="small">
+                        Las <strong>OC pendientes</strong> se ven a la derecha del Stock Proyectado. El botón <em>OC</em> alterna
+                        entre una sola columna (la suma) y una por temporada (verano, invierno, atemporal). Ya están
+                        <strong>dentro</strong> del Stock Proyectado: la compra proyectada es neta de lo pedido.
+                    </p>
+                    <p class="small mb-0">
+                        Clic en un encabezado ordena: ascendente, descendente y vuelta al orden original (▲ ▼). La fila
+                        TOTALES queda siempre al final. El botón <em>Columnas</em> permite ocultar columnas; la elección se
+                        recuerda en este navegador. El <strong>Excel exporta siempre todas</strong>, ocultas o no.
+                    </p>
+                </div>
+            </div>
+        </div>
+
         <!-- Stock Proyectado -->
         <div class="accordion-item">
             <h2 class="accordion-header">
