@@ -28,9 +28,37 @@
                             Si hay filtros, el sistema le pregunta si quiere guardar todo o solo lo que está
                             viendo.
                         </li>
-                        <li>Se generará un nombre automático que incluye la fecha y la hora (ej: <code>Presupuesto_2026-09-22_10-30_verano</code>).</li>
+                        <li>
+                            Elija el <strong>nombre</strong>: viene precargado con la fecha y la hora
+                            (ej: <code>Presupuesto_2026-09-22_10-30_verano</code>) y se puede cambiar, pero
+                            <strong>no puede repetir</strong> el de otra versión guardada.
+                        </li>
+                        <li>Si quiere, escriba un <strong>comentario general</strong>: se ve en el panel de versiones.</li>
                         <li>Recibirá una notificación con el resultado y la temporada objetivo de la versión.</li>
                     </ol>
+
+                    <h6 class="mt-3"><i class="fas fa-comment-dots me-2 text-warning"></i>Notas por fila</h6>
+                    <p class="small">
+                        Cada fila puede tener una <strong>nota</strong> (por qué se cambió el índice, por ejemplo). Se escribe
+                        en el campo <em>Nota / motivo del cambio</em> al editar un índice, o desde el ícono
+                        <i class="far fa-comment"></i> al lado del rubro, sin tocar índices. La fila con nota muestra el ícono
+                        resaltado y la nota al pasar el mouse. Hay una nota por fila y por solapa (la última que se escribió),
+                        se guarda con la versión y se ve en el historial y en el Excel.
+                    </p>
+
+                    <h6 class="mt-3"><i class="fas fa-code-branch me-2 text-primary"></i>Retomar una versión</h6>
+                    <p class="small">
+                        El botón <strong>Retomar versión</strong> de cada solapa de compra lista las versiones guardadas desde
+                        esa misma solapa. Al retomar una, sus <strong>índices y notas</strong> se aplican sobre los datos de
+                        <strong>hoy</strong> (stock, ventas y OC actuales) y se recalcula todo: venta, compra y tramos. Las filas
+                        con un índice distinto del de hoy quedan marcadas como editadas.
+                    </p>
+                    <ul class="small">
+                        <li>Un aviso lista las filas de la versión que hoy ya no existen. Las filas nuevas quedan con su índice de hoy.</li>
+                        <li>Si la versión es <strong>anterior al índice Total Empresa</strong>, se avisa: sus índices se habían armado sobre la base Locales Propios.</li>
+                        <li>Mientras se trabaja sobre ella, un cartel dice "Trabajando sobre: …" con un botón para descartar y volver a los índices originales.</li>
+                        <li>Guardar <strong>siempre crea una versión nueva</strong>: la retomada no se pisa, y la nueva recuerda de cuál salió.</li>
+                    </ul>
 
                     <div class="alert alert-warning">
                         <i class="fas fa-filter me-2"></i>
@@ -189,6 +217,11 @@
                             El botón <i class="fas fa-eraser"></i> limpia todos los filtros de una vez.
                         </li>
                     </ul>
+                    <p class="mt-3 small">
+                        <strong>Totales:</strong> con una versión elegida en el primer desplegable, la tabla termina en una
+                        fila TOTALES (stock, ventas, compra y compra por tramo) que respeta los demás filtros. Los índices
+                        no se suman. Sin versión elegida no se muestran totales: sumar versiones distintas no tiene sentido.
+                    </p>
                     <p class="mt-3">
                         Una vez que haya configurado sus filtros, presione el botón <button class="btn btn-primary btn-sm disabled"><i class="fas fa-search me-1"></i> Buscar</button> para cargar los datos en la tabla.
                     </p>

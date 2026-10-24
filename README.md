@@ -53,11 +53,16 @@ compra/
 │   │   ├── indice-editor.js
 │   │   ├── main.js
 │   │   ├── tabla-renderer.js
+│   │   ├── retomar-version.js     # Retomar una versión guardada sobre los datos de hoy
+│   │   ├── tabla-columnas.js      # Ordenar y ocultar columnas
 │   │   ├── temporada-servidor.js  # Temporada/días que calcula el servidor
 │   │   └── utils.js
 │   ├── sql/
 │   │   ├── 01_cabecera_versiones.sql      # DDL de la cabecera de versiones
-│   │   └── 02_migracion_versiones.php     # Migración de las versiones existentes
+│   │   ├── 02_migracion_versiones.php     # Migración de las versiones existentes
+│   │   ├── 03 a 05                        # Tramos y baja lógica (ver abajo)
+│   │   ├── 06_sp_presupuesto_compras.sql  # SP con índice Total Empresa (solo Argentina)
+│   │   └── 07_notas_e_indices_versiones.sql # Notas, comentario e índices LP/TE (solo Argentina)
 │   ├── api.php                    # API REST endpoints
 │   ├── index.php                  # Interfaz principal
 │   └── test_web.php               # Test de conexión y despliegue
@@ -94,8 +99,9 @@ ENV=PROD
 
 ### 4. Scripts de base de datos
 
-En `presupuestos/sql/`, en orden. Hay que correrlos **en las dos bases**:
-`POWER_BI_CONTROL` (Argentina) y `POWER_BI_CONTROL_URUGUAY` (Uruguay).
+En `presupuestos/sql/`, en orden. Del `01` al `05` hay que correrlos **en las dos bases**:
+`POWER_BI_CONTROL` (Argentina) y `POWER_BI_CONTROL_URUGUAY` (Uruguay). El `06` y el `07`
+son **solo de Argentina** y se niegan a correr en otra base.
 
 ```
 01_cabecera_versiones.sql     Crea la cabecera de versiones, el log de oficial y
@@ -122,12 +128,32 @@ En `presupuestos/sql/`, en orden. Hay que correrlos **en las dos bases**:
                               Los 4 bloques vienen en @CONFIRMAR_* = 0.
                               El bloque 4 (la vista para el consumidor externo)
                               es OPCIONAL y se puede dejar para después.
+
+06_sp_presupuesto_compras.sql SOLO ARGENTINA. ALTER completo del SP con el índice
+                              Total Empresa, las ventas de 60 días LP/TE y la venta
+                              real de la temporada en curso. Viene con
+                              @CONFIRMAR_SP = 0. Está armado sobre el SP vigente al
+                              24/10/2026: si el SP cambió después (ajuste de stock
+                              pendiente), MERGEAR antes de correrlo. Después hay que
+                              correr el SP una vez; el script trae una verificación
+                              de solo lectura para el final.
+
+07_notas_e_indices_versiones.sql
+                              SOLO ARGENTINA. indice_lp, indice_total_empresa_original
+                              y nota en el detalle; comentario e id_version_origen
+                              en la cabecera. Los 3 bloques vienen en @CONFIRMAR_* = 0.
 ```
 
-Los cinco son **reejecutables** y ninguno borra datos. La aplicación funciona con o sin
+Los siete son **reejecutables** y ninguno borra datos. La aplicación funciona con o sin
 ellos aplicados: mientras falten, el panel de versiones avisa que hay que correrlos y
 el resto sigue andando igual (sin el 03, se guarda y se muestra todo salvo el reparto
 por tramo; sin el 05, eliminar una versión sigue borrándola físicamente).
+
+Sin el `06` (Uruguay, o Argentina antes de correrlo) las solapas de compra funcionan como
+antes: el índice LP es el editable y mueve la proyección, y todo lo que depende de columnas
+nuevas (índice TE, índices generales, venta real de la temporada en curso) se muestra "—" con
+un tooltip que lo explica. Sin el `07`, se guarda igual pero sin notas, comentario ni versión
+de origen.
 
 El `04` **no inventa nada**: solo reconstruye las versiones cuyo reparto se puede
 reproducir exacto, y verifica fila por fila antes de escribir. La que no cierra queda
@@ -317,6 +343,56 @@ por canal, pertenecen al circuito de distribución y tienen otro grano), el tipo
 importe FOB calculado (es derivable de dos columnas ya guardadas y guardarlo abre la puerta
 a que queden desincronizados).
 
+## 📈 Índice Locales Propios e índice Total Empresa
+
+La venta proyectada es la venta histórica de la temporada (columnas del SP: **Locales
+Propios + Central**) multiplicada por un índice de variación: últimos 60 días hasta ayer
+contra los mismos 60 días del año anterior. Hasta el `06` el índice medía **solo Locales
+Propios**, así que índice y venta eran de universos distintos.
+
+| Índice | Columna del SP | En pantalla | Mueve la proyección |
+| --- | --- | --- | --- |
+| Locales Propios | `INDICE_VARIACION` (sin cambios) | `Índice Ver./Inv. LP`, solo lectura | No: queda como termómetro |
+| Total Empresa | `INDICE_VARIACION_TOTAL_EMPRESA` | `Índice Ver./Inv. Total Empresa`, editable | **Sí**: venta, compra y tramos |
+
+* Verano e invierno arrancan con el mismo TE (el SP da uno solo) y se editan por separado.
+* **Sin columna TE** (Uruguay, o antes del `06`) el LP sigue siendo el editable y la columna
+  TE muestra "—". Se decidió así para no dejar a Uruguay sin poder editar índices.
+* `Índice Var. Original` es el valor del SP del índice **editable** antes de tocarlo (el TE, o
+  el LP sin TE): contra él se marca "editado" y a él vuelve "restaurar". Arranca oculta.
+* En el código, los campos que alimentan el cálculo siguen siendo `INDICE_VARIACION` e
+  `INDICE_VARIACION_INVIERNO`; `ProcesadorDatos::prepararIndices()` decide con qué valor
+  arrancan. El LP viaja aparte en `INDICE_LP`.
+
+**Índice general.** En la fila TOTALES, debajo de cada columna de índice:
+`SUM(VTA_60D_*) / SUM(VTA_60D_ANT_*)` sobre las filas visibles. Es ponderado por venta (no un
+promedio de índices), se recalcula al filtrar y **no cambia al editar índices**.
+
+**Versiones.** `indice_verano_variacion` / `indice_invierno_variacion` conservan su
+significado: el índice que **movió** la proyección (el editable). `indice_variacion_original`
+sigue siendo el LP del SP. Una versión sin `indice_total_empresa_original` es anterior al índice
+Total Empresa: al retomarla, sus índices se cargan en las columnas TE con un aviso.
+
+### Venta de la temporada en curso
+
+Tres columnas al lado de la `Venta Proy.` del tipo de la temporada en curso: **Vendido**
+(`VTA_TEMPORADA_EN_CURSO`, real, hasta el día anterior a la corrida del SP), **Resto** (el
+tramo resto que ya calcula `obtenerPeriodosProyeccion()`, no una cuenta aparte) y **Total**.
+Es informativo: no entra en la compra. Si el SP no corrió hoy, el encabezado avisa cuántos días
+quedan sin contar entre el corte y hoy (`PresupuestoCalculos::infoVentaTemporadaEnCurso()`).
+
+### Retomar una versión
+
+Aplica los índices editables y las notas de una versión **de la misma solapa** sobre los datos
+de **hoy** y el servidor recalcula todo (`compra-con-indices`, con la misma función que el
+render). No pisa nada: guardar después crea una versión nueva con `id_version_origen`.
+
+### Nombres, comentarios y notas
+
+* El nombre de una versión **no puede repetirse** entre las versiones no dadas de baja, incluidas
+  las viejas sin cabecera. Se valida en el modal y otra vez en el servidor al guardar.
+* `cabecera.comentario`: comentario general. `detalle.nota`: una nota por fila y solapa.
+
 ## 💻 API Endpoints
 
 | Endpoint                            | Método | Descripción                             |
@@ -335,6 +411,9 @@ a que queden desincronizados).
 | `api.php?accion=recalcular-tramos`  | POST   | Reparto por tramo de **una** fila, tras editar un índice. El navegador no lo recalcula: hay una sola implementación. |
 | `api.php?accion=eliminar-version-presupuesto` | POST | Elimina una versión (cabecera + detalle + log). Sin `confirmado` no borra: devuelve cuántas filas se llevaría y si es la oficial. |
 | `api.php?accion=historial-oficial`  | GET    | Quién marcó qué versión como oficial y cuándo. |
+| `api.php?accion=validar-nombre-version&nombre=…` | GET | Si un nombre de versión está libre. `guardar-presupuesto` lo vuelve a validar (409 si se repite). |
+| `api.php?accion=version-para-retomar` | GET  | Índices editables y notas de una versión (`id_cabecera` o, sin cabecera, `nombre_presupuesto`). |
+| `api.php?accion=compra-con-indices` | POST   | Una solapa de compra recalculada con índices impuestos por rubro/categoría. Devuelve además `faltantes`: las filas que ya no existen hoy. |
 
 `buscar-historial` acepta además `id_cabecera` o `nombre_presupuesto` para ver **una sola
 versión** en lugar de todo el historial.
@@ -400,6 +479,10 @@ lee esa tabla, no ejecuta el SP.
 * `RUBRO`, `CATEGORIA_PADRE`, `CANT_STOCK`, `CANT_STOCK_GUARDAR`, `INDICE_VARIACION`
 * Pendientes de ingreso: `CANT_PEND_OC_VERANO`, `...INVIERNO`, `...ATEMPORAL`
 * Cobertura: `STOCK_COBERTURA` (45 días de venta; 0 para `CALZADOS` y `CAMPERAS`)
+* Desde el `06`, **solo Argentina** y al final de la tabla: `VTA_60D_LP`, `VTA_60D_ANT_LP`,
+  `VTA_60D_TE`, `VTA_60D_ANT_TE`, `INDICE_VARIACION_TOTAL_EMPRESA` (misma regla que
+  `INDICE_VARIACION` cuando el año anterior es 0) y `VTA_TEMPORADA_EN_CURSO`. Las sumas TE usan
+  las mismas exclusiones que las columnas de temporada, incluido el artículo `XV00LV00A0001`.
 * Columnas de temporadas: `VTA_VERANO_26`, `VTA_INVIERNO_26`, etc. Las define
   `PrepararDatosTemporadas` en `RO_TABLA_TEMPORADAS_ACTUALES`, con las últimas 3
   temporadas **completas** de cada tipo.

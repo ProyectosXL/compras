@@ -129,6 +129,7 @@ const TablaRendererUtils = {
         const td = document.createElement('td');
         td.setAttribute('data-columna-dinamica', 'true');
         td.setAttribute('data-tramo-orden', tramo.orden);
+        td.dataset.col = 'tramo-' + tramo.orden;
         td.className = 'text-end fw-bold '
             + (!tramo.es_comprable
                 ? 'bg-danger-subtle text-danger-emphasis'
@@ -145,6 +146,7 @@ const TablaRendererUtils = {
      */
     pintarCeldaTramo(td, tramo) {
         td.textContent = FormatoUtils.formatearNumero(tramo.compra || 0);
+        td.dataset.valor = tramo.compra || 0;
 
         const partes = [
             (tramo.es_resto ? 'Resto ' : '') + tramo.temporada_codigo,
@@ -178,9 +180,14 @@ const TablaRendererUtils = {
         
         const columnasVenta = [];
 
+        // Solo las columnas que corresponden a una temporada identificable, con la
+        // misma regla que ProcesadorDatos::obtenerColumnasVentasSeguras(). Antes
+        // entraba cualquier columna con VERANO, INVIERNO o VTA_ en el nombre, y las
+        // del SP que no son temporadas (VTA_60D_LP, VTA_TEMPORADA_EN_CURSO) se
+        // habrían mostrado como un año histórico más.
         for (const columna of Object.keys(primeraFila)) {
             if (!columnasExcluidas.includes(columna) &&
-                (columna.includes('VERANO') || columna.includes('INVIERNO') || columna.includes('VTA_'))) {
+                TemporadaServidor.temporadaDeColumna(columna)) {
                 columnasVenta.push(columna);
             }
         }
@@ -222,6 +229,293 @@ const TablaRendererUtils = {
      */
     formatearNombreColumna(columna) {
         return TemporadaServidor.etiquetaHistorica(columna);
+    },
+
+    /**
+     * Escribe un número formateado y deja el valor crudo en data-valor.
+     * El valor crudo es el que usa el orden por columna: ordenar leyendo el texto
+     * obligaba a deshacer el separador de miles, que depende del formato regional.
+     */
+    escribirNumero(td, valor) {
+        if (valor === null || valor === undefined) return;
+        const numero = parseFloat(valor) || 0;
+        td.textContent = FormatoUtils.formatearNumero(numero);
+        td.dataset.valor = numero;
+    },
+
+    /**
+     * Celda de índice, LP o Total Empresa, de una temporada.
+     *
+     * Con índice Total Empresa disponible, el TE es el editable y el LP queda como
+     * termómetro de solo lectura. Sin él (Uruguay, o Argentina antes del script 06)
+     * se mantiene lo de siempre: el LP mueve el cálculo y se edita, y la columna TE
+     * muestra "—". Se decidió así para no dejar a Uruguay sin poder editar índices.
+     *
+     * @param {string} temporada 'verano' o 'invierno'
+     * @param {string} tipo 'lp' o 'te'
+     */
+    celdaIndice(item, solapa, temporada, tipo) {
+        const td = document.createElement('td');
+        td.dataset.col = `indice-${temporada === 'invierno' ? 'inv' : 'ver'}-${tipo}`;
+        const editable = (tipo === 'te') === !!item.TE_DISPONIBLE;
+
+        if (editable) {
+            const valor = parseFloat(temporada === 'invierno'
+                ? (item.INDICE_VARIACION_INVIERNO ?? item.INDICE_VARIACION ?? 1.0)
+                : (item.INDICE_VARIACION ?? 1.0));
+
+            td.className = 'text-center editable-cell';
+            td.dataset.temporada = temporada;
+            td.dataset.indiceEditable = temporada;
+            td.dataset.valor = valor;
+            td.innerHTML = `<input type="number" class="indice-input" value="${valor.toFixed(2)}" step="0.01" min="0" max="10" readonly>`;
+            td.title = (tipo === 'te'
+                ? 'Índice Total Empresa (Locales Propios + Central): es el que mueve la venta proyectada, la compra y los tramos.'
+                : 'Índice Locales Propios: en esta base todavía no hay índice Total Empresa, así que este es el que mueve la proyección.')
+                + ' Clic para editarlo.'
+                + (valor === 0 ? ' El SP devuelve 0 cuando no hubo venta el año anterior: la proyección usa 1,00.' : '');
+
+            // El valor se lee al hacer clic y no al armar la fila: después de una
+            // edición la celda muestra otro número que el que tenía al renderizarse.
+            td.addEventListener('click', () => {
+                const actual = parseFloat(td.querySelector('.indice-input')?.value) || 0;
+                IndiceEditor.editarIndice(item.RUBRO, item.CATEGORIA_PADRE, actual, solapa, null, temporada);
+            });
+            return td;
+        }
+
+        if (tipo === 'lp') {
+            const valor = parseFloat(item.INDICE_LP ?? 0);
+            td.className = 'text-center bg-secondary-subtle text-emphasis';
+            td.textContent = valor.toFixed(2);
+            td.dataset.valor = valor;
+            td.title = 'Índice Locales Propios: últimos 60 días contra los mismos 60 días del año anterior, '
+                     + 'solo canal Locales Propios. Es un termómetro: no mueve la proyección.';
+            return td;
+        }
+
+        td.className = 'text-center text-muted';
+        td.textContent = '—';
+        td.title = 'Sin índice Total Empresa: el SP de esta base todavía no lo calcula (Uruguay, o falta '
+                 + 'correr el script 06). La proyección usa el índice Locales Propios.';
+        return td;
+    },
+
+    // ----------------------------------------------------------------------
+    // Venta de la temporada en curso: real + proyectada
+    // ----------------------------------------------------------------------
+
+    /**
+     * Columna junto a la que va el grupo de la temporada en curso: la "Venta Proy."
+     * del mismo tipo que la temporada que se está transitando. Null si el servidor
+     * todavía no mandó la información.
+     */
+    anclaTemporadaEnCurso() {
+        const info = TemporadaServidor.ventaEnCurso();
+        if (!info) return null;
+        return info.tipo === 'INVIERNO' ? 'venta-proy-inv' : 'venta-proy-ver';
+    },
+
+    /**
+     * Venta proyectada del resto de la temporada en curso para una fila.
+     *
+     * Es el tramo "resto" que ya repartió el servidor (obtenerPeriodosProyeccion /
+     * ventaProyectadaDeTramo), no una cuenta propia: así el número es el mismo que
+     * está dentro de la venta proyectada y de la compra, y al editar el índice se
+     * actualiza con el reparto que devuelve recalcular-tramos.
+     */
+    restoTemporadaEnCurso(item) {
+        const tramo = (item.TRAMOS || []).find(t => t.es_resto);
+        return tramo ? (parseFloat(tramo.venta_proyectada) || 0) : null;
+    },
+
+    /**
+     * Vendido real de la temporada en curso, o null si no se puede mostrar: base sin
+     * el script 06 (Uruguay) o SP corrido en otra temporada.
+     */
+    vendidoTemporadaEnCurso(item) {
+        const info = TemporadaServidor.ventaEnCurso();
+        if (!info || !info.disponible || !info.vigente) return null;
+        if (item.VTA_TEMPORADA_EN_CURSO === null || item.VTA_TEMPORADA_EN_CURSO === undefined) return null;
+        return parseFloat(item.VTA_TEMPORADA_EN_CURSO) || 0;
+    },
+
+    /** Por qué el vendido real no se muestra, para el tooltip del "—". */
+    motivoSinVendido() {
+        const info = TemporadaServidor.ventaEnCurso();
+        if (info && info.disponible && !info.vigente) {
+            return 'La venta real del SP es de la temporada anterior (el SP no corrió desde que '
+                 + 'empezó ' + info.codigo + '). Volvé a correr el SP para verla.';
+        }
+        return 'Esta base no trae la venta real de la temporada en curso (Uruguay, o falta correr el script 06).';
+    },
+
+    /** Encabezados del grupo, en orden: Vendido, Resto, Total. */
+    encabezadosTemporadaEnCurso() {
+        const info = TemporadaServidor.ventaEnCurso();
+        if (!info) return [];
+
+        const corte = info.fecha_corte ? UIUtils.formatearFechaCorta(info.fecha_corte).slice(0, 5) : null;
+        const leyenda = 'Vendido es venta REAL (Locales Propios + Central) desde el '
+            + UIUtils.formatearFechaCorta(info.desde) + (corte ? ' hasta el ' + corte : '') + '. '
+            + 'Resto es venta PROYECTADA desde hoy hasta el fin de ' + info.codigo
+            + ', con el índice de esa temporada: es el mismo tramo que está dentro de la venta '
+            + 'proyectada y de la compra. Total = Vendido + Resto. Es informativo: no entra en la '
+            + 'compra ni en los tramos.';
+
+        // Si el SP corrió hace más de un día, entre el corte y hoy hay días que no
+        // están ni en lo vendido ni en el resto: se avisa con la cantidad.
+        const aviso = info.disponible && info.vigente && info.dias_sin_contar > 0
+            ? ` <i class="fas fa-exclamation-triangle text-warning" title="Quedan ${info.dias_sin_contar} día(s) sin contar entre el ${corte} y hoy: el SP no corrió desde entonces. No están ni en Vendido ni en Resto."></i>`
+            : '';
+
+        return [
+            { col: 'tec-vendido', clase: 'text-center bg-info text-dark',
+              html: `<span class="th-linea">Vendido</span><span class="th-linea th-periodo">${info.codigo}</span>`
+                  + (corte && info.vigente ? `<span class="th-linea th-periodo">al ${corte}${aviso}</span>` : ''),
+              ayuda: leyenda },
+            { col: 'tec-resto', clase: 'text-center header-venta-proyectada',
+              html: `<span class="th-linea">Resto</span><span class="th-linea th-periodo">${info.codigo}</span>`
+                  + '<span class="th-linea th-periodo">proyectado</span>',
+              ayuda: leyenda },
+            { col: 'tec-total', clase: 'text-center bg-dark-subtle text-dark',
+              html: `<span class="th-linea">Total</span><span class="th-linea th-periodo">${info.codigo}</span>`
+                  + '<span class="th-linea th-periodo">real + proy.</span>',
+              ayuda: leyenda }
+        ];
+    },
+
+    /**
+     * Agrega las tres celdas del grupo a una fila, justo después de su ancla.
+     * Los valores los escribe pintarTemporadaEnCurso(), que también usa el editor.
+     */
+    agregarCeldasTemporadaEnCurso(fila, item) {
+        const ancla = TablaRendererUtils.celdaDeColumna(fila, TablaRendererUtils.anclaTemporadaEnCurso());
+        if (!ancla) return;
+
+        const clases = {
+            'tec-vendido': 'text-end bg-info-subtle',
+            'tec-resto': 'text-end bg-primary-subtle text-primary-emphasis',
+            'tec-total': 'text-end fw-bold'
+        };
+        let anterior = ancla;
+        ['tec-vendido', 'tec-resto', 'tec-total'].forEach(col => {
+            const td = document.createElement('td');
+            td.dataset.col = col;
+            td.className = clases[col];
+            anterior.after(td);
+            anterior = td;
+        });
+
+        TablaRendererUtils.pintarTemporadaEnCurso(fila, item);
+    },
+
+    /** Escribe Vendido, Resto y Total de una fila. */
+    pintarTemporadaEnCurso(fila, item) {
+        const c = (col) => TablaRendererUtils.celdaDeColumna(fila, col);
+        if (!c('tec-vendido')) return;
+
+        const vendido = TablaRendererUtils.vendidoTemporadaEnCurso(item);
+        const resto = TablaRendererUtils.restoTemporadaEnCurso(item);
+
+        const guion = (td, motivo) => {
+            td.textContent = '—';
+            delete td.dataset.valor;
+            td.title = motivo;
+        };
+
+        if (vendido === null) {
+            guion(c('tec-vendido'), TablaRendererUtils.motivoSinVendido());
+        } else {
+            TablaRendererUtils.escribirNumero(c('tec-vendido'), vendido);
+            c('tec-vendido').title = 'Venta real de la temporada en curso';
+        }
+
+        if (resto === null) {
+            guion(c('tec-resto'), 'Esta fila no tiene tramo de resto de temporada.');
+        } else {
+            TablaRendererUtils.escribirNumero(c('tec-resto'), resto);
+            c('tec-resto').title = 'Venta proyectada del resto de la temporada en curso';
+        }
+
+        // El total solo tiene sentido con las dos partes: sumar el resto solo lo
+        // haría pasar por el total de la temporada.
+        if (vendido === null || resto === null) {
+            guion(c('tec-total'), 'Hace falta la venta real y la proyectada para el total.');
+        } else {
+            TablaRendererUtils.escribirNumero(c('tec-total'), vendido + resto);
+            c('tec-total').title = 'Vendido + Resto';
+        }
+    },
+
+    /**
+     * Ícono de nota de una fila: resaltado y con la nota en el tooltip si la fila
+     * tiene una; tenue si no, para que se vea que se puede agregar.
+     */
+    pintarNota(fila, item) {
+        const btn = fila.querySelector('.btn-nota');
+        if (!btn) return;
+        const nota = item.NOTA || '';
+        btn.innerHTML = nota
+            ? '<i class="fas fa-comment-dots text-warning"></i>'
+            : '<i class="far fa-comment text-muted opacity-50"></i>';
+        btn.title = nota ? `Nota: ${nota}` : 'Agregar una nota a esta fila';
+        btn.classList.toggle('tiene-nota', !!nota);
+    },
+
+    /** Celda de una columna (data-col) dentro de una fila. */
+    celdaDeColumna(fila, col) {
+        return fila ? fila.querySelector(`td[data-col="${col}"]`) : null;
+    },
+
+    /**
+     * Fila de un rubro/categoría en la tabla de una solapa.
+     * Se compara contra el dataset y no con un selector armado con el texto: los
+     * rubros traen comillas y barras que habría que escapar.
+     */
+    filaDeRegistro(solapa, rubro, categoria) {
+        const tbody = document.getElementById(`tbody-${solapa}`);
+        if (!tbody) return null;
+        return Array.from(tbody.querySelectorAll('tr.fila-datos'))
+            .find(f => f.dataset.rubro === rubro && f.dataset.categoria === categoria) || null;
+    },
+
+    /**
+     * Escribe en la fila todo lo que cambia cuando se edita un índice: los índices
+     * editables, el original, las ventas proyectadas y la compra. Lo usan el render
+     * y el editor, así una celda no puede quedar con un número que el otro no escribe.
+     */
+    actualizarCeldasCalculadas(fila, item) {
+        if (!fila) return;
+        const c = (col) => TablaRendererUtils.celdaDeColumna(fila, col);
+
+        const original = c('indice-original');
+        if (original) {
+            const valor = TablaRendererUtils.obtenerIndiceOriginal(item);
+            original.textContent = valor.toFixed(2);
+            original.dataset.valor = valor;
+        }
+
+        ['verano', 'invierno'].forEach(temporada => {
+            const td = fila.querySelector(`td[data-indice-editable="${temporada}"]`);
+            if (!td) return;
+            const valor = parseFloat(temporada === 'invierno'
+                ? (item.INDICE_VARIACION_INVIERNO ?? item.INDICE_VARIACION ?? 1.0)
+                : (item.INDICE_VARIACION ?? 1.0));
+            const input = td.querySelector('.indice-input');
+            if (input) input.value = valor.toFixed(2);
+            td.dataset.valor = valor;
+        });
+
+        if (c('venta-proy-ver')) TablaRendererUtils.escribirNumero(c('venta-proy-ver'), item.VENTA_PROY_VERANO || 0);
+        if (c('venta-proy-inv')) TablaRendererUtils.escribirNumero(c('venta-proy-inv'), item.VENTA_PROY_INVIERNO || 0);
+
+        const compra = c('compra-proyectada');
+        if (compra) {
+            const valor = item.COMPRA_PROYECTADA || 0;
+            TablaRendererUtils.escribirNumero(compra, valor);
+            compra.className = `text-end bg-success-subtle text-success-emphasis fw-bold ${FormatoUtils.obtenerClaseValor(valor)}`;
+        }
     },
 
     // NUEVO: Obtener índice original del registro
@@ -268,6 +562,7 @@ class TablaRenderer {
 
         TablaRendererUtils.limpiarTabla('verano');
         TablaRenderer.agregarColumnasVentasHistoricas('verano', datos);
+        TablaRenderer.rotularEncabezadosIndices('verano', datos);
         
         tbody.innerHTML = '';
         
@@ -301,6 +596,7 @@ class TablaRenderer {
 
         TablaRendererUtils.limpiarTabla('invierno');
         TablaRenderer.agregarColumnasVentasHistoricas('invierno', datos);
+        TablaRenderer.rotularEncabezadosIndices('invierno', datos);
         
         tbody.innerHTML = '';
         
@@ -344,6 +640,34 @@ class TablaRenderer {
     }
 
     /**
+     * Ajusta los tooltips de los encabezados de índice según haya o no índice
+     * Total Empresa. Sin él la columna LP es la editable y la TE queda en "—", así
+     * que el encabezado tiene que decir cuál de las dos mueve la proyección.
+     */
+    static rotularEncabezadosIndices(solapa, datos) {
+        const tabla = document.getElementById(`tabla-${solapa}`);
+        if (!tabla) return;
+
+        const teDisponible = (datos || []).some(d => d.TE_DISPONIBLE);
+        tabla.querySelectorAll('th[data-indice-tipo]').forEach(th => {
+            const esTe = th.dataset.indiceTipo === 'te';
+            if (esTe) {
+                th.title = teDisponible
+                    ? 'Índice Total Empresa (Locales Propios + Central): últimos 60 días contra los mismos '
+                      + '60 días del año anterior, mismo universo que la venta histórica. Es el que mueve la '
+                      + 'venta proyectada, la compra y los tramos. Editable.'
+                    : 'Sin índice Total Empresa en esta base (Uruguay, o falta correr el script 06).';
+            } else {
+                th.title = teDisponible
+                    ? 'Índice Locales Propios: últimos 60 días contra los mismos 60 días del año anterior, '
+                      + 'solo canal Locales Propios. Termómetro: no mueve la proyección.'
+                    : 'Índice Locales Propios. Sin índice Total Empresa en esta base, es el que mueve la '
+                      + 'proyección y el que se edita.';
+            }
+        });
+    }
+
+    /**
      * Agregar columnas de ventas históricas (solo para compras)
      */
     static agregarColumnasVentasHistoricas(solapa, datos) {
@@ -356,6 +680,23 @@ class TablaRenderer {
             return;
         }
         
+        // Grupo de la temporada en curso, pegado a la Venta Proy. de su mismo tipo:
+        // es la otra mitad de esa temporada (lo ya vendido) y su total.
+        const ancla = thead.querySelector(`th[data-col="${TablaRendererUtils.anclaTemporadaEnCurso()}"]`);
+        if (ancla) {
+            let anterior = ancla;
+            TablaRendererUtils.encabezadosTemporadaEnCurso().forEach(e => {
+                const th = document.createElement('th');
+                th.className = e.clase;
+                th.innerHTML = e.html;
+                th.title = e.ayuda;
+                th.dataset.col = e.col;
+                th.setAttribute('data-columna-dinamica', 'true');
+                anterior.after(th);
+                anterior = th;
+            });
+        }
+
         // Los tramos van PRIMERO, pegados a Compra Proyectada: son la apertura de esa
         // misma columna, y ponerlos después de los años históricos los habría dejado
         // al final de la tabla, lejos del total que abren.
@@ -368,6 +709,7 @@ class TablaRenderer {
             th.title = info.ayuda;
             th.setAttribute('data-columna-dinamica', 'true');
             th.setAttribute('data-tramo-orden', tramo.orden);
+            th.dataset.col = 'tramo-' + tramo.orden;
             th.style.fontSize = '0.7rem';
             th.style.whiteSpace = 'nowrap';
             thead.appendChild(th);
@@ -386,6 +728,7 @@ class TablaRenderer {
             const th = document.createElement('th');
             th.className = 'text-center bg-info-subtle text-dark';
             th.textContent = TablaRendererUtils.formatearNombreColumna(columna);
+            th.dataset.col = 'hist-' + columna;
             th.setAttribute('data-columna-dinamica', 'true');
             th.style.fontSize = '0.7rem';
             th.style.whiteSpace = 'nowrap';
@@ -398,68 +741,78 @@ class TablaRenderer {
     /**
      * CORREGIDO: Crear fila completa para compras con ÍNDICE ORIGINAL
      */
+    /**
+     * Fila de una solapa de compra.
+     *
+     * Cada celda lleva data-col y la fila lleva rubro y categoría. Antes la fila se
+     * buscaba por su posición en el tbody y cada celda por su número de columna
+     * (children[4] era el índice de verano, [10] la compra): agregar una columna
+     * desarmaba en silencio la edición de índices, las marcas de "editado" y la fila
+     * de totales, y ordenar las filas habría editado otra fila que la clickeada.
+     */
     static crearFilaCompraCompleta(item, index, todosLosDatos, solapa) {
         const tr = document.createElement('tr');
         tr.className = 'fila-datos';
-        
-        const stockProyectado = FormatoUtils.formatearNumero(item.STOCK_PROYECTADO || 0);
-        const indiceOriginal = TablaRendererUtils.obtenerIndiceOriginal(item);
-        const indiceVariacionVerano = parseFloat(item.INDICE_VARIACION || 1.0);
-        const indiceVariacionInvierno = parseFloat(item.INDICE_VARIACION_INVIERNO || indiceVariacionVerano);
-        const ventaProyVerano = FormatoUtils.formatearNumero(item.VENTA_PROY_VERANO || 0);
-        const ventaProyInvierno = FormatoUtils.formatearNumero(item.VENTA_PROY_INVIERNO || 0);
-        const compraProyectada = item.COMPRA_PROYECTADA || 0;
-        
+        tr.dataset.rubro = item.RUBRO || '';
+        tr.dataset.categoria = item.CATEGORIA_PADRE || '';
+
         const ventaVeranoAnterior = TablaRendererUtils.buscarVentaHistoricaCorrecta(item, 'VERANO');
         const ventaInviernoAnterior = TablaRendererUtils.buscarVentaHistoricaCorrecta(item, 'INVIERNO');
-        
-        const claseCompra = FormatoUtils.obtenerClaseValor(compraProyectada);
-        
-        // Crear elementos TD para los índices editables
-        const celdaIndiceVerano = document.createElement('td');
-        celdaIndiceVerano.className = 'text-center editable-cell';
-        celdaIndiceVerano.innerHTML = `<input type="number" class="indice-input" value="${indiceVariacionVerano.toFixed(2)}" step="0.01" min="0" max="10" readonly>`;
-        celdaIndiceVerano.setAttribute('data-temporada', 'verano');
-        celdaIndiceVerano.setAttribute('data-indice', indiceVariacionVerano);
-        
-        const celdaIndiceInvierno = document.createElement('td');
-        celdaIndiceInvierno.className = 'text-center editable-cell';
-        celdaIndiceInvierno.innerHTML = `<input type="number" class="indice-input" value="${indiceVariacionInvierno.toFixed(2)}" step="0.01" min="0" max="10" readonly>`;
-        celdaIndiceInvierno.setAttribute('data-temporada', 'invierno');
-        celdaIndiceInvierno.setAttribute('data-indice', indiceVariacionInvierno);
-        
-        // Agregar event listeners
-        celdaIndiceVerano.addEventListener('click', () => {
-            console.log('🔥 CLICK VERANO - Temporada: verano');
-            IndiceEditor.editarIndice(item.RUBRO, item.CATEGORIA_PADRE, indiceVariacionVerano, solapa, index, 'verano');
+
+        const celda = (col, clase, valor, titulo = '') => {
+            const td = document.createElement('td');
+            td.dataset.col = col;
+            td.className = clase;
+            if (titulo) td.title = titulo;
+            TablaRendererUtils.escribirNumero(td, valor);
+            return td;
+        };
+
+        tr.appendChild(celda('rubro', 'fw-medium', null));
+        tr.lastChild.textContent = item.RUBRO || '';
+        // Ícono de nota, dentro de la celda del rubro para no sumar una columna.
+        const btnNota = document.createElement('button');
+        btnNota.type = 'button';
+        btnNota.className = 'btn btn-link btn-sm p-0 ms-1 btn-nota';
+        btnNota.addEventListener('click', (e) => {
+            e.stopPropagation();
+            IndiceEditor.editarNota(solapa, item.RUBRO, item.CATEGORIA_PADRE);
         });
-        
-        celdaIndiceInvierno.addEventListener('click', () => {
-            console.log('❄️ CLICK INVIERNO - Temporada: invierno');
-            IndiceEditor.editarIndice(item.RUBRO, item.CATEGORIA_PADRE, indiceVariacionInvierno, solapa, index, 'invierno');
-        });
-        
-        // NUEVA ESTRUCTURA: Agregar ÍNDICE ORIGINAL después de STOCK PROYECTADO
-        tr.innerHTML = `
-            <td class="fw-medium">${item.RUBRO || ''}</td>
-            <td>${item.CATEGORIA_PADRE || ''}</td>
-            <td class="text-end bg-info-subtle">${stockProyectado}</td>
-            <td class="text-center bg-secondary-subtle text-emphasis" title="Índice de variación original (no editable)">${indiceOriginal.toFixed(2)}</td>
-            <td class="placeholder-verano"></td>
-            <td class="text-end bg-info-subtle" title="Venta histórica verano anterior">${FormatoUtils.formatearNumero(ventaVeranoAnterior)}</td>
-            <td class="text-end bg-primary-subtle text-primary-emphasis fw-bold" title="Venta proyectada verano">${ventaProyVerano}</td>
-            <td class="placeholder-invierno"></td>
-            <td class="text-end bg-info-subtle" title="Venta histórica invierno anterior">${FormatoUtils.formatearNumero(ventaInviernoAnterior)}</td>
-            <td class="text-end bg-primary-subtle text-primary-emphasis fw-bold" title="Venta proyectada invierno">${ventaProyInvierno}</td>
-            <td class="text-end bg-success-subtle text-success-emphasis fw-bold ${claseCompra}" title="Compra proyectada">${FormatoUtils.formatearNumero(compraProyectada)}</td>
-        `;
-        
-        // Reemplazar placeholders con las celdas con event listeners
-        const placeholderVerano = tr.querySelector('.placeholder-verano');
-        const placeholderInvierno = tr.querySelector('.placeholder-invierno');
-        
-        placeholderVerano.replaceWith(celdaIndiceVerano);
-        placeholderInvierno.replaceWith(celdaIndiceInvierno);
+        tr.lastChild.appendChild(btnNota);
+        TablaRendererUtils.pintarNota(tr, item);
+        tr.appendChild(celda('categoria', '', null));
+        tr.lastChild.textContent = item.CATEGORIA_PADRE || '';
+
+        tr.appendChild(celda('stock-proyectado', 'text-end bg-info-subtle', item.STOCK_PROYECTADO || 0));
+
+        // OC pendientes: las cuatro columnas existen siempre y la vista (agrupada o
+        // abierta) solo decide cuáles se ven. Son los mismos valores que la solapa
+        // Stock y ya están dentro del stock proyectado.
+        const ocVer = parseFloat(item.CANT_PEND_OC_VERANO || 0);
+        const ocInv = parseFloat(item.CANT_PEND_OC_INVIERNO || 0);
+        const ocAtemp = parseFloat(item.CANT_PEND_OC_ATEMPORAL || 0);
+        const ayudaOc = 'Ya incluidas en el Stock Proyectado: la compra proyectada es neta de lo pedido.';
+        tr.appendChild(celda('oc-total', 'text-end bg-success-subtle', ocVer + ocInv + ocAtemp, 'OC pendientes. ' + ayudaOc));
+        tr.appendChild(celda('oc-ver', 'text-end bg-success-subtle', ocVer, 'OC pendientes de verano. ' + ayudaOc));
+        tr.appendChild(celda('oc-inv', 'text-end bg-success-subtle', ocInv, 'OC pendientes de invierno. ' + ayudaOc));
+        tr.appendChild(celda('oc-atemp', 'text-end bg-success-subtle', ocAtemp, 'OC pendientes atemporales. ' + ayudaOc));
+        tr.appendChild(celda('indice-original', 'text-center bg-secondary-subtle text-emphasis', null,
+            'Índice editable tal como vino del SP, antes de cualquier edición (no editable).'));
+
+        tr.appendChild(TablaRendererUtils.celdaIndice(item, solapa, 'verano', 'lp'));
+        tr.appendChild(TablaRendererUtils.celdaIndice(item, solapa, 'verano', 'te'));
+        tr.appendChild(celda('venta-ver-ant', 'text-end bg-info-subtle', ventaVeranoAnterior, 'Venta histórica verano anterior'));
+        tr.appendChild(celda('venta-proy-ver', 'text-end bg-primary-subtle text-primary-emphasis fw-bold', null, 'Venta proyectada verano'));
+
+        tr.appendChild(TablaRendererUtils.celdaIndice(item, solapa, 'invierno', 'lp'));
+        tr.appendChild(TablaRendererUtils.celdaIndice(item, solapa, 'invierno', 'te'));
+        tr.appendChild(celda('venta-inv-ant', 'text-end bg-info-subtle', ventaInviernoAnterior, 'Venta histórica invierno anterior'));
+        tr.appendChild(celda('venta-proy-inv', 'text-end bg-primary-subtle text-primary-emphasis fw-bold', null, 'Venta proyectada invierno'));
+
+        tr.appendChild(celda('compra-proyectada', '', null, 'Compra proyectada'));
+
+        // Vendido / Resto / Total de la temporada en curso, al lado de su Venta Proy.
+        TablaRendererUtils.agregarCeldasTemporadaEnCurso(tr, item);
 
         // Compra abierta por tramo, en el mismo orden que los encabezados: pegada a la
         // compra total y antes de los años históricos.
@@ -470,20 +823,18 @@ class TablaRenderer {
         // Agregar columnas históricas dinámicas
         const columnasHistoricas = TablaRendererUtils.extraerColumnasVentasHistoricas(todosLosDatos);
         columnasHistoricas.forEach(columna => {
-            const td = document.createElement('td');
-            td.className = 'text-end bg-light';
+            const valor = item[columna] || 0;
+            const td = celda('hist-' + columna, 'text-end bg-light', valor,
+                `${columna}: ${FormatoUtils.formatearNumero(valor)}`);
             td.setAttribute('data-columna-dinamica', 'true');
             td.style.fontSize = '0.75rem';
-            
-            const valor = item[columna] || 0;
-            td.textContent = FormatoUtils.formatearNumero(valor);
-            td.title = `${columna}: ${FormatoUtils.formatearNumero(valor)}`;
-            
             tr.appendChild(td);
         });
-        
-        console.log(`✅ Fila creada con índice original ${indiceOriginal.toFixed(2)} para ${item.RUBRO} - ${item.CATEGORIA_PADRE}`);
-        
+
+        // Los valores que cambian al editar un índice se escriben con la misma función
+        // que usa el editor, para que el render y la edición no puedan diferir.
+        TablaRendererUtils.actualizarCeldasCalculadas(tr, item);
+
         return tr;
     }
 
@@ -540,8 +891,10 @@ class TablaRenderer {
         let coincidencias = 0;
         
         filas.forEach(fila => {
-            const rubro = (fila.children[0]?.textContent || '').toLowerCase();
-            const categoria = (fila.children[1]?.textContent || '').toLowerCase();
+            // Las solapas de compra marcan rubro y categoría en la fila; las demás
+            // tablas que usan este filtro siguen teniéndolos en las dos primeras celdas.
+            const rubro = (fila.dataset.rubro ?? fila.children[0]?.textContent ?? '').toLowerCase();
+            const categoria = (fila.dataset.categoria ?? fila.children[1]?.textContent ?? '').toLowerCase();
             
             if (rubro.includes(terminoLower) || categoria.includes(terminoLower)) {
                 fila.style.display = '';
@@ -556,10 +909,13 @@ class TablaRenderer {
         return coincidencias;
     }
 
-    static resaltarFila(solapa, index, resaltar = true) {
-        const tabla = document.getElementById(`tbody-${solapa}`);
-        const fila = tabla.children[index];
-        
+    /**
+     * Resalta la fila de un rubro/categoría. Se busca por rubro y categoría y no por
+     * posición: con filtros u orden aplicados, el n-ésimo hijo del tbody es otra fila.
+     */
+    static resaltarFila(solapa, rubro, categoria, resaltar = true) {
+        const fila = TablaRendererUtils.filaDeRegistro(solapa, rubro, categoria);
+
         if (fila) {
             if (resaltar) {
                 fila.classList.add('table-warning');
@@ -612,7 +968,71 @@ class TablaRenderer {
         return html;
     }
 
-    static renderizarTablaHistorial(datos) {
+    /**
+     * Nota de una fila del historial, como ícono con la nota en el tooltip. El
+     * texto va además oculto en la celda para que la columna se pueda ordenar.
+     */
+    static iconoNotaHistorial(item) {
+        if (!item.nota) return '';
+        const nota = HistorialManager.escaparHtml(item.nota);
+        return `<i class="fas fa-comment-dots text-warning" title="${nota}"></i>`
+             + `<span class="visually-hidden">${nota}</span>`;
+    }
+
+    /**
+     * Fila TOTALES del historial. Solo con una versión elegida en el filtro: sumar
+     * el historial entero mezclaría versiones distintas de la misma compra y daría
+     * un número que no existe. Sin versión, una leyenda lo explica.
+     *
+     * Suma lo que se ve, así que respeta los demás filtros (rubro, búsqueda). Los
+     * índices no se suman. La compra por tramo se totaliza por tramo con los mismos
+     * badges que las filas.
+     */
+    static filaTotalesHistorial(datos, conTotales) {
+        if (!conTotales) {
+            return `<tr class="fila-totales-historial"><td colspan="16" class="text-center text-muted small py-2">
+                        <i class="fas fa-info-circle me-1"></i>Elegí una versión para ver totales.</td></tr>`;
+        }
+
+        const suma = (campo) => datos.reduce((acc, d) => acc + (parseFloat(d[campo]) || 0), 0);
+        const num = (v) => `<td class="text-end fw-bold">${FormatoUtils.formatearNumero(v)}</td>`;
+
+        // Tramos agrupados por temporada (y si es resto), en orden cronológico.
+        const tramos = new Map();
+        datos.forEach(d => (d.tramos || []).forEach(t => {
+            const clave = (t.es_resto ? 'Resto ' : '') + t.temporada_codigo;
+            if (!tramos.has(clave)) {
+                tramos.set(clave, { ...t, compra: 0, compra_deficit_cobertura: 0 });
+            }
+            const acc = tramos.get(clave);
+            acc.compra += parseFloat(t.compra) || 0;
+            acc.compra_deficit_cobertura += parseFloat(t.compra_deficit_cobertura) || 0;
+        }));
+        const desglose = tramos.size
+            ? TablaRenderer.desgloseTramos({ tramos: [...tramos.values()].sort((a, b) => a.orden - b.orden) })
+            : '<span class="text-muted small">—</span>';
+
+        return `
+            <tr class="fila-totales-historial table-warning fw-bold">
+                <!-- Una celda por columna, sin colspan: ocultar columnas las ubica por posición. -->
+                <td class="text-uppercase"><i class="fas fa-calculator me-1"></i>Totales</td>
+                <td></td><td></td><td></td>
+                <td class="text-center"><span class="badge bg-dark">${datos.length} ITEMS</span></td>
+                <td></td>
+                ${num(suma('stock_proyectado'))}
+                <td class="text-center text-muted">—</td>
+                ${num(suma('venta_verano_anterior'))}
+                ${num(suma('venta_proyectada_verano'))}
+                <td class="text-center text-muted">—</td>
+                ${num(suma('venta_invierno_anterior'))}
+                ${num(suma('venta_proyectada_invierno'))}
+                ${num(suma('compra_proyectada'))}
+                <td class="text-center">${desglose}</td>
+                <td></td>
+            </tr>`;
+    }
+
+    static renderizarTablaHistorial(datos, conTotales = false) {
         const tbody = document.getElementById('tbody-historial');
         if (!tbody) {
             console.error('No se encontró el cuerpo de la tabla de historial (tbody-historial).');
@@ -620,7 +1040,7 @@ class TablaRenderer {
         }
 
         if (!datos || datos.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="15" class="text-center text-muted py-4">No se encontraron resultados para los filtros aplicados.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="16" class="text-center text-muted py-4">No se encontraron resultados para los filtros aplicados.</td></tr>`;
             return;
         }
 
@@ -644,11 +1064,12 @@ class TablaRenderer {
                     <td class="text-center bg-primary-subtle">${FormatoUtils.formatearNumero(item.venta_proyectada_invierno)}</td>
                     <td class="text-center bg-success-subtle"><strong>${FormatoUtils.formatearNumero(item.compra_proyectada)}</strong></td>
                     <td class="text-center bg-success-subtle">${TablaRenderer.desgloseTramos(item)}</td>
+                    <td class="text-center">${TablaRenderer.iconoNotaHistorial(item)}</td>
                 </tr>
             `;
         }).join('');
 
-        tbody.innerHTML = html;
+        tbody.innerHTML = html + TablaRenderer.filaTotalesHistorial(datos, conTotales);
     }
 
     /**
@@ -753,9 +1174,44 @@ class TablaRenderer {
     }
 
     /**
+     * Vista de las OC pendientes en las solapas de compra: 'agrupado' (una columna
+     * con la suma) o 'abierto' (una por temporada). Se recuerda por solapa y sin
+     * vencimiento: es una preferencia de cómo leer la tabla, no un dato.
+     */
+    static aplicarVistaOc(solapa, vista) {
+        const tabla = document.getElementById(`tabla-${solapa}`);
+        const boton = document.getElementById(`btn-vista-oc-${solapa}`);
+        if (!tabla) return;
+
+        tabla.dataset.vistaOc = vista === 'abierto' ? 'abierto' : 'agrupado';
+        if (boton) {
+            boton.innerHTML = vista === 'abierto'
+                ? '<i class="fas fa-truck me-1"></i> OC: abiertas'
+                : '<i class="fas fa-truck me-1"></i> OC: agrupadas';
+        }
+    }
+
+    static configurarVistaOc() {
+        ['verano', 'invierno'].forEach(solapa => {
+            const clave = `vista_oc_${solapa}`;
+            TablaRenderer.aplicarVistaOc(solapa, StorageUtils.obtener(clave) || 'agrupado');
+
+            const boton = document.getElementById(`btn-vista-oc-${solapa}`);
+            if (!boton) return;
+            boton.addEventListener('click', () => {
+                const tabla = document.getElementById(`tabla-${solapa}`);
+                const nueva = tabla && tabla.dataset.vistaOc === 'abierto' ? 'agrupado' : 'abierto';
+                TablaRenderer.aplicarVistaOc(solapa, nueva);
+                StorageUtils.guardar(clave, nueva);
+            });
+        });
+    }
+
+    /**
      * Inicialización simplificada
      */
     static init() {
+        TablaRenderer.configurarVistaOc();
         console.log('✅ TablaRenderer (con índice original) inicializado correctamente');
     }
 
@@ -792,9 +1248,9 @@ class TablaRenderer {
         
         const filas = tbody.querySelectorAll('tr.fila-datos');
         
-        filas.forEach((fila, indiceVisual) => {
-            const rubro = fila.children[0]?.textContent?.trim();
-            const categoria = fila.children[1]?.textContent?.trim();
+        filas.forEach(fila => {
+            const rubro = fila.dataset.rubro;
+            const categoria = fila.dataset.categoria;
             
             if (!rubro || !categoria) return;
             

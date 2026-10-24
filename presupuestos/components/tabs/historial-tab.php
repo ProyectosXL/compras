@@ -111,11 +111,12 @@
                          versiones de distintas solapas y fechas, así que cada fila
                          puede tener otros tramos. El desglose va dentro de la celda. -->
                     <th class="text-center bg-success-subtle text-dark">Compra por tramo</th>
+                    <th class="text-center" title="Nota de la fila: por qué se cambió el índice">Nota</th>
                 </tr>
             </thead>
             <tbody id="tbody-historial">
                 <tr>
-                    <td colspan="15" class="text-center text-muted py-4">
+                    <td colspan="16" class="text-center text-muted py-4">
                         <i class="fas fa-filter"></i>
                         Utilice los filtros y presione "Buscar" para ver el historial.
                     </td>

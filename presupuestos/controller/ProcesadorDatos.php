@@ -6,41 +6,144 @@
  * Sistema de Presupuesto de Compras v2.1 - CORREGIDA PARA VENTA PROYECTADA
  */
 class ProcesadorDatos {
-    
+
     /**
-     * CORREGIDO: Procesar datos para la solapa de compra verano CON CONTEXTO
+     * Decide qué índice mueve la proyección de una fila y deja los dos a la vista.
+     *
+     * La venta histórica de las columnas de temporada es Total Empresa (LOCALES
+     * PROPIOS + CENTRAL), pero INDICE_VARIACION mide solo Locales Propios: el índice
+     * y la venta a la que se aplicaba eran de universos distintos. Desde el script 06
+     * el SP trae INDICE_VARIACION_TOTAL_EMPRESA, que es el que pasa a mover venta,
+     * compra y tramos; el de Locales Propios queda como termómetro, de solo lectura.
+     *
+     * Los campos que alimentan el cálculo siguen siendo INDICE_VARIACION e
+     * INDICE_VARIACION_INVIERNO —los lee PresupuestoCalculos, el editor, el guardado
+     * y recalcular-tramos— así que acá solo cambia con qué valor arrancan. Se descartó
+     * agregar un tercer par de campos "efectivos": habría obligado a tocar cada uno
+     * de esos consumidores para que leyera el campo nuevo, y con uno solo que se
+     * olvidara la pantalla y la versión guardada habrían usado índices distintos.
+     *
+     * Sin la columna TE (Uruguay, o Argentina antes de correr el 06) todo sigue como
+     * antes: el LP mueve el cálculo y es el que se edita.
+     *
+     * @return array [registro listo para calcular, campos de índice para la fila procesada]
+     */
+    private function prepararIndices($registro) {
+        $teDisponible = array_key_exists('INDICE_VARIACION_TOTAL_EMPRESA', $registro);
+        $indiceLp = (float)($registro['INDICE_VARIACION'] ?? 1.0);
+        $indiceTe = $teDisponible ? (float)($registro['INDICE_VARIACION_TOTAL_EMPRESA'] ?? 0) : null;
+
+        // El SP da un solo índice por fila; verano e invierno arrancan con el mismo
+        // y se editan por separado, igual que hasta ahora.
+        $editableVerano = $teDisponible ? $indiceTe : (float)($registro['INDICE_VARIACION'] ?? 1.0);
+        $editableInvierno = $teDisponible
+            ? $indiceTe
+            : (float)($registro['INDICE_VARIACION_INVIERNO'] ?? $registro['INDICE_VARIACION'] ?? 1.0);
+
+        // Si alguien ya pisó el editable antes de llegar acá (IndiceController lo hace
+        // sobre el registro crudo), se respeta ese valor y no el del SP.
+        if (isset($registro['_INDICE_EDITADO_VERANO'])) {
+            $editableVerano = (float)$registro['_INDICE_EDITADO_VERANO'];
+        }
+        if (isset($registro['_INDICE_EDITADO_INVIERNO'])) {
+            $editableInvierno = (float)$registro['_INDICE_EDITADO_INVIERNO'];
+        }
+
+        $paraCalculo = $registro;
+        $paraCalculo['INDICE_VARIACION'] = $editableVerano;
+        $paraCalculo['INDICE_VARIACION_INVIERNO'] = $editableInvierno;
+
+        // "Original" es el valor del SP del índice EDITABLE, antes de tocarlo: es contra
+        // ese valor que se marca una fila como editada y al que vuelve "restaurar".
+        // Con TE disponible es el TE; si no, el LP, como siempre.
+        $original = $teDisponible ? $indiceTe : $indiceLp;
+
+        $campos = [
+            'TE_DISPONIBLE' => $teDisponible,
+            'INDICE_LP' => round($indiceLp, 2),
+            'INDICE_TE' => $teDisponible ? round($indiceTe, 2) : null,
+            'INDICE_VAR_ORIGINAL' => round($original, 2),
+            'INDICE_ORIGINAL' => round($original, 2),
+            'INDICE_VARIACION' => round($editableVerano, 2),
+            'INDICE_VARIACION_INVIERNO' => round($editableInvierno, 2)
+        ];
+
+        return [$paraCalculo, $campos];
+    }
+
+    /**
+     * Ventas de 60 días con las que el SP calcula cada índice (script 06).
+     *
+     * Viajan con la fila para que la pantalla calcule el índice GENERAL de lo que se
+     * ve: SUM(venta) / SUM(venta año anterior), ponderado por venta. Un promedio de
+     * los índices de cada fila daría el mismo peso a un rubro que vende 10 unidades
+     * que a uno que vende 10.000.
+     *
+     * Sin las columnas (Uruguay, o antes del 06) van en null y no en 0: 0 sería "no
+     * se vendió nada", que es otra cosa que "no hay dato".
+     */
+    private function ventasParaIndiceGeneral($registro) {
+        $campos = [];
+        // VTA_TEMPORADA_EN_CURSO viaja por el mismo camino y con la misma regla: es la
+        // venta real de la temporada en curso, que la pantalla suma con el resto proyectado.
+        foreach (['VTA_60D_LP', 'VTA_60D_ANT_LP', 'VTA_60D_TE', 'VTA_60D_ANT_TE', 'VTA_TEMPORADA_EN_CURSO'] as $campo) {
+            $campos[$campo] = array_key_exists($campo, $registro) ? (float)($registro[$campo] ?? 0) : null;
+        }
+        return $campos;
+    }
+
+    /**
+     * Procesar datos para la solapa de compra verano
      */
     public function procesarDatosCompraVerano($datos) {
+        return $this->procesarDatosCompra($datos, 'verano');
+    }
+
+    /**
+     * Procesar datos para la solapa de compra invierno
+     */
+    public function procesarDatosCompraInvierno($datos) {
+        return $this->procesarDatosCompra($datos, 'invierno');
+    }
+
+    /**
+     * Procesa las filas de una solapa de compra.
+     *
+     * Las dos solapas eran dos copias de la misma función que solo diferían en el
+     * contexto que le pasaban al cálculo. Se unificaron al agregar el índice Total
+     * Empresa: con dos copias, cada campo nuevo había que escribirlo dos veces y
+     * nada garantizaba que las dos solapas mandaran la misma fila.
+     *
+     * @param string $contexto 'verano' o 'invierno'
+     */
+    private function procesarDatosCompra($datos, $contexto) {
         $resultado = [];
-        
+
         if (empty($datos)) {
             return $resultado;
         }
-        
+
         // Asegurar que no hay duplicados en los datos fuente
         $datosUnicos = $this->eliminarDuplicados($datos);
-        
+
         foreach ($datosUnicos as $index => $registro) {
             try {
                 $stockProyectado = $this->calcularStockProyectadoRegistro($registro);
-                
-                // CORRECCIÓN: Especificar contexto de solapa 'verano'
+                list($registroCalculo, $camposIndices) = $this->prepararIndices($registro);
+
                 $calculosCompra = PresupuestoCalculos::procesarRegistroCompraProyectada(
-                    $registro, 
-                    $stockProyectado, 
-                    'VERANO',
+                    $registroCalculo,
+                    $stockProyectado,
+                    strtoupper($contexto),
                     null, // fecha actual
-                    'verano' // CONTEXTO ESPECÍFICO
+                    $contexto
                 );
-                
+
                 $registroProcesado = [
                     'RUBRO' => $this->limpiarTexto($registro['RUBRO'] ?? ''),
                     'CATEGORIA_PADRE' => $this->limpiarTexto($registro['CATEGORIA_PADRE'] ?? ''),
-                    'STOCK_PROYECTADO' => round($stockProyectado, 2),
-                    'INDICE_VAR_ORIGINAL' => round((float)($registro['INDICE_VAR_ORIGINAL'] ?? $registro['INDICE_ORIGINAL'] ?? $registro['INDICE_VARIACION'] ?? 1.0), 2),
-                    'INDICE_ORIGINAL' => round((float)($registro['INDICE_ORIGINAL'] ?? $registro['INDICE_VAR_ORIGINAL'] ?? $registro['INDICE_VARIACION'] ?? 1.0), 2),
-                    'INDICE_VARIACION' => round((float)($registro['INDICE_VARIACION'] ?? 1.0), 2),
-                    'INDICE_VARIACION_INVIERNO' => round((float)($registro['INDICE_VARIACION_INVIERNO'] ?? $registro['INDICE_VARIACION'] ?? 1.0), 2),
+                    'STOCK_PROYECTADO' => round($stockProyectado, 2)
+                ] + $camposIndices + [
                     // Componentes de STOCK_PROYECTADO. Viajan para poder guardarlos en la
                     // versión: sin ellos, meses después no se sabe cuánto había pedido y
                     // sin ingresar, que es lo que vuelve NETA a la compra proyectada.
@@ -63,7 +166,7 @@ class ProcesadorDatos {
                     // el Excel y el guardado usen el mismo reparto que calculó el servidor,
                     // en vez de que cada uno lo rehaga por su cuenta.
                     'TRAMOS' => $calculosCompra['tramos']
-                ];
+                ] + $this->ventasParaIndiceGeneral($registro);
 
                 // Agregar columnas de ventas históricas de forma controlada
                 $columnasVenta = $this->obtenerColumnasVentasSeguras($registro);
@@ -74,87 +177,15 @@ class ProcesadorDatos {
                 $resultado[] = $registroProcesado;
 
             } catch (Exception $e) {
-                error_log("Error procesando registro de verano (índice $index): " . $e->getMessage());
+                error_log("Error procesando registro de $contexto (índice $index): " . $e->getMessage());
                 continue;
             }
         }
-        
-        error_log("✅ VERANO procesado con contexto específico: " . count($resultado) . " registros");
+
+        error_log("✅ " . strtoupper($contexto) . " procesado con contexto específico: " . count($resultado) . " registros");
         return $resultado;
     }
-    
-    /**
-     * CORREGIDO: Procesar datos para la solapa de compra invierno CON CONTEXTO
-     */
-    public function procesarDatosCompraInvierno($datos) {
-        $resultado = [];
-        
-        if (empty($datos)) {
-            return $resultado;
-        }
-        
-        // Asegurar que no hay duplicados en los datos fuente
-        $datosUnicos = $this->eliminarDuplicados($datos);
-        
-        foreach ($datosUnicos as $index => $registro) {
-            try {
-                $stockProyectado = $this->calcularStockProyectadoRegistro($registro);
-                
-                // CORRECCIÓN: Especificar contexto de solapa 'invierno'
-                $calculosCompra = PresupuestoCalculos::procesarRegistroCompraProyectada(
-                    $registro, 
-                    $stockProyectado, 
-                    'INVIERNO',
-                    null, // fecha actual
-                    'invierno' // CONTEXTO ESPECÍFICO
-                );
-                
-                $registroProcesado = [
-                    'RUBRO' => $this->limpiarTexto($registro['RUBRO'] ?? ''),
-                    'CATEGORIA_PADRE' => $this->limpiarTexto($registro['CATEGORIA_PADRE'] ?? ''),
-                    'STOCK_PROYECTADO' => round($stockProyectado, 2),
-                    'INDICE_VAR_ORIGINAL' => round((float)($registro['INDICE_VAR_ORIGINAL'] ?? $registro['INDICE_ORIGINAL'] ?? $registro['INDICE_VARIACION'] ?? 1.0), 2),
-                    'INDICE_ORIGINAL' => round((float)($registro['INDICE_ORIGINAL'] ?? $registro['INDICE_VAR_ORIGINAL'] ?? $registro['INDICE_VARIACION'] ?? 1.0), 2),
-                    'INDICE_VARIACION' => round((float)($registro['INDICE_VARIACION'] ?? 1.0), 2),
-                    'INDICE_VARIACION_INVIERNO' => round((float)($registro['INDICE_VARIACION_INVIERNO'] ?? $registro['INDICE_VARIACION'] ?? 1.0), 2),
-                    // Ver el comentario equivalente en procesarDatosCompraVerano().
-                    'CANT_STOCK' => (int)($registro['CANT_STOCK'] ?? 0),
-                    'CANT_STOCK_GUARDAR' => (int)($registro['CANT_STOCK_GUARDAR'] ?? 0),
-                    'CANT_PEND_OC_VERANO' => (int)($registro['CANT_PEND_OC_VERANO'] ?? 0),
-                    'CANT_PEND_OC_INVIERNO' => (int)($registro['CANT_PEND_OC_INVIERNO'] ?? 0),
-                    'CANT_PEND_OC_ATEMPORAL' => (int)($registro['CANT_PEND_OC_ATEMPORAL'] ?? 0),
-                    'STOCK_COBERTURA' => (int)($registro['STOCK_COBERTURA'] ?? 0),
-                    'VENTA_VERANO_ANTERIOR' => round($calculosCompra['venta_verano_anterior'], 0),
-                    'TEMPORADA_BASE_VERANO' => $calculosCompra['temporada_base_verano'],
-                    'TEMPORADA_BASE_INVIERNO' => $calculosCompra['temporada_base_invierno'],
-                    'VENTA_INVIERNO_ANTERIOR' => round($calculosCompra['venta_invierno_anterior'], 0),
-                    'VENTA_PROY_VERANO' => round($calculosCompra['venta_proy_verano'], 0),
-                    'VENTA_PROY_INVIERNO' => round($calculosCompra['venta_proy_invierno'], 0),
-                    'COMPRA_PROYECTADA' => round($calculosCompra['compra_proyectada'], 0),
-                    // Compra abierta por tramo. Viaja con la fila para que la pantalla,
-                    // el Excel y el guardado usen el mismo reparto que calculó el servidor,
-                    // en vez de que cada uno lo rehaga por su cuenta.
-                    'TRAMOS' => $calculosCompra['tramos']
-                ];
 
-                // Agregar columnas de ventas históricas de forma controlada
-                $columnasVenta = $this->obtenerColumnasVentasSeguras($registro);
-                foreach ($columnasVenta as $columna) {
-                    $registroProcesado[$columna] = round((float)($registro[$columna] ?? 0), 0);
-                }
-
-                $resultado[] = $registroProcesado;
-
-            } catch (Exception $e) {
-                error_log("Error procesando registro de invierno (índice $index): " . $e->getMessage());
-                continue;
-            }
-        }
-        
-        error_log("✅ INVIERNO procesado con contexto específico: " . count($resultado) . " registros");
-        return $resultado;
-    }
-        
     /**
      * Procesar datos para la solapa de stock proyectado
      */
@@ -274,24 +305,25 @@ class ProcesadorDatos {
      */
     public function procesarRegistroCompraVerano($registro) {
         $stockProyectado = $this->calcularStockProyectadoRegistro($registro);
+        list($registroCalculo, $camposIndices) = $this->prepararIndices($registro);
         
         // CORRECCIÓN: Especificar contexto 'verano'
         $calculosCompra = PresupuestoCalculos::procesarRegistroCompraProyectada(
-            $registro, 
+            $registroCalculo, 
             $stockProyectado, 
             'VERANO',
             null,
             'verano' // CONTEXTO ESPECÍFICO
         );
         
-        return array_merge($registro, [
+        return array_merge($registro, $camposIndices, [
             'STOCK_PROYECTADO' => round($stockProyectado, 2),
             'VENTA_VERANO_ANTERIOR' => round($calculosCompra['venta_verano_anterior'], 0),
             'VENTA_INVIERNO_ANTERIOR' => round($calculosCompra['venta_invierno_anterior'], 0),
             'VENTA_PROY_VERANO' => round($calculosCompra['venta_proy_verano'], 0),
             'VENTA_PROY_INVIERNO' => round($calculosCompra['venta_proy_invierno'], 0),
             'COMPRA_PROYECTADA' => round($calculosCompra['compra_proyectada'], 0),
-            // Ver el comentario equivalente en procesarDatosCompraVerano().
+            // Ver el comentario equivalente en procesarDatosCompra().
             'TRAMOS' => $calculosCompra['tramos']
         ]);
     }
@@ -301,24 +333,25 @@ class ProcesadorDatos {
      */
     public function procesarRegistroCompraInvierno($registro) {
         $stockProyectado = $this->calcularStockProyectadoRegistro($registro);
+        list($registroCalculo, $camposIndices) = $this->prepararIndices($registro);
         
         // CORRECCIÓN: Especificar contexto 'invierno'
         $calculosCompra = PresupuestoCalculos::procesarRegistroCompraProyectada(
-            $registro, 
+            $registroCalculo, 
             $stockProyectado, 
             'INVIERNO',
             null,
             'invierno' // CONTEXTO ESPECÍFICO
         );
         
-        return array_merge($registro, [
+        return array_merge($registro, $camposIndices, [
             'STOCK_PROYECTADO' => round($stockProyectado, 2),
             'VENTA_VERANO_ANTERIOR' => round($calculosCompra['venta_verano_anterior'], 0),
             'VENTA_INVIERNO_ANTERIOR' => round($calculosCompra['venta_invierno_anterior'], 0),
             'VENTA_PROY_VERANO' => round($calculosCompra['venta_proy_verano'], 0),
             'VENTA_PROY_INVIERNO' => round($calculosCompra['venta_proy_invierno'], 0),
             'COMPRA_PROYECTADA' => round($calculosCompra['compra_proyectada'], 0),
-            // Ver el comentario equivalente en procesarDatosCompraVerano().
+            // Ver el comentario equivalente en procesarDatosCompra().
             'TRAMOS' => $calculosCompra['tramos']
         ]);
     }

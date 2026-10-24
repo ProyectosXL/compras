@@ -207,28 +207,46 @@ class ExcelExporter {
             } else {
                 // Verano / Invierno
                 resultado['Stock Proyectado'] = item.STOCK_PROYECTADO || 0;
+
+                // OC pendientes, agrupadas y abiertas: el Excel lleva todas las columnas,
+                // sin importar la vista elegida en pantalla. Ya están dentro del stock
+                // proyectado, por eso el encabezado lo aclara.
+                const ocVer = item.CANT_PEND_OC_VERANO || 0;
+                const ocInv = item.CANT_PEND_OC_INVIERNO || 0;
+                const ocAtemp = item.CANT_PEND_OC_ATEMPORAL || 0;
+                resultado['OC Pendientes (incl. en stock proy.)'] = ocVer + ocInv + ocAtemp;
+                resultado['OC Pend. Verano'] = ocVer;
+                resultado['OC Pend. Invierno'] = ocInv;
+                resultado['OC Pend. Atemporal'] = ocAtemp;
                 
                 // Índices
                 resultado['Índice Var. Original'] = parseFloat(item.INDICE_VAR_ORIGINAL || item.INDICE_ORIGINAL || 1).toFixed(2);
                 
-                // Campos editables (usamos el valor actual en memoria)
-                resultado['Índice Ver. Variación'] = parseFloat(item.INDICE_VARIACION || 1).toFixed(2);
+                // LP y Total Empresa, igual que la pantalla: con TE el editable es el TE y
+                // el LP es el del SP; sin TE (Uruguay) el LP es el editable y no hay TE.
+                const indices = ExcelExporter.indicesDeFila(item);
+                resultado['Índice Ver. LP'] = indices.verano.lp;
+                resultado['Índice Ver. Total Empresa'] = indices.verano.te;
                 
                 // Ventas anteriores (lógica robusta)
                 // Los encabezados llevan el período que cubre cada columna, igual que la
                 // pantalla: exportado sin eso, el Excel perdía de qué temporada hablaba.
                 const periodos = ExcelExporter.periodosDeSolapa(solapa);
+                const enCurso = TemporadaServidor.ventaEnCurso();
 
                 resultado['Venta Ver. Anterior'] = ExcelExporter.buscarVentaHistorica(item, 'VERANO');
                 // De qué temporada salió la base: varía por fila, así que no se puede
                 // poner en el encabezado como en la pantalla.
                 resultado['Temporada Base Ver.'] = item.TEMPORADA_BASE_VERANO || '';
                 resultado[`Proy. Verano (${periodos.verano})`] = item.VENTA_PROY_VERANO || 0;
+                if (enCurso && enCurso.tipo === 'VERANO') Object.assign(resultado, ExcelExporter.columnasTemporadaEnCurso(item, enCurso));
 
-                resultado['Índice Inv. Variación'] = parseFloat(item.INDICE_VARIACION_INVIERNO || item.INDICE_VARIACION || 1).toFixed(2);
+                resultado['Índice Inv. LP'] = indices.invierno.lp;
+                resultado['Índice Inv. Total Empresa'] = indices.invierno.te;
                 resultado['Venta Inv. Anterior'] = ExcelExporter.buscarVentaHistorica(item, 'INVIERNO');
                 resultado['Temporada Base Inv.'] = item.TEMPORADA_BASE_INVIERNO || '';
                 resultado[`Proy. Invierno (${periodos.invierno})`] = item.VENTA_PROY_INVIERNO || 0;
+                if (enCurso && enCurso.tipo === 'INVIERNO') Object.assign(resultado, ExcelExporter.columnasTemporadaEnCurso(item, enCurso));
                 
                 resultado['Compra Proyectada'] = item.COMPRA_PROYECTADA || 0;
 
@@ -273,8 +291,10 @@ class ExcelExporter {
 
                 Object.keys(item).forEach(key => {
                     // Si es una columna de historial (contiene VERANO, INVIERNO o VTA_)
-                    if (!columnasIgnorar.includes(key) && 
-                        (key.includes('VERANO') || key.includes('INVIERNO') || key.includes('VTA_')) &&
+                    // Misma regla que la tabla: solo columnas de una temporada
+                    // identificable. Con "contiene VTA_" se colaban VTA_60D_LP y compañía.
+                    if (!columnasIgnorar.includes(key) &&
+                        TemporadaServidor.temporadaDeColumna(key) &&
                         !key.startsWith('PROY') &&
                         !isNaN(parseFloat(item[key]))) {
                         
@@ -285,9 +305,47 @@ class ExcelExporter {
                         resultado[TemporadaServidor.etiquetaHistorica(key)] = item[key];
                     }
                 });
+
+                // La nota de la fila, al final: es texto libre y en el medio cortaría
+                // la lectura de los números.
+                resultado['Nota'] = item.NOTA || '';
             }
             return resultado;
         });
+    }
+
+    /**
+     * Vendido (real), Resto (proyectado) y Total de la temporada en curso, con los
+     * mismos valores que la pantalla. El encabezado dice qué es real y qué proyectado,
+     * porque en el Excel no hay colores ni tooltips que lo aclaren.
+     */
+    static columnasTemporadaEnCurso(item, info) {
+        const vendido = TablaRendererUtils.vendidoTemporadaEnCurso(item);
+        const resto = TablaRendererUtils.restoTemporadaEnCurso(item);
+        const corte = info.fecha_corte ? ` al ${UIUtils.formatearFechaCorta(info.fecha_corte)}` : '';
+
+        return {
+            [`Vendido ${info.codigo} (real${corte})`]: vendido === null ? '—' : vendido,
+            [`Resto ${info.codigo} (proyectado)`]: resto === null ? '—' : resto,
+            [`Total ${info.codigo} (real + proyectado)`]: (vendido === null || resto === null) ? '—' : vendido + resto
+        };
+    }
+
+    /**
+     * Índices LP y Total Empresa de una fila, por temporada, como se ven en pantalla.
+     * Sin índice TE la columna TE sale con "—", igual que en la tabla.
+     */
+    static indicesDeFila(item) {
+        const editable = (temporada) => parseFloat(temporada === 'invierno'
+            ? (item.INDICE_VARIACION_INVIERNO ?? item.INDICE_VARIACION ?? 1)
+            : (item.INDICE_VARIACION ?? 1)).toFixed(2);
+        const lpDelSp = parseFloat(item.INDICE_LP ?? item.INDICE_VARIACION ?? 1).toFixed(2);
+
+        const de = (temporada) => item.TE_DISPONIBLE
+            ? { lp: lpDelSp, te: editable(temporada) }
+            : { lp: editable(temporada), te: '—' };
+
+        return { verano: de('verano'), invierno: de('invierno') };
     }
 
     /**
@@ -306,25 +364,61 @@ class ExcelExporter {
         };
     }
 
+    /**
+     * Venta anterior de una fila: la misma que muestra la pantalla y la que usó el
+     * servidor para proyectar. Antes acá se buscaba por su cuenta con el año del
+     * navegador y, si no encontraba, tomaba la PRIMERA columna VTA_VERANO_* del
+     * registro, que es la más vieja: en esos casos el Excel mostraba otra base que
+     * la pantalla.
+     */
     static buscarVentaHistorica(item, temporada) {
-        // Misma lógica que TotalesCompra para consistencia
-        const anoActual = new Date().getFullYear().toString().substr(-2);
-        const anoAnterior = (parseInt(anoActual) - 1).toString();
-        
-        const posibles = temporada === 'VERANO' 
-            ? ['VENTA_VER_ANT', 'VTA_VERANO_ANT', `VTA_VERANO_${anoActual}`, `VTA_VERANO_${anoAnterior}`]
-            : ['VENTA_INV_ANT', 'VTA_INVIERNO_ANT', `VTA_INVIERNO_${anoActual}`, `VTA_INVIERNO_${anoAnterior}`];
+        return TemporadaServidor.ventaAnteriorDe(item, temporada);
+    }
 
-        for (const k of posibles) {
-            if (item[k] !== undefined) return parseFloat(item[k]);
-        }
-        
-        // Búsqueda genérica
-        const patron = temporada === 'VERANO' ? 'VTA_VERANO_' : 'VTA_INVIERNO_';
-        const keys = Object.keys(item).filter(k => k.startsWith(patron));
-        if (keys.length > 0) return parseFloat(item[keys[0]]);
-        
-        return 0;
+    /**
+     * Fila TOTALES de una hoja de compra, al final.
+     *
+     * Suma las columnas numéricas de las filas exportadas. Los índices no se suman:
+     * debajo de los LP y TE va el índice general de cada universo, ponderado por
+     * venta, igual que en la pantalla (TotalesCompra.indiceGeneral). Los índices
+     * originales y las columnas de texto quedan vacíos.
+     */
+    static filaTotalesPresupuesto(filas, datos) {
+        if (!filas.length) return null;
+
+        const totales = { ventas60: { lp: 0, lpAnt: 0, te: 0, teAnt: 0, hayLp: false, hayTe: false } };
+        datos.forEach(item => {
+            if (item.VTA_60D_LP !== null && item.VTA_60D_LP !== undefined) {
+                totales.ventas60.hayLp = true;
+                totales.ventas60.lp += parseFloat(item.VTA_60D_LP || 0);
+                totales.ventas60.lpAnt += parseFloat(item.VTA_60D_ANT_LP || 0);
+            }
+            if (item.VTA_60D_TE !== null && item.VTA_60D_TE !== undefined) {
+                totales.ventas60.hayTe = true;
+                totales.ventas60.te += parseFloat(item.VTA_60D_TE || 0);
+                totales.ventas60.teAnt += parseFloat(item.VTA_60D_ANT_TE || 0);
+            }
+        });
+        const general = (tipo) => {
+            const g = TotalesCompra.indiceGeneral(totales, tipo);
+            return g.valor === null ? '—' : `General ${g.texto}`;
+        };
+
+        const fila = {};
+        Object.keys(filas[0]).forEach(col => {
+            if (col === 'Rubro') { fila[col] = 'TOTALES'; return; }
+            if (/^Índice .* LP$/.test(col)) { fila[col] = general('lp'); return; }
+            if (/^Índice .* Total Empresa$/.test(col)) { fila[col] = general('te'); return; }
+            if (col.startsWith('Índice')) { fila[col] = ''; return; }
+
+            // Una columna se suma si todos sus valores son números: así quedan afuera
+            // las de texto (temporada base, nota) y las que traen "—".
+            const valores = filas.map(f => f[col]);
+            fila[col] = valores.every(v => typeof v === 'number' || (v !== '' && v !== null && !isNaN(v) && typeof v !== 'boolean'))
+                ? valores.reduce((a, v) => a + (parseFloat(v) || 0), 0)
+                : '';
+        });
+        return fila;
     }
 
     static prepararDatosCompras(datos) {
@@ -376,6 +470,8 @@ class ExcelExporter {
                 case 'verano':
                     datosCrudos = ExcelExporter.obtenerDatosFiltradosOCompletos('verano');
                     datosPreparados = ExcelExporter.prepararDatosPresupuesto(datosCrudos, 'verano');
+                    const totalesVerano = ExcelExporter.filaTotalesPresupuesto(datosPreparados, datosCrudos);
+                    if (totalesVerano) datosPreparados.push(totalesVerano);
                     nombreHoja = 'Compra Verano';
                     nombreArchivo = `compra_verano_${ExcelExporter.obtenerFechaHora()}.xlsx`;
                     break;
@@ -383,6 +479,8 @@ class ExcelExporter {
                 case 'invierno':
                     datosCrudos = ExcelExporter.obtenerDatosFiltradosOCompletos('invierno');
                     datosPreparados = ExcelExporter.prepararDatosPresupuesto(datosCrudos, 'invierno');
+                    const totalesInvierno = ExcelExporter.filaTotalesPresupuesto(datosPreparados, datosCrudos);
+                    if (totalesInvierno) datosPreparados.push(totalesInvierno);
                     nombreHoja = 'Compra Invierno';
                     nombreArchivo = `compra_invierno_${ExcelExporter.obtenerFechaHora()}.xlsx`;
                     break;

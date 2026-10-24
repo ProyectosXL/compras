@@ -756,6 +756,52 @@ class PresupuestoCalculos {
     }
 
     /**
+     * Qué cubre VTA_TEMPORADA_EN_CURSO del SP y si sirve para la temporada de hoy.
+     *
+     * El SP suma la venta real desde el primer día de la temporada hasta el día
+     * anterior a su corrida, así que la fecha de corte es ULT_ACTUALIZACION − 1. La
+     * pantalla la suma con el resto proyectado, que arranca HOY: si el SP corrió hace
+     * más de un día, entre las dos quedan días que no están en ningún lado, y eso se
+     * informa en vez de esconderlo.
+     *
+     * Si el SP corrió en otra temporada (por ejemplo el 31/01 y hoy es 02/02), lo que
+     * trae es venta de la temporada anterior: se marca como no vigente para no sumarle
+     * el resto de una temporada distinta.
+     *
+     * @param DateTime|string|null $ultActualizacion ULT_ACTUALIZACION de la tabla del SP
+     * @param bool $hayColumna si la tabla trae VTA_TEMPORADA_EN_CURSO (script 06)
+     */
+    public static function infoVentaTemporadaEnCurso($ultActualizacion, $hayColumna, $fecha = null) {
+        $hoy = self::normalizarFecha($fecha);
+        $temporada = self::obtenerTemporadaActual($hoy);
+
+        $info = [
+            'disponible' => (bool)$hayColumna && $ultActualizacion !== null,
+            'codigo'     => $temporada['codigo'],
+            'tipo'       => $temporada['temporada'],
+            'desde'      => $temporada['desde'],
+            'fecha_corte' => null,
+            'dias_sin_contar' => 0,
+            'vigente'    => false
+        ];
+
+        if (!$info['disponible']) {
+            return $info;
+        }
+
+        $corrida = self::normalizarFecha($ultActualizacion);
+        $corte = (clone $corrida)->modify('-1 day');
+
+        $info['fecha_corte'] = $corte->format('Y-m-d');
+        // La temporada de la corrida es la que usó el SP para elegir el primer día.
+        $info['vigente'] = self::obtenerTemporadaActual($corrida)['codigo'] === $temporada['codigo'];
+        // Días entre el corte y ayer que no suma nadie: el resto proyectado empieza hoy.
+        $info['dias_sin_contar'] = $corrida < $hoy ? (int)$corrida->diff($hoy)->days : 0;
+
+        return $info;
+    }
+
+    /**
      * NUEVO: Función de diagnóstico para debug
      */
     public static function diagnosticarDatos($registro) {

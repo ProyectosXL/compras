@@ -230,7 +230,10 @@ class IndiceController {
     private function actualizarRegistro(&$datosBase, $rubro, $categoria, $nuevoIndice, $solapa) {
         foreach ($datosBase as &$registro) {
             if ($registro['RUBRO'] === $rubro && $registro['CATEGORIA_PADRE'] === $categoria) {
-                $registro['INDICE_VARIACION'] = $nuevoIndice;
+                // Se marca el índice EDITABLE y no INDICE_VARIACION: desde el índice
+                // Total Empresa, ProcesadorDatos::prepararIndices() reemplaza
+                // INDICE_VARIACION por el TE y la edición se habría perdido.
+                $registro['_INDICE_EDITADO_VERANO'] = $nuevoIndice;
                 
                 // Recalcular según la solapa
                 $procesador = new ProcesadorDatos();

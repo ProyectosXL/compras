@@ -8,33 +8,37 @@
 <script src="js/utils.js?v=4.0"></script>
 <!-- Temporada calculada por el servidor. Va temprano porque la consultan el renderer,
      el exportador a Excel y las calculadoras. -->
-<script src="js/temporada-servidor.js?v=2.0"></script>
+<script src="js/temporada-servidor.js?v=2.1"></script>
 <script src="js/api-client.js?v=13.0"></script>
-<script src="js/tabla-renderer.js?v=4.0"></script>
+<script src="js/tabla-renderer.js?v=4.3"></script>
 <script src="js/busqueda-manager.js"></script>
 
 <!-- Gestor de filtros persistentes -->
 <script src="js/filtros-manager.js"></script>
-<script src="js/historial-manager.js?v=5.0"></script>
+<script src="js/historial-manager.js?v=5.4"></script>
 
 <!-- Calculadoras específicas (CARGAR ANTES del indice-editor) -->
-<script src="js/calculadora-verano.js?v=3.0"></script>
-<script src="js/calculadora-invierno.js?v=3.0"></script>
+<script src="js/calculadora-verano.js?v=3.1"></script>
+<script src="js/calculadora-invierno.js?v=3.1"></script>
 
 <!-- Editor de índices (DESPUÉS de las calculadoras) -->
-<script src="js/indice-editor.js?v=2.0"></script>
+<script src="js/indice-editor.js?v=2.3"></script>
 
 <!-- Resto de módulos -->
 <script src="js/compras-manager.js?v=2.0"></script>
 <script src="js/contenedores-manager.js?v=2.0"></script>
-<script src="js/totales-compra.js?v=3.0"></script>
+<script src="js/totales-compra.js?v=3.1"></script>
 <script src="js/totales-stock.js?v=2.0"></script>
-<script src="js/excel-exporter.js?v=14.0"></script>
+<script src="js/excel-exporter.js?v=14.3"></script>
 <script src="js/ventas-manager.js?v=2.0"></script>
 <script src="js/distribucion-manager.js?v=21.0"></script>
 
 <!-- Script principal (SIEMPRE AL FINAL) -->
-<script src="js/main.js?v=13.0"></script>
+<script src="js/main.js?v=13.2"></script>
+<!-- Ordenar y ocultar columnas: después de los renderers, observa las tablas ya armadas. -->
+<!-- Retomar una versión guardada en las solapas de compra. -->
+<script src="js/retomar-version.js?v=1.0"></script>
+<script src="js/tabla-columnas.js?v=1.0"></script>
 
 <script>
     // Variables globales para compatibilidad

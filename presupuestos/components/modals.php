@@ -29,6 +29,13 @@
                         • 0.8 = Reducción 20%
                     </div>
                 </div>
+                <!-- Una nota por fila y por solapa: la última que se escribe. Se guarda
+                     con la versión (detalle.nota) para que meses después se sepa por qué
+                     se tocó el índice. -->
+                <div class="mb-3">
+                    <label for="modal-nota-indice" class="form-label">Nota / motivo del cambio <span class="text-muted small">(opcional)</span></label>
+                    <textarea class="form-control form-control-sm" id="modal-nota-indice" rows="2" maxlength="500"></textarea>
+                </div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>

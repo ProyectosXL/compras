@@ -31,10 +31,46 @@ class HistorialController {
 
         try {
             $resultado = $this->historial->guardarPresupuesto($datos);
-            $this->jsonResponse($resultado, $resultado['success'] ? 200 : 500);
+            // Un nombre repetido no es una falla del servidor: es un conflicto con
+            // otra versión, y el mensaje le dice al usuario qué cambiar.
+            $codigo = $resultado['success'] ? 200 : (($resultado['codigo'] ?? '') === 'nombre_repetido' ? 409 : 500);
+            $this->jsonResponse($resultado, $codigo);
         } catch (Exception $e) {
             $this->jsonResponse(['success' => false, 'message' => 'Error del servidor: ' . $e->getMessage()], 500);
         }
+    }
+
+    /**
+     * Índices y notas de una versión guardada, para retomarla sobre los datos de hoy.
+     */
+    public function versionParaRetomar() {
+        try {
+            $resultado = $this->historial->versionParaRetomar(
+                !empty($_GET['id_cabecera']) ? (int)$_GET['id_cabecera'] : null,
+                $_GET['nombre_presupuesto'] ?? null
+            );
+            $this->jsonResponse($resultado, $resultado['success'] ? 200 : 404);
+        } catch (Exception $e) {
+            $this->jsonResponse(['success' => false, 'message' => 'Error del servidor: ' . $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Indica si un nombre de versión está libre. Lo usa el modal de guardado para
+     * avisar antes de confirmar; guardarPresupuesto() lo vuelve a validar igual.
+     */
+    public function validarNombreVersion() {
+        $nombre = trim((string)($_GET['nombre'] ?? ''));
+        if ($nombre === '') {
+            $this->jsonResponse(['success' => true, 'disponible' => false, 'message' => 'El nombre no puede quedar vacío.']);
+            return;
+        }
+        $disponible = $this->historial->nombreDisponible($nombre);
+        $this->jsonResponse([
+            'success' => true,
+            'disponible' => $disponible,
+            'message' => $disponible ? '' : "Ya existe una versión llamada '{$nombre}'."
+        ]);
     }
 
     /**

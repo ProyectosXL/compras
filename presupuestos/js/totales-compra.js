@@ -77,6 +77,15 @@ class TotalesCompra {
                 itemsNegativos: 0,
                 itemsPositivos: 0,
                 dinamicos: {},
+                // Ventas de 60 días para el índice general de cada universo. `hay`
+                // distingue "suma 0" de "la base no trae el dato" (Uruguay, o antes
+                // del script 06): lo primero es un índice indefinido, lo segundo
+                // directamente no existe.
+                ventas60: { lp: 0, lpAnt: 0, te: 0, teAnt: 0, hayLp: false, hayTe: false },
+                // Temporada en curso: mismas reglas por fila que las celdas de arriba,
+                // así el total es la suma de lo que se ve.
+                enCurso: { vendido: 0, resto: 0, total: 0, hayVendido: false, hayResto: false },
+                oc: { ver: 0, inv: 0, atemp: 0 },
                 // Indexado por `orden` y no por código de temporada: el orden es la
                 // posición de la columna, y es lo que mantiene alineada la fila de
                 // totales aunque dos tramos compartieran código.
@@ -96,6 +105,27 @@ class TotalesCompra {
                 acc.totalVentaInviernoAnt += TotalesCompra.obtenerValorVentaAnterior(item, 'INVIERNO');
                 acc.totalVentaVeranoProy += TotalesCompra.obtenerValorProyeccion(item, 'VERANO');
                 acc.totalVentaInviernoProy += TotalesCompra.obtenerValorProyeccion(item, 'INVIERNO');
+
+                if (item.VTA_60D_LP !== null && item.VTA_60D_LP !== undefined) {
+                    acc.ventas60.hayLp = true;
+                    acc.ventas60.lp += parseFloat(item.VTA_60D_LP || 0);
+                    acc.ventas60.lpAnt += parseFloat(item.VTA_60D_ANT_LP || 0);
+                }
+                if (item.VTA_60D_TE !== null && item.VTA_60D_TE !== undefined) {
+                    acc.ventas60.hayTe = true;
+                    acc.ventas60.te += parseFloat(item.VTA_60D_TE || 0);
+                    acc.ventas60.teAnt += parseFloat(item.VTA_60D_ANT_TE || 0);
+                }
+
+                acc.oc.ver += parseFloat(item.CANT_PEND_OC_VERANO || 0);
+                acc.oc.inv += parseFloat(item.CANT_PEND_OC_INVIERNO || 0);
+                acc.oc.atemp += parseFloat(item.CANT_PEND_OC_ATEMPORAL || 0);
+
+                const vendido = TablaRendererUtils.vendidoTemporadaEnCurso(item);
+                const resto = TablaRendererUtils.restoTemporadaEnCurso(item);
+                if (vendido !== null) { acc.enCurso.hayVendido = true; acc.enCurso.vendido += vendido; }
+                if (resto !== null) { acc.enCurso.hayResto = true; acc.enCurso.resto += resto; }
+                if (vendido !== null && resto !== null) acc.enCurso.total += vendido + resto;
 
                 // Sumar Dinámicos
                 clavesDinamicas.forEach(k => {
@@ -127,6 +157,46 @@ class TotalesCompra {
             console.error('Error calculando totales:', error);
             TotalesCompra.ocultarTotales(solapa);
         }
+    }
+
+    /**
+     * Índice general de un universo sobre las filas sumadas: SUM(venta 60 días) /
+     * SUM(venta mismos 60 días del año anterior).
+     *
+     * Es ponderado por venta, no un promedio de índices, y sale de la venta real: no
+     * cambia al editar el índice de una fila. Por eso sirve de referencia contra la
+     * cual comparar lo que se editó.
+     *
+     * @param {string} tipo 'lp' o 'te'
+     * @returns {{valor: number|null, texto: string, ayuda: string}}
+     */
+    static indiceGeneral(totales, tipo) {
+        const v = totales.ventas60;
+        const nombre = tipo === 'te' ? 'Total Empresa' : 'Locales Propios';
+        const universo = tipo === 'te' ? 'Locales Propios + Central' : 'solo Locales Propios';
+        const hay = tipo === 'te' ? v.hayTe : v.hayLp;
+        const actual = tipo === 'te' ? v.te : v.lp;
+        const anterior = tipo === 'te' ? v.teAnt : v.lpAnt;
+
+        if (!hay) {
+            return {
+                valor: null, texto: '—',
+                ayuda: `Índice general ${nombre}: esta base no trae las ventas de 60 días con las que se `
+                     + 'calcula (Uruguay, o falta correr el script 06).'
+            };
+        }
+
+        const formula = `Índice general ${nombre} (${universo}), sobre las filas visibles:\n`
+            + `venta últimos 60 días / venta mismos 60 días del año anterior\n`
+            + `= ${TotalesCompra.formatearNumero(actual)} / ${TotalesCompra.formatearNumero(anterior)}\n`
+            + 'Ponderado por venta, no es un promedio de índices. No cambia al editar índices.';
+
+        if (anterior === 0) {
+            return { valor: null, texto: '—', ayuda: formula + '\nSin venta el año anterior: no se puede calcular.' };
+        }
+
+        const valor = actual / anterior;
+        return { valor, texto: valor.toFixed(2), ayuda: formula };
     }
 
     /**
@@ -234,6 +304,14 @@ class TotalesCompra {
                     ayuda: 'Temporada que esta compra tiene que cubrir: '
                          + periodos.objetivo.desde + ' a ' + periodos.objetivo.hasta }
                 : null,
+            // Un solo ítem con los dos índices generales, para no sumar dos casilleros
+            // a una barra que ya es ancha. Solo si la base trae las ventas de 60 días.
+            (totales.ventas60.hayLp || totales.ventas60.hayTe)
+                ? { label: 'Índice general',
+                    valor: `LP ${TotalesCompra.indiceGeneral(totales, 'lp').texto} · TE ${TotalesCompra.indiceGeneral(totales, 'te').texto}`,
+                    ayuda: TotalesCompra.indiceGeneral(totales, 'lp').ayuda + '\n\n'
+                         + TotalesCompra.indiceGeneral(totales, 'te').ayuda }
+                : null,
             { label: 'Con faltante', valor: totales.itemsNegativos, tono: 'alerta',
               ayuda: 'Rubro/categoría cuya compra proyectada da negativa, es decir que '
                    + 'el stock proyectado no alcanza a cubrir la venta proyectada.' },
@@ -291,9 +369,19 @@ class TotalesCompra {
         searchContainer.parentNode.insertBefore(resumenContainer, searchContainer.nextSibling);
     }
 
+    /**
+     * Fila TOTALES al pie de la tabla.
+     *
+     * Se arma recorriendo los encabezados (data-col) y no con una lista fija de
+     * celdas. La lista fija tenía que coincidir a mano, posición por posición, con
+     * las columnas de la tabla: cada columna nueva corría la fila entera y dejaba
+     * los totales debajo de otro encabezado. Así, una columna sin total muestra "-"
+     * y la fila no puede quedar corrida.
+     */
     static agregarFilaTotales(solapa, totales, clavesDinamicas = [], tramos = []) {
         const tbody = document.getElementById(`tbody-${solapa}`);
-        if (!tbody) return;
+        const tabla = document.getElementById(`tabla-${solapa}`);
+        if (!tbody || !tabla) return;
 
         const filaAnterior = tbody.querySelector('.fila-totales-compra');
         if (filaAnterior) filaAnterior.remove();
@@ -302,51 +390,74 @@ class TotalesCompra {
         filaTotales.className = 'fila-totales-compra table-warning fw-bold sticky-bottom';
         filaTotales.style.borderTop = '3px solid #333';
         filaTotales.style.boxShadow = '0 -2px 5px rgba(0,0,0,0.1)';
-        
-        const colorBadge = solapa === 'verano' ? 'warning' : 'info';
-        
-        // CONSTRUCCIÓN DEL HTML
-        let html = `
-            <td class="fw-bold text-uppercase bg-warning"><i class="fas fa-calculator me-2"></i>TOTALES</td>
-            <td class="text-center bg-warning"><span class="badge bg-dark text-white">${totales.totalRegistros} ITEMS</span></td>
-            
-            <td class="text-end text-primary fw-bold" style="font-size:1.1em">${TotalesCompra.formatearNumero(totales.totalStockProyectado)}</td>
-            
-            <td class="text-center text-muted">-</td>
-            <td class="text-center text-muted">-</td>
-            
-            <td class="text-end text-primary fw-bold" style="font-size:1.1em">${TotalesCompra.formatearNumero(totales.totalVentaVeranoAnt)}</td>
-            <td class="text-end text-primary fw-bold" style="font-size:1.1em">${TotalesCompra.formatearNumero(totales.totalVentaVeranoProy)}</td>
-            
-            <td class="text-center text-muted">-</td>
-            
-            <td class="text-end text-primary fw-bold" style="font-size:1.1em">${TotalesCompra.formatearNumero(totales.totalVentaInviernoAnt)}</td>
-            <td class="text-end text-primary fw-bold" style="font-size:1.1em">${TotalesCompra.formatearNumero(totales.totalVentaInviernoProy)}</td>
-            
-            <td class="text-end ${totales.totalCompraProyectada < 0 ? 'text-danger' : 'text-success'} fw-bold" style="font-size: 1.2em; background-color: rgba(255,255,255,0.5);">
-                ${TotalesCompra.formatearNumero(totales.totalCompraProyectada)}
-            </td>
-        `;
 
-        // Compra por tramo, en el mismo orden que los encabezados y las filas.
-        // El tramo no comprable se muestra en rojo: no es parte de lo que hay que
-        // comprar, así que sumarlo con los otros daría un total que no existe.
+        const numero = (valor, extra = '') =>
+            `<td class="text-end text-primary fw-bold" style="font-size:1.1em"${extra}>${TotalesCompra.formatearNumero(valor)}</td>`;
+
+        const celdas = {
+            'rubro': '<td class="fw-bold text-uppercase bg-warning"><i class="fas fa-calculator me-2"></i>TOTALES</td>',
+            'categoria': `<td class="text-center bg-warning"><span class="badge bg-dark text-white">${totales.totalRegistros} ITEMS</span></td>`,
+            'stock-proyectado': numero(totales.totalStockProyectado),
+            'oc-total': numero(totales.oc.ver + totales.oc.inv + totales.oc.atemp),
+            'oc-ver': numero(totales.oc.ver),
+            'oc-inv': numero(totales.oc.inv),
+            'oc-atemp': numero(totales.oc.atemp),
+            'venta-ver-ant': numero(totales.totalVentaVeranoAnt),
+            'venta-proy-ver': numero(totales.totalVentaVeranoProy),
+            'venta-inv-ant': numero(totales.totalVentaInviernoAnt),
+            'venta-proy-inv': numero(totales.totalVentaInviernoProy),
+            'compra-proyectada': `<td class="text-end ${totales.totalCompraProyectada < 0 ? 'text-danger' : 'text-success'} fw-bold" style="font-size: 1.2em; background-color: rgba(255,255,255,0.5);">
+                ${TotalesCompra.formatearNumero(totales.totalCompraProyectada)}
+            </td>`
+        };
+
+        const guion = (motivo) => `<td class="text-center text-muted" title="${motivo}">—</td>`;
+        celdas['tec-vendido'] = totales.enCurso.hayVendido
+            ? numero(totales.enCurso.vendido) : guion(TablaRendererUtils.motivoSinVendido());
+        celdas['tec-resto'] = totales.enCurso.hayResto
+            ? numero(totales.enCurso.resto) : guion('Sin tramo de resto de temporada.');
+        celdas['tec-total'] = totales.enCurso.hayVendido && totales.enCurso.hayResto
+            ? numero(totales.enCurso.total) : guion('Hace falta la venta real y la proyectada para el total.');
+
+        // Índice general debajo de cada columna de índice: el LP bajo las LP y el TE
+        // bajo las TE. Es el mismo número para verano e invierno porque el SP da un
+        // solo índice por fila.
+        ['lp', 'te'].forEach(tipo => {
+            const general = TotalesCompra.indiceGeneral(totales, tipo);
+            const td = `<td class="text-center fw-bold ${general.valor === null ? 'text-muted' : 'text-dark'}"`
+                     + ` title="${general.ayuda.replace(/"/g, '&quot;')}">`
+                     + `<span class="d-block small fw-normal text-muted">General</span>${general.texto}</td>`;
+            celdas[`indice-ver-${tipo}`] = td;
+            celdas[`indice-inv-${tipo}`] = td;
+        });
+
+        // Compra por tramo. El tramo no comprable se muestra en rojo: no es parte de
+        // lo que hay que comprar, así que sumarlo con los otros daría un total que no existe.
         tramos.forEach(tramo => {
             const valor = totales.tramos[tramo.orden] || 0;
             const clase = !tramo.es_comprable
                 ? 'text-danger'
                 : (tramo.es_objetivo ? 'text-success' : 'text-secondary');
-            html += `<td class="text-end ${clase} fw-bold" data-tramo-orden="${tramo.orden}">`
-                  + `${TotalesCompra.formatearNumero(valor)}</td>`;
+            celdas['tramo-' + tramo.orden] = `<td class="text-end ${clase} fw-bold" data-tramo-orden="${tramo.orden}">`
+                + `${TotalesCompra.formatearNumero(valor)}</td>`;
         });
 
-        // Agregar columnas dinámicas (Años)
+        // Columnas dinámicas (años históricos)
         clavesDinamicas.forEach(key => {
-            const valor = totales.dinamicos[key];
-            html += `<td class="text-end text-secondary">${TotalesCompra.formatearNumero(valor)}</td>`;
+            celdas['hist-' + key] = `<td class="text-end text-secondary">${TotalesCompra.formatearNumero(totales.dinamicos[key])}</td>`;
         });
 
-        filaTotales.innerHTML = html;
+        const encabezados = Array.from(tabla.querySelectorAll('thead tr:last-child th'));
+        filaTotales.innerHTML = encabezados
+            .map(th => celdas[th.dataset.col] || '<td class="text-center text-muted">-</td>')
+            .join('');
+
+        // Cada celda lleva el data-col de su columna, como las filas de datos, para
+        // que ocultar una columna oculte también su total.
+        Array.from(filaTotales.children).forEach((td, i) => {
+            if (encabezados[i] && encabezados[i].dataset.col) td.dataset.col = encabezados[i].dataset.col;
+        });
+
         tbody.appendChild(filaTotales);
     }
 

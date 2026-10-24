@@ -118,8 +118,13 @@ class ExcelExporter {
         $xml .= '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' . "\n";
         $xml .= '<sheetData>' . "\n";
         
-        // Encabezados
-        $headers = array_keys($datos[0]);
+        // Encabezados. Las columnas que no son un valor simple (TRAMOS es un arreglo
+        // por fila) no entran en una celda: htmlspecialchars() fallaba con ellas. Las
+        // columnas nuevas del SP (índices LP/TE, ventas de 60 días, venta de la
+        // temporada en curso) salen solas, con su nombre de columna.
+        $headers = array_values(array_filter(array_keys($datos[0]), function ($h) use ($datos) {
+            return !is_array($datos[0][$h]) && !is_object($datos[0][$h]);
+        }));
         $xml .= '<row r="1">' . "\n";
         foreach ($headers as $index => $header) {
             $cellRef = self::obtenerReferenciaColumna($index + 1) . '1';
