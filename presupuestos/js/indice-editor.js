@@ -182,7 +182,9 @@ class IndiceEditor {
      */
     static async refrescarTramos(solapa, indiceReal, registro, filaVisual) {
         const celdas = filaVisual
-            ? Array.from(filaVisual.querySelectorAll('td[data-tramo-orden]'))
+            // Resto y Total de la temporada en curso salen del mismo reparto, así que se
+            // marcan y se actualizan junto con los tramos.
+            ? Array.from(filaVisual.querySelectorAll('td[data-tramo-orden], td[data-col="tec-resto"], td[data-col="tec-total"]'))
             : [];
 
         celdas.forEach(td => td.classList.add('tramo-recalculando'));
@@ -216,6 +218,11 @@ class IndiceEditor {
                     td.classList.remove('tramo-desactualizado');
                 }
             });
+
+            if (filaVisual) {
+                TablaRendererUtils.pintarTemporadaEnCurso(filaVisual, registro);
+                celdas.forEach(td => td.classList.remove('tramo-desactualizado'));
+            }
 
             if (typeof TotalesCompra !== 'undefined') {
                 TotalesCompra.onIndiceActualizado(solapa, registro.RUBRO, registro.CATEGORIA_PADRE, null);

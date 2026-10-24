@@ -301,6 +301,153 @@ const TablaRendererUtils = {
         return td;
     },
 
+    // ----------------------------------------------------------------------
+    // Venta de la temporada en curso: real + proyectada
+    // ----------------------------------------------------------------------
+
+    /**
+     * Columna junto a la que va el grupo de la temporada en curso: la "Venta Proy."
+     * del mismo tipo que la temporada que se está transitando. Null si el servidor
+     * todavía no mandó la información.
+     */
+    anclaTemporadaEnCurso() {
+        const info = TemporadaServidor.ventaEnCurso();
+        if (!info) return null;
+        return info.tipo === 'INVIERNO' ? 'venta-proy-inv' : 'venta-proy-ver';
+    },
+
+    /**
+     * Venta proyectada del resto de la temporada en curso para una fila.
+     *
+     * Es el tramo "resto" que ya repartió el servidor (obtenerPeriodosProyeccion /
+     * ventaProyectadaDeTramo), no una cuenta propia: así el número es el mismo que
+     * está dentro de la venta proyectada y de la compra, y al editar el índice se
+     * actualiza con el reparto que devuelve recalcular-tramos.
+     */
+    restoTemporadaEnCurso(item) {
+        const tramo = (item.TRAMOS || []).find(t => t.es_resto);
+        return tramo ? (parseFloat(tramo.venta_proyectada) || 0) : null;
+    },
+
+    /**
+     * Vendido real de la temporada en curso, o null si no se puede mostrar: base sin
+     * el script 06 (Uruguay) o SP corrido en otra temporada.
+     */
+    vendidoTemporadaEnCurso(item) {
+        const info = TemporadaServidor.ventaEnCurso();
+        if (!info || !info.disponible || !info.vigente) return null;
+        if (item.VTA_TEMPORADA_EN_CURSO === null || item.VTA_TEMPORADA_EN_CURSO === undefined) return null;
+        return parseFloat(item.VTA_TEMPORADA_EN_CURSO) || 0;
+    },
+
+    /** Por qué el vendido real no se muestra, para el tooltip del "—". */
+    motivoSinVendido() {
+        const info = TemporadaServidor.ventaEnCurso();
+        if (info && info.disponible && !info.vigente) {
+            return 'La venta real del SP es de la temporada anterior (el SP no corrió desde que '
+                 + 'empezó ' + info.codigo + '). Volvé a correr el SP para verla.';
+        }
+        return 'Esta base no trae la venta real de la temporada en curso (Uruguay, o falta correr el script 06).';
+    },
+
+    /** Encabezados del grupo, en orden: Vendido, Resto, Total. */
+    encabezadosTemporadaEnCurso() {
+        const info = TemporadaServidor.ventaEnCurso();
+        if (!info) return [];
+
+        const corte = info.fecha_corte ? UIUtils.formatearFechaCorta(info.fecha_corte).slice(0, 5) : null;
+        const leyenda = 'Vendido es venta REAL (Locales Propios + Central) desde el '
+            + UIUtils.formatearFechaCorta(info.desde) + (corte ? ' hasta el ' + corte : '') + '. '
+            + 'Resto es venta PROYECTADA desde hoy hasta el fin de ' + info.codigo
+            + ', con el índice de esa temporada: es el mismo tramo que está dentro de la venta '
+            + 'proyectada y de la compra. Total = Vendido + Resto. Es informativo: no entra en la '
+            + 'compra ni en los tramos.';
+
+        // Si el SP corrió hace más de un día, entre el corte y hoy hay días que no
+        // están ni en lo vendido ni en el resto: se avisa con la cantidad.
+        const aviso = info.disponible && info.vigente && info.dias_sin_contar > 0
+            ? ` <i class="fas fa-exclamation-triangle text-warning" title="Quedan ${info.dias_sin_contar} día(s) sin contar entre el ${corte} y hoy: el SP no corrió desde entonces. No están ni en Vendido ni en Resto."></i>`
+            : '';
+
+        return [
+            { col: 'tec-vendido', clase: 'text-center bg-info text-dark',
+              html: `<span class="th-linea">Vendido</span><span class="th-linea th-periodo">${info.codigo}</span>`
+                  + (corte && info.vigente ? `<span class="th-linea th-periodo">al ${corte}${aviso}</span>` : ''),
+              ayuda: leyenda },
+            { col: 'tec-resto', clase: 'text-center header-venta-proyectada',
+              html: `<span class="th-linea">Resto</span><span class="th-linea th-periodo">${info.codigo}</span>`
+                  + '<span class="th-linea th-periodo">proyectado</span>',
+              ayuda: leyenda },
+            { col: 'tec-total', clase: 'text-center bg-dark-subtle text-dark',
+              html: `<span class="th-linea">Total</span><span class="th-linea th-periodo">${info.codigo}</span>`
+                  + '<span class="th-linea th-periodo">real + proy.</span>',
+              ayuda: leyenda }
+        ];
+    },
+
+    /**
+     * Agrega las tres celdas del grupo a una fila, justo después de su ancla.
+     * Los valores los escribe pintarTemporadaEnCurso(), que también usa el editor.
+     */
+    agregarCeldasTemporadaEnCurso(fila, item) {
+        const ancla = TablaRendererUtils.celdaDeColumna(fila, TablaRendererUtils.anclaTemporadaEnCurso());
+        if (!ancla) return;
+
+        const clases = {
+            'tec-vendido': 'text-end bg-info-subtle',
+            'tec-resto': 'text-end bg-primary-subtle text-primary-emphasis',
+            'tec-total': 'text-end fw-bold'
+        };
+        let anterior = ancla;
+        ['tec-vendido', 'tec-resto', 'tec-total'].forEach(col => {
+            const td = document.createElement('td');
+            td.dataset.col = col;
+            td.className = clases[col];
+            anterior.after(td);
+            anterior = td;
+        });
+
+        TablaRendererUtils.pintarTemporadaEnCurso(fila, item);
+    },
+
+    /** Escribe Vendido, Resto y Total de una fila. */
+    pintarTemporadaEnCurso(fila, item) {
+        const c = (col) => TablaRendererUtils.celdaDeColumna(fila, col);
+        if (!c('tec-vendido')) return;
+
+        const vendido = TablaRendererUtils.vendidoTemporadaEnCurso(item);
+        const resto = TablaRendererUtils.restoTemporadaEnCurso(item);
+
+        const guion = (td, motivo) => {
+            td.textContent = '—';
+            delete td.dataset.valor;
+            td.title = motivo;
+        };
+
+        if (vendido === null) {
+            guion(c('tec-vendido'), TablaRendererUtils.motivoSinVendido());
+        } else {
+            TablaRendererUtils.escribirNumero(c('tec-vendido'), vendido);
+            c('tec-vendido').title = 'Venta real de la temporada en curso';
+        }
+
+        if (resto === null) {
+            guion(c('tec-resto'), 'Esta fila no tiene tramo de resto de temporada.');
+        } else {
+            TablaRendererUtils.escribirNumero(c('tec-resto'), resto);
+            c('tec-resto').title = 'Venta proyectada del resto de la temporada en curso';
+        }
+
+        // El total solo tiene sentido con las dos partes: sumar el resto solo lo
+        // haría pasar por el total de la temporada.
+        if (vendido === null || resto === null) {
+            guion(c('tec-total'), 'Hace falta la venta real y la proyectada para el total.');
+        } else {
+            TablaRendererUtils.escribirNumero(c('tec-total'), vendido + resto);
+            c('tec-total').title = 'Vendido + Resto';
+        }
+    },
+
     /** Celda de una columna (data-col) dentro de una fila. */
     celdaDeColumna(fila, col) {
         return fila ? fila.querySelector(`td[data-col="${col}"]`) : null;
@@ -518,6 +665,23 @@ class TablaRenderer {
             return;
         }
         
+        // Grupo de la temporada en curso, pegado a la Venta Proy. de su mismo tipo:
+        // es la otra mitad de esa temporada (lo ya vendido) y su total.
+        const ancla = thead.querySelector(`th[data-col="${TablaRendererUtils.anclaTemporadaEnCurso()}"]`);
+        if (ancla) {
+            let anterior = ancla;
+            TablaRendererUtils.encabezadosTemporadaEnCurso().forEach(e => {
+                const th = document.createElement('th');
+                th.className = e.clase;
+                th.innerHTML = e.html;
+                th.title = e.ayuda;
+                th.dataset.col = e.col;
+                th.setAttribute('data-columna-dinamica', 'true');
+                anterior.after(th);
+                anterior = th;
+            });
+        }
+
         // Los tramos van PRIMERO, pegados a Compra Proyectada: son la apertura de esa
         // misma columna, y ponerlos después de los años históricos los habría dejado
         // al final de la tabla, lejos del total que abren.
@@ -609,6 +773,9 @@ class TablaRenderer {
         tr.appendChild(celda('venta-proy-inv', 'text-end bg-primary-subtle text-primary-emphasis fw-bold', null, 'Venta proyectada invierno'));
 
         tr.appendChild(celda('compra-proyectada', '', null, 'Compra proyectada'));
+
+        // Vendido / Resto / Total de la temporada en curso, al lado de su Venta Proy.
+        TablaRendererUtils.agregarCeldasTemporadaEnCurso(tr, item);
 
         // Compra abierta por tramo, en el mismo orden que los encabezados: pegada a la
         // compra total y antes de los años históricos.

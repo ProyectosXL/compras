@@ -82,6 +82,9 @@ class TotalesCompra {
                 // del script 06): lo primero es un índice indefinido, lo segundo
                 // directamente no existe.
                 ventas60: { lp: 0, lpAnt: 0, te: 0, teAnt: 0, hayLp: false, hayTe: false },
+                // Temporada en curso: mismas reglas por fila que las celdas de arriba,
+                // así el total es la suma de lo que se ve.
+                enCurso: { vendido: 0, resto: 0, total: 0, hayVendido: false, hayResto: false },
                 // Indexado por `orden` y no por código de temporada: el orden es la
                 // posición de la columna, y es lo que mantiene alineada la fila de
                 // totales aunque dos tramos compartieran código.
@@ -112,6 +115,12 @@ class TotalesCompra {
                     acc.ventas60.te += parseFloat(item.VTA_60D_TE || 0);
                     acc.ventas60.teAnt += parseFloat(item.VTA_60D_ANT_TE || 0);
                 }
+
+                const vendido = TablaRendererUtils.vendidoTemporadaEnCurso(item);
+                const resto = TablaRendererUtils.restoTemporadaEnCurso(item);
+                if (vendido !== null) { acc.enCurso.hayVendido = true; acc.enCurso.vendido += vendido; }
+                if (resto !== null) { acc.enCurso.hayResto = true; acc.enCurso.resto += resto; }
+                if (vendido !== null && resto !== null) acc.enCurso.total += vendido + resto;
 
                 // Sumar Dinámicos
                 clavesDinamicas.forEach(k => {
@@ -392,6 +401,14 @@ class TotalesCompra {
                 ${TotalesCompra.formatearNumero(totales.totalCompraProyectada)}
             </td>`
         };
+
+        const guion = (motivo) => `<td class="text-center text-muted" title="${motivo}">—</td>`;
+        celdas['tec-vendido'] = totales.enCurso.hayVendido
+            ? numero(totales.enCurso.vendido) : guion(TablaRendererUtils.motivoSinVendido());
+        celdas['tec-resto'] = totales.enCurso.hayResto
+            ? numero(totales.enCurso.resto) : guion('Sin tramo de resto de temporada.');
+        celdas['tec-total'] = totales.enCurso.hayVendido && totales.enCurso.hayResto
+            ? numero(totales.enCurso.total) : guion('Hace falta la venta real y la proyectada para el total.');
 
         // Índice general debajo de cada columna de índice: el LP bajo las LP y el TE
         // bajo las TE. Es el mismo número para verano e invierno porque el SP da un

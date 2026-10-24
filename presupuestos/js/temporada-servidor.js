@@ -61,6 +61,16 @@ const TemporadaServidor = {
     },
 
     /**
+     * Qué cubre la venta real de la temporada en curso que trae el SP: código de la
+     * temporada, fecha de corte, días sin contar y si es de la temporada de hoy.
+     * Lo calcula PresupuestoCalculos::infoVentaTemporadaEnCurso(); null si no llegó.
+     */
+    ventaEnCurso() {
+        const info = TemporadaServidor.info();
+        return (info && info.venta_en_curso) || null;
+    },
+
+    /**
      * Períodos que cubre cada columna proyectada en una solapa dada.
      * @param {string} solapa 'verano' o 'invierno'
      */

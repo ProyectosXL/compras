@@ -35,6 +35,13 @@ class MainController {
                 // Agregar información de temporada
                 $infoTemporada = PresupuestoCalculos::obtenerInfoTemporada();
 
+                // Venta real de la temporada en curso: hasta qué día llega y si quedan
+                // días sin contar entre esa fecha y hoy (ver infoVentaTemporadaEnCurso).
+                $infoTemporada['venta_en_curso'] = PresupuestoCalculos::infoVentaTemporadaEnCurso(
+                    $datos[0]['ULT_ACTUALIZACION'] ?? null,
+                    !empty($datos) && array_key_exists('VTA_TEMPORADA_EN_CURSO', $datos[0])
+                );
+
                 // Extraer ULT_ACTUALIZACION del primer registro de la tabla
                 if (!empty($datos) && isset($datos[0]['ULT_ACTUALIZACION'])) {
                     $ultAct = $datos[0]['ULT_ACTUALIZACION'];

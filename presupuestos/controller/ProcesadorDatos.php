@@ -84,7 +84,9 @@ class ProcesadorDatos {
      */
     private function ventasParaIndiceGeneral($registro) {
         $campos = [];
-        foreach (['VTA_60D_LP', 'VTA_60D_ANT_LP', 'VTA_60D_TE', 'VTA_60D_ANT_TE'] as $campo) {
+        // VTA_TEMPORADA_EN_CURSO viaja por el mismo camino y con la misma regla: es la
+        // venta real de la temporada en curso, que la pantalla suma con el resto proyectado.
+        foreach (['VTA_60D_LP', 'VTA_60D_ANT_LP', 'VTA_60D_TE', 'VTA_60D_ANT_TE', 'VTA_TEMPORADA_EN_CURSO'] as $campo) {
             $campos[$campo] = array_key_exists($campo, $registro) ? (float)($registro[$campo] ?? 0) : null;
         }
         return $campos;

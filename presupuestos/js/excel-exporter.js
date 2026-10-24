@@ -221,18 +221,21 @@ class ExcelExporter {
                 // Los encabezados llevan el período que cubre cada columna, igual que la
                 // pantalla: exportado sin eso, el Excel perdía de qué temporada hablaba.
                 const periodos = ExcelExporter.periodosDeSolapa(solapa);
+                const enCurso = TemporadaServidor.ventaEnCurso();
 
                 resultado['Venta Ver. Anterior'] = ExcelExporter.buscarVentaHistorica(item, 'VERANO');
                 // De qué temporada salió la base: varía por fila, así que no se puede
                 // poner en el encabezado como en la pantalla.
                 resultado['Temporada Base Ver.'] = item.TEMPORADA_BASE_VERANO || '';
                 resultado[`Proy. Verano (${periodos.verano})`] = item.VENTA_PROY_VERANO || 0;
+                if (enCurso && enCurso.tipo === 'VERANO') Object.assign(resultado, ExcelExporter.columnasTemporadaEnCurso(item, enCurso));
 
                 resultado['Índice Inv. LP'] = indices.invierno.lp;
                 resultado['Índice Inv. Total Empresa'] = indices.invierno.te;
                 resultado['Venta Inv. Anterior'] = ExcelExporter.buscarVentaHistorica(item, 'INVIERNO');
                 resultado['Temporada Base Inv.'] = item.TEMPORADA_BASE_INVIERNO || '';
                 resultado[`Proy. Invierno (${periodos.invierno})`] = item.VENTA_PROY_INVIERNO || 0;
+                if (enCurso && enCurso.tipo === 'INVIERNO') Object.assign(resultado, ExcelExporter.columnasTemporadaEnCurso(item, enCurso));
                 
                 resultado['Compra Proyectada'] = item.COMPRA_PROYECTADA || 0;
 
@@ -294,6 +297,23 @@ class ExcelExporter {
             }
             return resultado;
         });
+    }
+
+    /**
+     * Vendido (real), Resto (proyectado) y Total de la temporada en curso, con los
+     * mismos valores que la pantalla. El encabezado dice qué es real y qué proyectado,
+     * porque en el Excel no hay colores ni tooltips que lo aclaren.
+     */
+    static columnasTemporadaEnCurso(item, info) {
+        const vendido = TablaRendererUtils.vendidoTemporadaEnCurso(item);
+        const resto = TablaRendererUtils.restoTemporadaEnCurso(item);
+        const corte = info.fecha_corte ? ` al ${UIUtils.formatearFechaCorta(info.fecha_corte)}` : '';
+
+        return {
+            [`Vendido ${info.codigo} (real${corte})`]: vendido === null ? '—' : vendido,
+            [`Resto ${info.codigo} (proyectado)`]: resto === null ? '—' : resto,
+            [`Total ${info.codigo} (real + proyectado)`]: (vendido === null || resto === null) ? '—' : vendido + resto
+        };
     }
 
     /**
