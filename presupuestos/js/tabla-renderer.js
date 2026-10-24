@@ -979,7 +979,60 @@ class TablaRenderer {
              + `<span class="visually-hidden">${nota}</span>`;
     }
 
-    static renderizarTablaHistorial(datos) {
+    /**
+     * Fila TOTALES del historial. Solo con una versión elegida en el filtro: sumar
+     * el historial entero mezclaría versiones distintas de la misma compra y daría
+     * un número que no existe. Sin versión, una leyenda lo explica.
+     *
+     * Suma lo que se ve, así que respeta los demás filtros (rubro, búsqueda). Los
+     * índices no se suman. La compra por tramo se totaliza por tramo con los mismos
+     * badges que las filas.
+     */
+    static filaTotalesHistorial(datos, conTotales) {
+        if (!conTotales) {
+            return `<tr class="fila-totales-historial"><td colspan="16" class="text-center text-muted small py-2">
+                        <i class="fas fa-info-circle me-1"></i>Elegí una versión para ver totales.</td></tr>`;
+        }
+
+        const suma = (campo) => datos.reduce((acc, d) => acc + (parseFloat(d[campo]) || 0), 0);
+        const num = (v) => `<td class="text-end fw-bold">${FormatoUtils.formatearNumero(v)}</td>`;
+
+        // Tramos agrupados por temporada (y si es resto), en orden cronológico.
+        const tramos = new Map();
+        datos.forEach(d => (d.tramos || []).forEach(t => {
+            const clave = (t.es_resto ? 'Resto ' : '') + t.temporada_codigo;
+            if (!tramos.has(clave)) {
+                tramos.set(clave, { ...t, compra: 0, compra_deficit_cobertura: 0 });
+            }
+            const acc = tramos.get(clave);
+            acc.compra += parseFloat(t.compra) || 0;
+            acc.compra_deficit_cobertura += parseFloat(t.compra_deficit_cobertura) || 0;
+        }));
+        const desglose = tramos.size
+            ? TablaRenderer.desgloseTramos({ tramos: [...tramos.values()].sort((a, b) => a.orden - b.orden) })
+            : '<span class="text-muted small">—</span>';
+
+        return `
+            <tr class="fila-totales-historial table-warning fw-bold">
+                <!-- Una celda por columna, sin colspan: ocultar columnas las ubica por posición. -->
+                <td class="text-uppercase"><i class="fas fa-calculator me-1"></i>Totales</td>
+                <td></td><td></td><td></td>
+                <td class="text-center"><span class="badge bg-dark">${datos.length} ITEMS</span></td>
+                <td></td>
+                ${num(suma('stock_proyectado'))}
+                <td class="text-center text-muted">—</td>
+                ${num(suma('venta_verano_anterior'))}
+                ${num(suma('venta_proyectada_verano'))}
+                <td class="text-center text-muted">—</td>
+                ${num(suma('venta_invierno_anterior'))}
+                ${num(suma('venta_proyectada_invierno'))}
+                ${num(suma('compra_proyectada'))}
+                <td class="text-center">${desglose}</td>
+                <td></td>
+            </tr>`;
+    }
+
+    static renderizarTablaHistorial(datos, conTotales = false) {
         const tbody = document.getElementById('tbody-historial');
         if (!tbody) {
             console.error('No se encontró el cuerpo de la tabla de historial (tbody-historial).');
@@ -1016,7 +1069,7 @@ class TablaRenderer {
             `;
         }).join('');
 
-        tbody.innerHTML = html;
+        tbody.innerHTML = html + TablaRenderer.filaTotalesHistorial(datos, conTotales);
     }
 
     /**

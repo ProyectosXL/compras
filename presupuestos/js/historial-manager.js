@@ -853,7 +853,9 @@ class HistorialManager {
             const respuesta = await APIClient.llamarAPI('buscar-historial', {}, 'POST', filtros);
 
             if (respuesta.success) {
-                TablaRenderer.renderizarTablaHistorial(respuesta.data);
+                // Los totales solo tienen sentido sobre UNA versión: sumar todo el
+                // historial mezclaría versiones distintas de la misma compra.
+                TablaRenderer.renderizarTablaHistorial(respuesta.data, !!version);
                 UIUtils.mostrarAlerta(`${respuesta.data.length} registros de historial encontrados.`, 'success');
             } else {
                 throw new Error(respuesta.message || 'Error al buscar en el historial.');
