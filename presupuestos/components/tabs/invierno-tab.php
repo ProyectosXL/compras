@@ -29,6 +29,10 @@
                 <button class="btn btn-primary btn-sm" id="btn-guardar-invierno" data-temporada="invierno">
                     <i class="fas fa-save me-1"></i> Guardar
                 </button>
+                <button class="btn btn-outline-primary btn-sm" id="btn-retomar-invierno"
+                        title="Aplicar los índices y notas de una versión guardada sobre los datos de hoy">
+                    <i class="fas fa-code-branch me-1"></i> Retomar versión
+                </button>
                 <button class="btn btn-outline-success btn-sm" id="btn-vista-oc-invierno" data-solapa="invierno"
                         title="Ver las OC pendientes en una sola columna o abiertas por temporada">
                     <i class="fas fa-truck me-1"></i> OC

@@ -70,82 +70,107 @@ class MainController {
     }
     
     /**
-     * CORREGIDO: Obtener datos para la solapa de Compra Proyectada Verano CON CONTEXTO
+     * Datos para la solapa de Compra Proyectada Verano
      */
     public function obtenerCompraProyectadaVerano() {
-        try {
-            $datosBase = $this->obtenerDatosValidados();
-            
-            // CORRECCIÓN: Pasar contexto 'verano' al procesador
-            $datosProcessados = $this->procesador->procesarDatosCompraVerano($datosBase);
-            
-            $columnasVenta = PresupuestoCalculos::obtenerColumnasVentas($datosBase, 'VERANO');
-            // Las etiquetas dependen de la solapa: la misma columna cubre distinto período
-            // en verano que en invierno, así que no se pueden calcular una sola vez para las dos.
-            $etiquetas = PresupuestoCalculos::generarEtiquetasVentaProyectada(null, 'verano');
-            $periodos = PresupuestoCalculos::obtenerPeriodosProyeccion(null, 'verano');
-            $etiquetasHistoricas = $this->etiquetarColumnasHistoricas($columnasVenta);
-            
-            // Log de debug
-            error_log("✅ VERANO - Procesados " . count($datosProcessados) . " registros con contexto específico");
-            
-            $this->jsonResponse([
-                'success' => true,
-                'message' => 'Datos de compra proyectada verano obtenidos',
-                'data' => $datosProcessados,
-                'columnas_venta' => $columnasVenta,
-                'etiquetas_historicas' => $etiquetasHistoricas,
-                'etiquetas' => $etiquetas,
-                'periodos' => $periodos,
-                'total_registros' => count($datosProcessados),
-                'contexto_aplicado' => 'verano'
-            ]);
-            
-        } catch (Exception $e) {
-            error_log("❌ Error en obtenerCompraProyectadaVerano: " . $e->getMessage());
-            $this->jsonResponse([
-                'success' => false,
-                'message' => 'Error al procesar compra verano: ' . $e->getMessage(),
-                'data' => []
-            ], 500);
-        }
+        $this->responderCompra('verano');
     }
-    
+
     /**
-     * CORREGIDO: Obtener datos para la solapa de Compra Proyectada Invierno CON CONTEXTO
+     * Datos para la solapa de Compra Proyectada Invierno
      */
     public function obtenerCompraProyectadaInvierno() {
+        $this->responderCompra('invierno');
+    }
+
+    /**
+     * Una solapa de compra recalculada con índices editables impuestos por fila.
+     *
+     * Es lo que usa "Retomar versión": los índices guardados se aplican sobre los
+     * datos de HOY (stock, ventas, OC) y el servidor recalcula venta, compra y tramos
+     * con la misma función que el render normal. Se descartó aplicarlos en el
+     * navegador fila por fila: habría sido una llamada a recalcular-tramos por fila
+     * y una segunda implementación de la venta proyectada.
+     *
+     * Body: { solapa, indices: [{rubro, categoria_padre, indice_verano, indice_invierno}] }
+     */
+    public function obtenerCompraConIndices() {
+        $entrada = json_decode(file_get_contents('php://input'), true) ?: [];
+        $solapa = (strtolower($entrada['solapa'] ?? '') === 'invierno') ? 'invierno' : 'verano';
+
+        $indices = [];
+        foreach (($entrada['indices'] ?? []) as $fila) {
+            $clave = trim((string)($fila['rubro'] ?? '')) . '|' . trim((string)($fila['categoria_padre'] ?? ''));
+            $indices[$clave] = $fila;
+        }
+
+        $this->responderCompra($solapa, $indices);
+    }
+
+    /**
+     * Arma la respuesta de una solapa de compra. Las etiquetas dependen de la solapa:
+     * la misma columna cubre distinto período en verano que en invierno.
+     *
+     * @param array|null $indices índices impuestos por "rubro|categoria"; las filas
+     *                            de hoy que no estén ahí quedan con su índice del SP.
+     */
+    private function responderCompra($solapa, $indices = null) {
         try {
             $datosBase = $this->obtenerDatosValidados();
-            
-            // CORRECCIÓN: Pasar contexto 'invierno' al procesador
-            $datosProcessados = $this->procesador->procesarDatosCompraInvierno($datosBase);
-            
-            $columnasVenta = PresupuestoCalculos::obtenerColumnasVentas($datosBase, 'INVIERNO');
-            $etiquetas = PresupuestoCalculos::generarEtiquetasVentaProyectada(null, 'invierno');
-            $periodos = PresupuestoCalculos::obtenerPeriodosProyeccion(null, 'invierno');
-            $etiquetasHistoricas = $this->etiquetarColumnasHistoricas($columnasVenta);
-            
-            // Log de debug
-            error_log("✅ INVIERNO - Procesados " . count($datosProcessados) . " registros con contexto específico");
-            
+            $faltantes = [];
+
+            if ($indices !== null) {
+                $hoy = [];
+                foreach ($datosBase as &$registro) {
+                    $clave = trim($registro['RUBRO'] ?? '') . '|' . trim($registro['CATEGORIA_PADRE'] ?? '');
+                    $hoy[$clave] = true;
+                    if (!isset($indices[$clave])) {
+                        continue;
+                    }
+                    // Validados igual que una edición manual: un índice fuera de rango
+                    // en una versión vieja no puede producir una proyección absurda.
+                    if (isset($indices[$clave]['indice_verano'])) {
+                        $registro['_INDICE_EDITADO_VERANO'] = PresupuestoCalculos::validarIndiceVariacion($indices[$clave]['indice_verano']);
+                    }
+                    if (isset($indices[$clave]['indice_invierno'])) {
+                        $registro['_INDICE_EDITADO_INVIERNO'] = PresupuestoCalculos::validarIndiceVariacion($indices[$clave]['indice_invierno']);
+                    }
+                }
+                unset($registro);
+
+                // Filas que estaban en la versión y hoy no existen: se informan para
+                // que no desaparezcan en silencio.
+                foreach ($indices as $clave => $fila) {
+                    if (!isset($hoy[$clave])) {
+                        $faltantes[] = ['rubro' => $fila['rubro'] ?? '', 'categoria_padre' => $fila['categoria_padre'] ?? ''];
+                    }
+                }
+            }
+
+            $datosProcesados = $solapa === 'invierno'
+                ? $this->procesador->procesarDatosCompraInvierno($datosBase)
+                : $this->procesador->procesarDatosCompraVerano($datosBase);
+
+            $columnasVenta = PresupuestoCalculos::obtenerColumnasVentas($datosBase, strtoupper($solapa));
+
             $this->jsonResponse([
                 'success' => true,
-                'message' => 'Datos de compra proyectada invierno obtenidos',
-                'data' => $datosProcessados,
+                'message' => "Datos de compra proyectada $solapa obtenidos",
+                'data' => $datosProcesados,
                 'columnas_venta' => $columnasVenta,
-                'etiquetas_historicas' => $etiquetasHistoricas,
-                'etiquetas' => $etiquetas,
-                'periodos' => $periodos,
-                'total_registros' => count($datosProcessados),
-                'contexto_aplicado' => 'invierno'
+                'etiquetas_historicas' => $this->etiquetarColumnasHistoricas($columnasVenta),
+                'etiquetas' => PresupuestoCalculos::generarEtiquetasVentaProyectada(null, $solapa),
+                'periodos' => PresupuestoCalculos::obtenerPeriodosProyeccion(null, $solapa),
+                'total_registros' => count($datosProcesados),
+                'contexto_aplicado' => $solapa,
+                'faltantes' => $faltantes
             ]);
-            
+
         } catch (Exception $e) {
-            error_log("❌ Error en obtenerCompraProyectadaInvierno: " . $e->getMessage());
+            error_log("❌ Error en la solapa de compra $solapa: " . $e->getMessage());
             $this->jsonResponse([
                 'success' => false,
-                'message' => 'Error al procesar compra invierno: ' . $e->getMessage(),
+                'message' => "Error al procesar compra $solapa: " . $e->getMessage(),
                 'data' => []
             ], 500);
         }
@@ -364,6 +389,7 @@ class MainController {
             case 'versiones-presupuesto':
             case 'historial-oficial':
             case 'validar-nombre-version':
+            case 'version-para-retomar':
                 $this->delegarHistorial($accion);
                 break;
                 
@@ -451,6 +477,10 @@ class MainController {
             // la última vez. Es una fila por edición, así que el viaje no pesa.
             case 'recalcular-tramos':
                 $this->recalcularTramos();
+                break;
+            // Solapa de compra con los índices de una versión guardada ("Retomar").
+            case 'compra-con-indices':
+                $this->obtenerCompraConIndices();
                 break;
             case 'guardar-presupuesto':
             case 'buscar-historial':
@@ -649,6 +679,9 @@ class MainController {
                 break;
             case 'validar-nombre-version':
                 $historialController->validarNombreVersion();
+                break;
+            case 'version-para-retomar':
+                $historialController->versionParaRetomar();
                 break;
             case 'marcar-oficial':
                 $historialController->marcarOficial();

@@ -15,14 +15,14 @@
 
 <!-- Gestor de filtros persistentes -->
 <script src="js/filtros-manager.js"></script>
-<script src="js/historial-manager.js?v=5.2"></script>
+<script src="js/historial-manager.js?v=5.3"></script>
 
 <!-- Calculadoras específicas (CARGAR ANTES del indice-editor) -->
 <script src="js/calculadora-verano.js?v=3.1"></script>
 <script src="js/calculadora-invierno.js?v=3.1"></script>
 
 <!-- Editor de índices (DESPUÉS de las calculadoras) -->
-<script src="js/indice-editor.js?v=2.2"></script>
+<script src="js/indice-editor.js?v=2.3"></script>
 
 <!-- Resto de módulos -->
 <script src="js/compras-manager.js?v=2.0"></script>
@@ -34,8 +34,10 @@
 <script src="js/distribucion-manager.js?v=21.0"></script>
 
 <!-- Script principal (SIEMPRE AL FINAL) -->
-<script src="js/main.js?v=13.1"></script>
+<script src="js/main.js?v=13.2"></script>
 <!-- Ordenar y ocultar columnas: después de los renderers, observa las tablas ya armadas. -->
+<!-- Retomar una versión guardada en las solapas de compra. -->
+<script src="js/retomar-version.js?v=1.0"></script>
 <script src="js/tabla-columnas.js?v=1.0"></script>
 
 <script>

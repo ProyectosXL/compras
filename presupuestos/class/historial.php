@@ -513,6 +513,119 @@ class Historial {
     }
 
     /**
+     * Lo que hace falta para retomar una versión: sus índices editables y sus notas
+     * por rubro/categoría, más los datos de la versión para el aviso y el banner.
+     *
+     * No se devuelven los números de la versión (stock, venta, compra): retomar es
+     * aplicar los índices sobre los datos de HOY y recalcular, no volver a mostrar
+     * la foto vieja.
+     *
+     * Se identifica por id de cabecera o, en las versiones viejas sin cabecera, por
+     * nombre: son las únicas dos formas que tiene el panel de nombrar una versión.
+     */
+    public function versionParaRetomar($idCabecera = null, $nombre = null) {
+        if (!$this->cid) {
+            return ['success' => false, 'message' => 'Error de conexión a la base de datos.'];
+        }
+
+        $conCabecera = $this->hayCabecera();
+        $detCols = "d.rubro, d.categoria_padre, d.indice_verano_variacion, d.indice_invierno_variacion, d.temporada";
+        $conNota = $this->tieneColumna('RO_T_HISTORIAL_COMPRAS_PROYECTADAS_PRESUPUESTO', 'nota');
+        $conTe = $this->tieneColumna('RO_T_HISTORIAL_COMPRAS_PROYECTADAS_PRESUPUESTO', 'indice_total_empresa_original');
+        if ($conNota) $detCols .= ", d.nota";
+        if ($conTe) $detCols .= ", d.indice_total_empresa_original";
+
+        if ($idCabecera && $conCabecera) {
+            $version = $this->primeraFila(
+                "SELECT c.* FROM RO_T_HISTORIAL_COMPRAS_PROYECTADAS_CABECERA c WHERE c.id = ?"
+                . ($this->filtroNoEliminada('c') !== '' ? ' AND ' . $this->filtroNoEliminada('c') : ''),
+                [(int)$idCabecera]);
+            if (!$version) {
+                return ['success' => false, 'message' => 'La versión no existe o fue dada de baja.'];
+            }
+            $filas = $this->todasLasFilas(
+                "SELECT $detCols FROM RO_T_HISTORIAL_COMPRAS_PROYECTADAS_PRESUPUESTO d WHERE d.id_cabecera = ?",
+                [(int)$idCabecera]);
+        } elseif ($nombre) {
+            $filas = $this->todasLasFilas(
+                "SELECT $detCols FROM RO_T_HISTORIAL_COMPRAS_PROYECTADAS_PRESUPUESTO d WHERE d.nombre_presupuesto = ?"
+                . ($this->detalleAmpliado() ? ' AND d.id_cabecera IS NULL' : ''),
+                [$nombre]);
+            if (!$filas) {
+                return ['success' => false, 'message' => 'La versión no existe.'];
+            }
+            $version = [
+                'id' => null,
+                'nombre_presupuesto' => $nombre,
+                'solapa' => $filas[0]['temporada'],
+                'es_oficial' => 0,
+                'es_completa' => null,
+                'comentario' => null
+            ];
+        } else {
+            return ['success' => false, 'message' => 'Falta indicar qué versión retomar.'];
+        }
+
+        // Anterior al índice Total Empresa: ninguna fila tiene el TE original. Sus
+        // índices editables se armaron sobre la base Locales Propios, así que al
+        // cargarlos en las columnas TE hay que avisarlo.
+        $anteriorTe = true;
+        foreach ($filas as $f) {
+            if (isset($f['indice_total_empresa_original']) && $f['indice_total_empresa_original'] !== null) {
+                $anteriorTe = false;
+                break;
+            }
+        }
+
+        foreach ($version as $k => $v) {
+            if ($v instanceof DateTime) {
+                $version[$k] = $v->format('Y-m-d H:i:s');
+            }
+        }
+
+        return [
+            'success' => true,
+            'version' => [
+                'id' => $version['id'] ?? null,
+                'nombre' => $version['nombre_presupuesto'],
+                'solapa' => $version['solapa'] ?? null,
+                'fecha_guardado' => $version['fecha_guardado'] ?? null,
+                'es_oficial' => (int)($version['es_oficial'] ?? 0),
+                'es_completa' => $version['es_completa'] ?? null,
+                'comentario' => $version['comentario'] ?? null,
+                'anterior_a_te' => $anteriorTe
+            ],
+            'filas' => array_map(function ($f) {
+                return [
+                    'rubro' => $f['rubro'],
+                    'categoria_padre' => $f['categoria_padre'],
+                    'indice_verano' => $f['indice_verano_variacion'] !== null ? (float)$f['indice_verano_variacion'] : null,
+                    'indice_invierno' => $f['indice_invierno_variacion'] !== null ? (float)$f['indice_invierno_variacion'] : null,
+                    'nota' => $f['nota'] ?? null
+                ];
+            }, $filas)
+        ];
+    }
+
+    private function primeraFila($sql, $params) {
+        $filas = $this->todasLasFilas($sql, $params);
+        return $filas ? $filas[0] : null;
+    }
+
+    private function todasLasFilas($sql, $params) {
+        $stmt = sqlsrv_query($this->cid, $sql, $params);
+        if ($stmt === false) {
+            throw new Exception('Error al leer la versión: ' . print_r(sqlsrv_errors(), true));
+        }
+        $filas = [];
+        while ($row = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC)) {
+            $filas[] = $row;
+        }
+        sqlsrv_free_stmt($stmt);
+        return $filas;
+    }
+
+    /**
      * Indica si un nombre está libre entre las versiones NO dadas de baja.
      *
      * Cuenta también las versiones viejas sin cabecera, que solo existen en el

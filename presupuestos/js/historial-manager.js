@@ -631,6 +631,8 @@ class HistorialManager {
 
             if (respuesta.success) {
                 UIUtils.mostrarAlerta(respuesta.message, 'success');
+                // Lo editado ya quedó guardado: retomar otra versión no pierde nada.
+                if (typeof RetomarVersion !== 'undefined') RetomarVersion.limpiarCambios(temporada);
             } else {
                 throw new Error(respuesta.message || 'Ocurrió un error desconocido al guardar.');
             }

@@ -160,6 +160,9 @@ class IndiceEditor {
             }
         }
 
+        // Para avisar antes de retomar otra versión encima de esta edición.
+        if (typeof RetomarVersion !== 'undefined') RetomarVersion.marcarCambios(solapa);
+
         // 7. Notificar a Totales (Recalcular sumas)
         if (typeof TotalesCompra !== 'undefined') {
             TotalesCompra.onIndiceActualizado(solapa, rubro, categoria, nuevoIndice);
@@ -453,6 +456,7 @@ class IndiceEditor {
 
         const nota = String(texto || '').trim().slice(0, 500);
         registro.NOTA = nota || null;
+        if (typeof RetomarVersion !== 'undefined') RetomarVersion.marcarCambios(solapa);
 
         const fila = TablaRendererUtils.filaDeRegistro(solapa, rubro, categoria);
         if (fila) TablaRendererUtils.pintarNota(fila, registro);

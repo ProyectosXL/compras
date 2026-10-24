@@ -189,6 +189,13 @@ class PresupuestoApp {
                 // Cargar datos de todas las solapas
                 await this.cargarDatosSolapas();
 
+                // Recargar todo deja las solapas con los índices de hoy: si había una
+                // versión retomada, ya no se está trabajando sobre ella.
+                if (typeof RetomarVersion !== 'undefined') {
+                    RetomarVersion.olvidar('verano');
+                    RetomarVersion.olvidar('invierno');
+                }
+
                 // Rotular de nuevo los encabezados: recién ahora se sabe qué columnas
                 // históricas trajo el SP, que es lo que nombra las columnas "anterior".
                 UIUtils.actualizarHeadersDinamicos(this.temporadaInfo);
@@ -247,23 +254,7 @@ class PresupuestoApp {
             try {
                 const verano = await APIClient.obtenerCompraVerano();
                 if (verano.success) {
-                    (verano.data || []).forEach(item => {
-                        // El original de las dos temporadas es el del SP para el índice
-                        // editable (el TE, o el LP si no hay TE): INDICE_VAR_ORIGINAL lo
-                        // manda el servidor. No se toma del valor editable porque una
-                        // versión retomada lo trae ya editado.
-                        const origVerano = parseFloat(item.INDICE_VAR_ORIGINAL ?? item.INDICE_ORIGINAL ?? item.INDICE_VARIACION ?? 1.0);
-                        const origInvierno = origVerano;
-                        item.INDICE_VAR_ORIGINAL = origVerano;
-                        item.INDICE_ORIGINAL = origVerano;
-                        item._indiceOriginal = origVerano;
-                        if (!item._indicesOriginales) {
-                            item._indicesOriginales = {
-                                verano: origVerano,
-                                invierno: origInvierno
-                            };
-                        }
-                    });
+                    this.prepararOriginales(verano.data || []);
                     this.datos.verano = verano.data;
                     // Las etiquetas históricas y el orden de las columnas los define el
                     // servidor; el front no vuelve a deducirlos del nombre de la columna.
@@ -289,23 +280,7 @@ class PresupuestoApp {
             try {
                 const invierno = await APIClient.obtenerCompraInvierno();
                 if (invierno.success) {
-                    (invierno.data || []).forEach(item => {
-                        // El original de las dos temporadas es el del SP para el índice
-                        // editable (el TE, o el LP si no hay TE): INDICE_VAR_ORIGINAL lo
-                        // manda el servidor. No se toma del valor editable porque una
-                        // versión retomada lo trae ya editado.
-                        const origVerano = parseFloat(item.INDICE_VAR_ORIGINAL ?? item.INDICE_ORIGINAL ?? item.INDICE_VARIACION ?? 1.0);
-                        const origInvierno = origVerano;
-                        item.INDICE_VAR_ORIGINAL = origVerano;
-                        item.INDICE_ORIGINAL = origVerano;
-                        item._indiceOriginal = origVerano;
-                        if (!item._indicesOriginales) {
-                            item._indicesOriginales = {
-                                verano: origVerano,
-                                invierno: origInvierno
-                            };
-                        }
-                    });
+                    this.prepararOriginales(invierno.data || []);
                     this.datos.invierno = invierno.data;
                     TemporadaServidor.registrarEtiquetasHistoricas(invierno.etiquetas_historicas);
                     this.columnasHistoricas = invierno.columnas_venta || this.columnasHistoricas;
@@ -353,6 +328,27 @@ class PresupuestoApp {
         throw error;
     }
 }
+
+    /**
+     * Deja en cada fila de una solapa de compra el índice ORIGINAL de cada temporada:
+     * contra él se marca una fila como editada y a él vuelve "restaurar".
+     *
+     * El original es el del SP para el índice editable (el TE, o el LP si no hay TE),
+     * y lo manda el servidor en INDICE_VAR_ORIGINAL. No se toma del valor editable
+     * porque una versión retomada lo trae ya editado. Antes este bloque estaba copiado
+     * cuatro veces en este archivo.
+     */
+    prepararOriginales(datos) {
+        (datos || []).forEach(item => {
+            const original = parseFloat(item.INDICE_VAR_ORIGINAL ?? item.INDICE_ORIGINAL ?? item.INDICE_VARIACION ?? 1.0);
+            item.INDICE_VAR_ORIGINAL = original;
+            item.INDICE_ORIGINAL = original;
+            item._indiceOriginal = original;
+            if (!item._indicesOriginales) {
+                item._indicesOriginales = { verano: original, invierno: original };
+            }
+        });
+    }
 
     /**
      * NUEVO: Renderizar solapa de forma segura evitando duplicados
@@ -404,19 +400,7 @@ class PresupuestoApp {
                 case 'verano':
                     response = await APIClient.obtenerCompraVerano();
                     if (response.success) {
-                        (response.data || []).forEach(item => {
-                            const origVerano = parseFloat(item.INDICE_VAR_ORIGINAL ?? item.INDICE_ORIGINAL ?? item.INDICE_VARIACION ?? 1.0);
-                            const origInvierno = parseFloat(item.INDICE_VARIACION_INVIERNO ?? item.INDICE_VARIACION ?? 1.0);
-                            item.INDICE_VAR_ORIGINAL = origVerano;
-                            item.INDICE_ORIGINAL = origVerano;
-                            item._indiceOriginal = origVerano;
-                            if (!item._indicesOriginales) {
-                                item._indicesOriginales = {
-                                    verano: origVerano,
-                                    invierno: origInvierno
-                                };
-                            }
-                        });
+                        this.prepararOriginales(response.data || []);
                         this.datos.verano = response.data;
                         this.renderizarSolapaSegura('verano', response.data, response.etiquetas);
                         UIUtils.actualizarContador('count-verano', response.data.length);
@@ -426,19 +410,7 @@ class PresupuestoApp {
                 case 'invierno':
                     response = await APIClient.obtenerCompraInvierno();
                     if (response.success) {
-                        (response.data || []).forEach(item => {
-                            const origVerano = parseFloat(item.INDICE_VAR_ORIGINAL ?? item.INDICE_ORIGINAL ?? item.INDICE_VARIACION ?? 1.0);
-                            const origInvierno = parseFloat(item.INDICE_VARIACION_INVIERNO ?? item.INDICE_VARIACION ?? 1.0);
-                            item.INDICE_VAR_ORIGINAL = origVerano;
-                            item.INDICE_ORIGINAL = origVerano;
-                            item._indiceOriginal = origVerano;
-                            if (!item._indicesOriginales) {
-                                item._indicesOriginales = {
-                                    verano: origVerano,
-                                    invierno: origInvierno
-                                };
-                            }
-                        });
+                        this.prepararOriginales(response.data || []);
                         this.datos.invierno = response.data;
                         this.renderizarSolapaSegura('invierno', response.data, response.etiquetas);
                         UIUtils.actualizarContador('count-invierno', response.data.length);
