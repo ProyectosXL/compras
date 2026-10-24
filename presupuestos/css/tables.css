@@ -460,3 +460,13 @@ mark {
     background-color: #ffc107 !important;
     color: #000 !important;
 }
+
+/* OC pendientes en las solapas de compra: las cuatro columnas existen siempre y la
+   vista de la tabla decide cuáles se ven. Va por data-col para que alcance a la
+   vez al encabezado, a las filas y a la fila de totales. */
+table[data-vista-oc="abierto"] [data-col="oc-total"],
+table:not([data-vista-oc="abierto"]) [data-col="oc-ver"],
+table:not([data-vista-oc="abierto"]) [data-col="oc-inv"],
+table:not([data-vista-oc="abierto"]) [data-col="oc-atemp"] {
+    display: none;
+}

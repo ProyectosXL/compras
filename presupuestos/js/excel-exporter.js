@@ -207,6 +207,17 @@ class ExcelExporter {
             } else {
                 // Verano / Invierno
                 resultado['Stock Proyectado'] = item.STOCK_PROYECTADO || 0;
+
+                // OC pendientes, agrupadas y abiertas: el Excel lleva todas las columnas,
+                // sin importar la vista elegida en pantalla. Ya están dentro del stock
+                // proyectado, por eso el encabezado lo aclara.
+                const ocVer = item.CANT_PEND_OC_VERANO || 0;
+                const ocInv = item.CANT_PEND_OC_INVIERNO || 0;
+                const ocAtemp = item.CANT_PEND_OC_ATEMPORAL || 0;
+                resultado['OC Pendientes (incl. en stock proy.)'] = ocVer + ocInv + ocAtemp;
+                resultado['OC Pend. Verano'] = ocVer;
+                resultado['OC Pend. Invierno'] = ocInv;
+                resultado['OC Pend. Atemporal'] = ocAtemp;
                 
                 // Índices
                 resultado['Índice Var. Original'] = parseFloat(item.INDICE_VAR_ORIGINAL || item.INDICE_ORIGINAL || 1).toFixed(2);

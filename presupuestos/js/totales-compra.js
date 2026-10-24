@@ -85,6 +85,7 @@ class TotalesCompra {
                 // Temporada en curso: mismas reglas por fila que las celdas de arriba,
                 // así el total es la suma de lo que se ve.
                 enCurso: { vendido: 0, resto: 0, total: 0, hayVendido: false, hayResto: false },
+                oc: { ver: 0, inv: 0, atemp: 0 },
                 // Indexado por `orden` y no por código de temporada: el orden es la
                 // posición de la columna, y es lo que mantiene alineada la fila de
                 // totales aunque dos tramos compartieran código.
@@ -115,6 +116,10 @@ class TotalesCompra {
                     acc.ventas60.te += parseFloat(item.VTA_60D_TE || 0);
                     acc.ventas60.teAnt += parseFloat(item.VTA_60D_ANT_TE || 0);
                 }
+
+                acc.oc.ver += parseFloat(item.CANT_PEND_OC_VERANO || 0);
+                acc.oc.inv += parseFloat(item.CANT_PEND_OC_INVIERNO || 0);
+                acc.oc.atemp += parseFloat(item.CANT_PEND_OC_ATEMPORAL || 0);
 
                 const vendido = TablaRendererUtils.vendidoTemporadaEnCurso(item);
                 const resto = TablaRendererUtils.restoTemporadaEnCurso(item);
@@ -393,6 +398,10 @@ class TotalesCompra {
             'rubro': '<td class="fw-bold text-uppercase bg-warning"><i class="fas fa-calculator me-2"></i>TOTALES</td>',
             'categoria': `<td class="text-center bg-warning"><span class="badge bg-dark text-white">${totales.totalRegistros} ITEMS</span></td>`,
             'stock-proyectado': numero(totales.totalStockProyectado),
+            'oc-total': numero(totales.oc.ver + totales.oc.inv + totales.oc.atemp),
+            'oc-ver': numero(totales.oc.ver),
+            'oc-inv': numero(totales.oc.inv),
+            'oc-atemp': numero(totales.oc.atemp),
             'venta-ver-ant': numero(totales.totalVentaVeranoAnt),
             'venta-proy-ver': numero(totales.totalVentaVeranoProy),
             'venta-inv-ant': numero(totales.totalVentaInviernoAnt),

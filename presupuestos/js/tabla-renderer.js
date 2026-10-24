@@ -759,6 +759,18 @@ class TablaRenderer {
         tr.lastChild.textContent = item.CATEGORIA_PADRE || '';
 
         tr.appendChild(celda('stock-proyectado', 'text-end bg-info-subtle', item.STOCK_PROYECTADO || 0));
+
+        // OC pendientes: las cuatro columnas existen siempre y la vista (agrupada o
+        // abierta) solo decide cuáles se ven. Son los mismos valores que la solapa
+        // Stock y ya están dentro del stock proyectado.
+        const ocVer = parseFloat(item.CANT_PEND_OC_VERANO || 0);
+        const ocInv = parseFloat(item.CANT_PEND_OC_INVIERNO || 0);
+        const ocAtemp = parseFloat(item.CANT_PEND_OC_ATEMPORAL || 0);
+        const ayudaOc = 'Ya incluidas en el Stock Proyectado: la compra proyectada es neta de lo pedido.';
+        tr.appendChild(celda('oc-total', 'text-end bg-success-subtle', ocVer + ocInv + ocAtemp, 'OC pendientes. ' + ayudaOc));
+        tr.appendChild(celda('oc-ver', 'text-end bg-success-subtle', ocVer, 'OC pendientes de verano. ' + ayudaOc));
+        tr.appendChild(celda('oc-inv', 'text-end bg-success-subtle', ocInv, 'OC pendientes de invierno. ' + ayudaOc));
+        tr.appendChild(celda('oc-atemp', 'text-end bg-success-subtle', ocAtemp, 'OC pendientes atemporales. ' + ayudaOc));
         tr.appendChild(celda('indice-original', 'text-center bg-secondary-subtle text-emphasis', null,
             'Índice editable tal como vino del SP, antes de cualquier edición (no editable).'));
 
@@ -1072,9 +1084,44 @@ class TablaRenderer {
     }
 
     /**
+     * Vista de las OC pendientes en las solapas de compra: 'agrupado' (una columna
+     * con la suma) o 'abierto' (una por temporada). Se recuerda por solapa y sin
+     * vencimiento: es una preferencia de cómo leer la tabla, no un dato.
+     */
+    static aplicarVistaOc(solapa, vista) {
+        const tabla = document.getElementById(`tabla-${solapa}`);
+        const boton = document.getElementById(`btn-vista-oc-${solapa}`);
+        if (!tabla) return;
+
+        tabla.dataset.vistaOc = vista === 'abierto' ? 'abierto' : 'agrupado';
+        if (boton) {
+            boton.innerHTML = vista === 'abierto'
+                ? '<i class="fas fa-truck me-1"></i> OC: abiertas'
+                : '<i class="fas fa-truck me-1"></i> OC: agrupadas';
+        }
+    }
+
+    static configurarVistaOc() {
+        ['verano', 'invierno'].forEach(solapa => {
+            const clave = `vista_oc_${solapa}`;
+            TablaRenderer.aplicarVistaOc(solapa, StorageUtils.obtener(clave) || 'agrupado');
+
+            const boton = document.getElementById(`btn-vista-oc-${solapa}`);
+            if (!boton) return;
+            boton.addEventListener('click', () => {
+                const tabla = document.getElementById(`tabla-${solapa}`);
+                const nueva = tabla && tabla.dataset.vistaOc === 'abierto' ? 'agrupado' : 'abierto';
+                TablaRenderer.aplicarVistaOc(solapa, nueva);
+                StorageUtils.guardar(clave, nueva);
+            });
+        });
+    }
+
+    /**
      * Inicialización simplificada
      */
     static init() {
+        TablaRenderer.configurarVistaOc();
         console.log('✅ TablaRenderer (con índice original) inicializado correctamente');
     }
 

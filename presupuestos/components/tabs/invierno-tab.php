@@ -2,7 +2,7 @@
 <div class="tab-pane fade" id="invierno" role="tabpanel">
     <div class="search-container">
         <div class="row align-items-center mb-2">
-            <div class="col-md-3">
+            <div class="col-md-3 col-lg-2">
                 <div class="input-group">
                     <span class="input-group-text">
                         <i class="fas fa-search"></i>
@@ -12,10 +12,10 @@
                         onkeyup="buscarDatos('invierno')">
                 </div>
             </div>
-            <div class="col-md-2">
+            <div class="col-md-2 col-lg-1">
                 <span class="badge bg-info fs-6 contador-animado" id="count-invierno">0 registros</span>
             </div>
-            <div class="col-md-3">
+            <div class="col-md-2">
                 <select class="form-select form-select-sm" id="filtro-rubro-invierno" onchange="filtrarPorRubroPresupuesto('invierno')">
                     <option value="">Todos los rubros</option>
                 </select>
@@ -25,9 +25,13 @@
                     <option value="">Todas las categorías</option>
                 </select>
             </div>
-            <div class="col-md-2 text-end export-buttons">
+            <div class="col-md-3 col-lg-5 export-buttons d-flex flex-wrap gap-1 justify-content-end">
                 <button class="btn btn-primary btn-sm" id="btn-guardar-invierno" data-temporada="invierno">
                     <i class="fas fa-save me-1"></i> Guardar
+                </button>
+                <button class="btn btn-outline-success btn-sm" id="btn-vista-oc-invierno" data-solapa="invierno"
+                        title="Ver las OC pendientes en una sola columna o abiertas por temporada">
+                    <i class="fas fa-truck me-1"></i> OC
                 </button>
                 <button class="btn btn-success btn-sm" onclick="exportarExcel('invierno')">
                     <i class="fas fa-file-excel me-1"></i> Excel
@@ -46,6 +50,12 @@
                     <th data-col="rubro">Rubro</th>
                     <th data-col="categoria">Categoría</th>
                     <th class="text-center bg-info" data-col="stock-proyectado">Stock<br>Proyectado</th>
+                    <!-- OC pendientes: ya están DENTRO del stock proyectado. Se muestran agrupadas
+                         (una columna) o abiertas por temporada, según el botón de la barra. -->
+                    <th class="text-center bg-success-subtle text-dark col-oc-agrupada" data-col="oc-total" title="OC pendientes de ingreso (verano + invierno + atemporal). Ya están incluidas en el Stock Proyectado: la compra proyectada es neta de lo pedido.">OC<br>Pendientes</th>
+                    <th class="text-center bg-success-subtle text-dark col-oc-abierta" data-col="oc-ver" title="OC pendientes de verano. Ya están incluidas en el Stock Proyectado.">OC Pend.<br>Verano</th>
+                    <th class="text-center bg-success-subtle text-dark col-oc-abierta" data-col="oc-inv" title="OC pendientes de invierno. Ya están incluidas en el Stock Proyectado.">OC Pend.<br>Invierno</th>
+                    <th class="text-center bg-success-subtle text-dark col-oc-abierta" data-col="oc-atemp" title="OC pendientes atemporales. Ya están incluidas en el Stock Proyectado.">OC Pend.<br>Atemporal</th>
                     <th class="text-center bg-secondary text-white" data-col="indice-original"
                         title="Índice editable tal como vino del SP, antes de cualquier edición. Es el valor al que vuelve Restaurar.">Índice Var.<br>Original</th>
                     <th class="text-center bg-secondary-subtle text-dark" data-col="indice-ver-lp" data-indice-tipo="lp">Índice Ver.<br>LP</th>
