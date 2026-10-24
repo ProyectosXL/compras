@@ -291,9 +291,19 @@ class TotalesCompra {
         searchContainer.parentNode.insertBefore(resumenContainer, searchContainer.nextSibling);
     }
 
+    /**
+     * Fila TOTALES al pie de la tabla.
+     *
+     * Se arma recorriendo los encabezados (data-col) y no con una lista fija de
+     * celdas. La lista fija tenía que coincidir a mano, posición por posición, con
+     * las columnas de la tabla: cada columna nueva corría la fila entera y dejaba
+     * los totales debajo de otro encabezado. Así, una columna sin total muestra "-"
+     * y la fila no puede quedar corrida.
+     */
     static agregarFilaTotales(solapa, totales, clavesDinamicas = [], tramos = []) {
         const tbody = document.getElementById(`tbody-${solapa}`);
-        if (!tbody) return;
+        const tabla = document.getElementById(`tabla-${solapa}`);
+        if (!tbody || !tabla) return;
 
         const filaAnterior = tbody.querySelector('.fila-totales-compra');
         if (filaAnterior) filaAnterior.remove();
@@ -302,51 +312,50 @@ class TotalesCompra {
         filaTotales.className = 'fila-totales-compra table-warning fw-bold sticky-bottom';
         filaTotales.style.borderTop = '3px solid #333';
         filaTotales.style.boxShadow = '0 -2px 5px rgba(0,0,0,0.1)';
-        
-        const colorBadge = solapa === 'verano' ? 'warning' : 'info';
-        
-        // CONSTRUCCIÓN DEL HTML
-        let html = `
-            <td class="fw-bold text-uppercase bg-warning"><i class="fas fa-calculator me-2"></i>TOTALES</td>
-            <td class="text-center bg-warning"><span class="badge bg-dark text-white">${totales.totalRegistros} ITEMS</span></td>
-            
-            <td class="text-end text-primary fw-bold" style="font-size:1.1em">${TotalesCompra.formatearNumero(totales.totalStockProyectado)}</td>
-            
-            <td class="text-center text-muted">-</td>
-            <td class="text-center text-muted">-</td>
-            
-            <td class="text-end text-primary fw-bold" style="font-size:1.1em">${TotalesCompra.formatearNumero(totales.totalVentaVeranoAnt)}</td>
-            <td class="text-end text-primary fw-bold" style="font-size:1.1em">${TotalesCompra.formatearNumero(totales.totalVentaVeranoProy)}</td>
-            
-            <td class="text-center text-muted">-</td>
-            
-            <td class="text-end text-primary fw-bold" style="font-size:1.1em">${TotalesCompra.formatearNumero(totales.totalVentaInviernoAnt)}</td>
-            <td class="text-end text-primary fw-bold" style="font-size:1.1em">${TotalesCompra.formatearNumero(totales.totalVentaInviernoProy)}</td>
-            
-            <td class="text-end ${totales.totalCompraProyectada < 0 ? 'text-danger' : 'text-success'} fw-bold" style="font-size: 1.2em; background-color: rgba(255,255,255,0.5);">
-                ${TotalesCompra.formatearNumero(totales.totalCompraProyectada)}
-            </td>
-        `;
 
-        // Compra por tramo, en el mismo orden que los encabezados y las filas.
-        // El tramo no comprable se muestra en rojo: no es parte de lo que hay que
-        // comprar, así que sumarlo con los otros daría un total que no existe.
+        const numero = (valor, extra = '') =>
+            `<td class="text-end text-primary fw-bold" style="font-size:1.1em"${extra}>${TotalesCompra.formatearNumero(valor)}</td>`;
+
+        const celdas = {
+            'rubro': '<td class="fw-bold text-uppercase bg-warning"><i class="fas fa-calculator me-2"></i>TOTALES</td>',
+            'categoria': `<td class="text-center bg-warning"><span class="badge bg-dark text-white">${totales.totalRegistros} ITEMS</span></td>`,
+            'stock-proyectado': numero(totales.totalStockProyectado),
+            'venta-ver-ant': numero(totales.totalVentaVeranoAnt),
+            'venta-proy-ver': numero(totales.totalVentaVeranoProy),
+            'venta-inv-ant': numero(totales.totalVentaInviernoAnt),
+            'venta-proy-inv': numero(totales.totalVentaInviernoProy),
+            'compra-proyectada': `<td class="text-end ${totales.totalCompraProyectada < 0 ? 'text-danger' : 'text-success'} fw-bold" style="font-size: 1.2em; background-color: rgba(255,255,255,0.5);">
+                ${TotalesCompra.formatearNumero(totales.totalCompraProyectada)}
+            </td>`
+        };
+
+        // Compra por tramo. El tramo no comprable se muestra en rojo: no es parte de
+        // lo que hay que comprar, así que sumarlo con los otros daría un total que no existe.
         tramos.forEach(tramo => {
             const valor = totales.tramos[tramo.orden] || 0;
             const clase = !tramo.es_comprable
                 ? 'text-danger'
                 : (tramo.es_objetivo ? 'text-success' : 'text-secondary');
-            html += `<td class="text-end ${clase} fw-bold" data-tramo-orden="${tramo.orden}">`
-                  + `${TotalesCompra.formatearNumero(valor)}</td>`;
+            celdas['tramo-' + tramo.orden] = `<td class="text-end ${clase} fw-bold" data-tramo-orden="${tramo.orden}">`
+                + `${TotalesCompra.formatearNumero(valor)}</td>`;
         });
 
-        // Agregar columnas dinámicas (Años)
+        // Columnas dinámicas (años históricos)
         clavesDinamicas.forEach(key => {
-            const valor = totales.dinamicos[key];
-            html += `<td class="text-end text-secondary">${TotalesCompra.formatearNumero(valor)}</td>`;
+            celdas['hist-' + key] = `<td class="text-end text-secondary">${TotalesCompra.formatearNumero(totales.dinamicos[key])}</td>`;
         });
 
-        filaTotales.innerHTML = html;
+        const encabezados = Array.from(tabla.querySelectorAll('thead tr:last-child th'));
+        filaTotales.innerHTML = encabezados
+            .map(th => celdas[th.dataset.col] || '<td class="text-center text-muted">-</td>')
+            .join('');
+
+        // Cada celda lleva el data-col de su columna, como las filas de datos, para
+        // que ocultar una columna oculte también su total.
+        Array.from(filaTotales.children).forEach((td, i) => {
+            if (encabezados[i] && encabezados[i].dataset.col) td.dataset.col = encabezados[i].dataset.col;
+        });
+
         tbody.appendChild(filaTotales);
     }
 

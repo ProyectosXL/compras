@@ -248,8 +248,12 @@ class PresupuestoApp {
                 const verano = await APIClient.obtenerCompraVerano();
                 if (verano.success) {
                     (verano.data || []).forEach(item => {
+                        // El original de las dos temporadas es el del SP para el índice
+                        // editable (el TE, o el LP si no hay TE): INDICE_VAR_ORIGINAL lo
+                        // manda el servidor. No se toma del valor editable porque una
+                        // versión retomada lo trae ya editado.
                         const origVerano = parseFloat(item.INDICE_VAR_ORIGINAL ?? item.INDICE_ORIGINAL ?? item.INDICE_VARIACION ?? 1.0);
-                        const origInvierno = parseFloat(item.INDICE_VARIACION_INVIERNO ?? item.INDICE_VARIACION ?? 1.0);
+                        const origInvierno = origVerano;
                         item.INDICE_VAR_ORIGINAL = origVerano;
                         item.INDICE_ORIGINAL = origVerano;
                         item._indiceOriginal = origVerano;
@@ -286,8 +290,12 @@ class PresupuestoApp {
                 const invierno = await APIClient.obtenerCompraInvierno();
                 if (invierno.success) {
                     (invierno.data || []).forEach(item => {
+                        // El original de las dos temporadas es el del SP para el índice
+                        // editable (el TE, o el LP si no hay TE): INDICE_VAR_ORIGINAL lo
+                        // manda el servidor. No se toma del valor editable porque una
+                        // versión retomada lo trae ya editado.
                         const origVerano = parseFloat(item.INDICE_VAR_ORIGINAL ?? item.INDICE_ORIGINAL ?? item.INDICE_VARIACION ?? 1.0);
-                        const origInvierno = parseFloat(item.INDICE_VARIACION_INVIERNO ?? item.INDICE_VARIACION ?? 1.0);
+                        const origInvierno = origVerano;
                         item.INDICE_VAR_ORIGINAL = origVerano;
                         item.INDICE_ORIGINAL = origVerano;
                         item._indiceOriginal = origVerano;

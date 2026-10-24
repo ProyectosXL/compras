@@ -232,9 +232,15 @@ class Historial {
         $ampliado = $this->detalleAmpliado();
         $conTramos = $this->hayTramos();
 
+        // Columnas del script 07 (solo Argentina). Se agregan al INSERT únicamente si
+        // la base las tiene: Uruguay, o Argentina antes de correrlo, guardan como antes.
+        $extras = [];
+        if ($ampliado && $this->tieneColumna('RO_T_HISTORIAL_COMPRAS_PROYECTADAS_PRESUPUESTO', 'indice_lp')) {
+            $extras = ['indice_lp', 'indice_total_empresa_original'];
+        }
+
         if ($ampliado) {
-            $sql = "INSERT INTO RO_T_HISTORIAL_COMPRAS_PROYECTADAS_PRESUPUESTO (
-                        nombre_presupuesto, fecha_guardado, temporada, pais, rubro,
+            $columnas = "nombre_presupuesto, fecha_guardado, temporada, pais, rubro,
                         categoria_padre, stock_proyectado, indice_variacion_original,
                         indice_verano_variacion, venta_verano_anterior, venta_proyectada_verano,
                         indice_invierno_variacion, venta_invierno_anterior, venta_proyectada_invierno,
@@ -242,8 +248,12 @@ class Historial {
                         id_cabecera, cant_stock, cant_stock_guardar,
                         cant_pend_oc_verano, cant_pend_oc_invierno, cant_pend_oc_atemporal,
                         stock_cobertura, costo_prom, inc_fob, vcosto,
-                        temporada_base_verano, temporada_base_invierno
-                    ) OUTPUT INSERTED.id VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                        temporada_base_verano, temporada_base_invierno";
+            if ($extras) {
+                $columnas .= ', ' . implode(', ', $extras);
+            }
+            $sql = "INSERT INTO RO_T_HISTORIAL_COMPRAS_PROYECTADAS_PRESUPUESTO ($columnas)
+                    OUTPUT INSERTED.id VALUES (" . implode(', ', array_fill(0, 27 + count($extras), '?')) . ")";
         } else {
             $sql = "INSERT INTO RO_T_HISTORIAL_COMPRAS_PROYECTADAS_PRESUPUESTO (
                         nombre_presupuesto, fecha_guardado, temporada, pais, rubro,
@@ -315,6 +325,10 @@ class Historial {
                     $fila['temporada_base_verano'] ?? null,
                     $fila['temporada_base_invierno'] ?? null
                 ]);
+
+                foreach ($extras as $extra) {
+                    $params[] = $this->valorExtraDetalle($fila, $extra);
+                }
             }
 
             $stmt = sqlsrv_query($this->cid, $sql, $params);
@@ -462,6 +476,40 @@ class Historial {
         sqlsrv_free_stmt($stmt);
 
         return $this->cacheDetalleAmpliado = (bool)$row['existe'];
+    }
+
+    /**
+     * Indica si una tabla tiene una columna, con el mismo criterio que
+     * detalleAmpliado(): se consulta el catálogo una vez por instancia y columna.
+     */
+    private $cacheColumnas = [];
+
+    private function tieneColumna($tabla, $columna) {
+        $clave = $tabla . '.' . $columna;
+        if (array_key_exists($clave, $this->cacheColumnas)) {
+            return $this->cacheColumnas[$clave];
+        }
+
+        $stmt = sqlsrv_query($this->cid,
+            "SELECT CASE WHEN COL_LENGTH(?, ?) IS NULL THEN 0 ELSE 1 END AS existe",
+            ['dbo.' . $tabla, $columna]);
+        if ($stmt === false) {
+            return $this->cacheColumnas[$clave] = false;
+        }
+        $row = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC);
+        sqlsrv_free_stmt($stmt);
+
+        return $this->cacheColumnas[$clave] = (bool)$row['existe'];
+    }
+
+    /** Valor de una columna opcional del detalle (script 07), tomado del payload. */
+    private function valorExtraDetalle($fila, $columna) {
+        $valor = $fila[$columna] ?? null;
+        if ($valor === null || $valor === '') {
+            return null;
+        }
+        // Los índices son números; la nota es texto y se recorta al largo de la columna.
+        return $columna === 'nota' ? mb_substr(trim((string)$valor), 0, 500) : (float)$valor;
     }
 
     /** Entero del payload, o NULL si el campo no vino (no 0: 0 es un valor real). */

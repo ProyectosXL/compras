@@ -211,8 +211,11 @@ class ExcelExporter {
                 // Índices
                 resultado['Índice Var. Original'] = parseFloat(item.INDICE_VAR_ORIGINAL || item.INDICE_ORIGINAL || 1).toFixed(2);
                 
-                // Campos editables (usamos el valor actual en memoria)
-                resultado['Índice Ver. Variación'] = parseFloat(item.INDICE_VARIACION || 1).toFixed(2);
+                // LP y Total Empresa, igual que la pantalla: con TE el editable es el TE y
+                // el LP es el del SP; sin TE (Uruguay) el LP es el editable y no hay TE.
+                const indices = ExcelExporter.indicesDeFila(item);
+                resultado['Índice Ver. LP'] = indices.verano.lp;
+                resultado['Índice Ver. Total Empresa'] = indices.verano.te;
                 
                 // Ventas anteriores (lógica robusta)
                 // Los encabezados llevan el período que cubre cada columna, igual que la
@@ -225,7 +228,8 @@ class ExcelExporter {
                 resultado['Temporada Base Ver.'] = item.TEMPORADA_BASE_VERANO || '';
                 resultado[`Proy. Verano (${periodos.verano})`] = item.VENTA_PROY_VERANO || 0;
 
-                resultado['Índice Inv. Variación'] = parseFloat(item.INDICE_VARIACION_INVIERNO || item.INDICE_VARIACION || 1).toFixed(2);
+                resultado['Índice Inv. LP'] = indices.invierno.lp;
+                resultado['Índice Inv. Total Empresa'] = indices.invierno.te;
                 resultado['Venta Inv. Anterior'] = ExcelExporter.buscarVentaHistorica(item, 'INVIERNO');
                 resultado['Temporada Base Inv.'] = item.TEMPORADA_BASE_INVIERNO || '';
                 resultado[`Proy. Invierno (${periodos.invierno})`] = item.VENTA_PROY_INVIERNO || 0;
@@ -288,6 +292,23 @@ class ExcelExporter {
             }
             return resultado;
         });
+    }
+
+    /**
+     * Índices LP y Total Empresa de una fila, por temporada, como se ven en pantalla.
+     * Sin índice TE la columna TE sale con "—", igual que en la tabla.
+     */
+    static indicesDeFila(item) {
+        const editable = (temporada) => parseFloat(temporada === 'invierno'
+            ? (item.INDICE_VARIACION_INVIERNO ?? item.INDICE_VARIACION ?? 1)
+            : (item.INDICE_VARIACION ?? 1)).toFixed(2);
+        const lpDelSp = parseFloat(item.INDICE_LP ?? item.INDICE_VARIACION ?? 1).toFixed(2);
+
+        const de = (temporada) => item.TE_DISPONIBLE
+            ? { lp: lpDelSp, te: editable(temporada) }
+            : { lp: editable(temporada), te: '—' };
+
+        return { verano: de('verano'), invierno: de('invierno') };
     }
 
     /**

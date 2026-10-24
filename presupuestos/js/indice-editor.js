@@ -126,45 +126,36 @@ class IndiceEditor {
             registroActualizado._indicesEditados = { ...registro._indicesEditados };
         }
 
-        // 4. Actualizar datos en memoria
-        datos[indiceReal] = registroActualizado;
-
-        // 5. Actualizar la fila visualmente (Buscar la fila en el DOM)
-        const tbody = document.getElementById(`tbody-${solapa}`);
-        const filas = tbody.querySelectorAll('tr.fila-datos');
-        let filaVisual = null;
-        let indexVisual = -1;
-
-        for (let i = 0; i < filas.length; i++) {
-            const f = filas[i];
-            if (f.children[0]?.textContent === rubro && f.children[1]?.textContent === categoria) {
-                filaVisual = f;
-                indexVisual = i;
-                break;
-            }
+        // 4. Marca de "editado", en el registro que QUEDA en memoria.
+        //
+        // Antes se escribía en `registro`, que en el paso siguiente se reemplaza por
+        // registroActualizado: la última edición perdía la marca en cuanto la tabla se
+        // volvía a dibujar (al filtrar, por ejemplo). Tampoco depende de que la fila
+        // esté visible: una fila oculta por un filtro también queda editada.
+        const esDiferente = Math.abs(nuevoIndice - valorOriginal) > 0.001;
+        if (esDiferente) {
+            registroActualizado._indicesEditados = registroActualizado._indicesEditados || {};
+            registroActualizado._indicesEditados[temporada] = {
+                valorOriginal: valorOriginal,
+                valorActual: nuevoIndice
+            };
+        } else if (registroActualizado._indicesEditados) {
+            delete registroActualizado._indicesEditados[temporada];
         }
 
+        // 5. Actualizar datos en memoria
+        datos[indiceReal] = registroActualizado;
+
+        // 6. Actualizar la fila en pantalla, buscándola por rubro y categoría: con
+        // filtros u orden aplicados, la posición en el tbody no identifica a la fila.
+        const filaVisual = TablaRendererUtils.filaDeRegistro(solapa, rubro, categoria);
+
         if (filaVisual) {
-            // Actualizar valores en la tabla
-            const contextoTabla = { temporada, index: indexVisual, solapa };
-            if (solapa === 'verano') CalculadoraVerano.actualizarFilaTabla(contextoTabla, registroActualizado);
-            else if (solapa === 'invierno') CalculadoraInvierno.actualizarFilaTabla(contextoTabla, registroActualizado);
-            
-            // 6. Gestionar marcas visuales (Editar vs Restaurar)
-            const valorOriginal = registro._indicesOriginales[temporada];
-            const esDiferente = Math.abs(nuevoIndice - valorOriginal) > 0.001;
-            
+            TablaRendererUtils.actualizarCeldasCalculadas(filaVisual, registroActualizado);
+
             if (esDiferente) {
-                // Marcar como editado
-                if (!registro._indicesEditados) registro._indicesEditados = {};
-                registro._indicesEditados[temporada] = {
-                    valorOriginal: valorOriginal,
-                    valorActual: nuevoIndice
-                };
                 IndiceEditor.aplicarMarcasVisualesEnFila(filaVisual, temporada, nuevoIndice);
             } else {
-                // Limpiar marcas (Restaurado)
-                if (registro._indicesEditados) delete registro._indicesEditados[temporada];
                 IndiceEditor.limpiarMarcasVisuales(filaVisual, temporada, valorOriginal);
             }
         }
@@ -246,11 +237,12 @@ class IndiceEditor {
      * Restaurar índice al valor original (Lógica Corregida)
      */
     static restaurarIndiceOriginalDesdeDatos(fila, temporada) {
-        const rubro = fila.children[0]?.textContent?.trim();
-        const categoria = fila.children[1]?.textContent?.trim();
-        
-        // Buscar solapa activa
-        const solapaActiva = document.querySelector('.nav-link.active').getAttribute('data-bs-target').replace('#', '');
+        const rubro = fila.dataset.rubro;
+        const categoria = fila.dataset.categoria;
+
+        // La solapa sale de la tabla a la que pertenece la fila y no de la pestaña
+        // activa: así no depende de qué pestaña tenga la clase .active en ese momento.
+        const solapaActiva = (fila.closest('tbody')?.id || '').replace('tbody-', '');
         const datos = window.presupuestoApp.getDatos(solapaActiva);
         
         const registro = datos.find(item => 
@@ -318,8 +310,13 @@ class IndiceEditor {
         
         document.getElementById('modal-rubro').textContent = rubro;
         document.getElementById('modal-categoria').textContent = categoria;
-        document.querySelector('#modalEditarIndice .modal-title').textContent = 
-            `Editar Índice - ${temporada.charAt(0).toUpperCase() + temporada.slice(1)}`;
+        // El título dice qué índice se edita: con TE disponible es el Total Empresa, y
+        // sin él (Uruguay) sigue siendo el de Locales Propios.
+        const registro = (window.presupuestoApp.getDatos(solapa) || [])
+            .find(r => r.RUBRO === rubro && r.CATEGORIA_PADRE === categoria);
+        const tipoIndice = registro && registro.TE_DISPONIBLE ? 'Total Empresa' : 'Locales Propios';
+        document.querySelector('#modalEditarIndice .modal-title').textContent =
+            `Editar Índice ${tipoIndice} - ${temporada.charAt(0).toUpperCase() + temporada.slice(1)}`;
         
         const input = document.getElementById('modal-nuevo-indice');
         input.value = parseFloat(indiceActual).toFixed(2);
@@ -327,7 +324,7 @@ class IndiceEditor {
         // Mostrar preview inicial
         IndiceEditor.mostrarPreviewCalculo(parseFloat(indiceActual));
         
-        TablaRenderer.resaltarFila(solapa, index, true);
+        TablaRenderer.resaltarFila(solapa, rubro, categoria, true);
         IndiceEditor.modalInstancia.show();
         setTimeout(() => input.select(), 500);
     }
@@ -341,6 +338,7 @@ class IndiceEditor {
             return;
         }
         
+        const editando = { ...IndiceEditor.indiceEditando };
         const btnGuardar = document.querySelector('#modalEditarIndice .btn-primary');
         const textoOriginal = btnGuardar.innerHTML;
         btnGuardar.innerHTML = 'Guardando...'; btnGuardar.disabled = true;
@@ -361,7 +359,8 @@ class IndiceEditor {
             UIUtils.mostrarAlerta('Error al guardar', 'error');
         } finally {
             btnGuardar.innerHTML = textoOriginal; btnGuardar.disabled = false;
-            TablaRenderer.resaltarFila(IndiceEditor.indiceEditando.solapa, IndiceEditor.indiceEditando.index, false);
+            // Se usa la copia: el modal pone indiceEditando en null al cerrarse.
+            if (editando) TablaRenderer.resaltarFila(editando.solapa, editando.rubro, editando.categoria, false);
         }
     }
 
@@ -370,8 +369,7 @@ class IndiceEditor {
     // ==========================================
 
     static aplicarMarcasVisualesEnFila(fila, temporada, nuevoValor) {
-        const colIndex = temporada === 'verano' ? 4 : 7;
-        const celda = fila.children[colIndex];
+        const celda = fila.querySelector(`td[data-indice-editable="${temporada}"]`);
         if (!celda) return;
 
         celda.classList.add('indice-editado');
@@ -397,8 +395,7 @@ class IndiceEditor {
     }
 
     static limpiarMarcasVisuales(fila, temporada, valorOriginal) {
-        const colIndex = temporada === 'verano' ? 4 : 7;
-        const celda = fila.children[colIndex];
+        const celda = fila.querySelector(`td[data-indice-editable="${temporada}"]`);
         if (!celda) return;
 
         celda.classList.remove('indice-editado');
@@ -416,9 +413,8 @@ class IndiceEditor {
             if (e.target.classList.contains('input-editado')) {
                 const celda = e.target.closest('td');
                 const fila = celda.closest('tr');
-                const temporada = celda.getAttribute('data-temporada'); // Asegúrate que el TD tenga este atributo
-                // Fallback si no tiene atributo
-                const temp = celda.cellIndex === 4 ? 'verano' : 'invierno';
+                const temp = celda.dataset.temporada;
+                if (!temp) return;
                 if (confirm('¿Restaurar original?')) {
                     IndiceEditor.restaurarIndiceOriginalDesdeDatos(fila, temp);
                 }

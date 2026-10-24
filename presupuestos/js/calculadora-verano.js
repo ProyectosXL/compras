@@ -219,120 +219,19 @@ class CalculadoraVerano {
     }
     
     /**
-     * CORREGIDA: Obtener ventas anteriores de la tabla con parseo correcto y debugging
-     */
-    static obtenerVentasAnterioresDeTabla(indiceEditando) {
-        const tbody = document.getElementById(`tbody-${indiceEditando.solapa}`);
-        const fila = tbody ? tbody.children[indiceEditando.index] : null;
-        
-        let ventaVeranoAnterior = 0;
-        let ventaInviernoAnterior = 0;
-        
-        if (fila && fila.children.length >= 11) {
-            // NUEVO ORDEN DE COLUMNAS:
-            // 0: Rubro
-            // 1: Categoría  
-            // 2: Stock Proyectado
-            // 3: Índice Var. Original
-            // 4: Índice Ver. Variación (editable)
-            // 5: Venta Ver. Anterior
-            // 6: Venta Proy. Verano
-            // 7: Índice Inv. Variación (editable)
-            // 8: Venta Inv. Anterior  
-            // 9: Venta Proy. Invierno
-            // 10: Compra Proyectada
-            
-            const celdaVeranoAnterior = fila.children[5];   // "Venta Ver. Anterior"
-            const celdaInviernoAnterior = fila.children[8]; // "Venta Inv. Anterior"
-            
-            console.log(`🔍 DEBUG TABLA - Fila ${indiceEditando.index}:`);
-            console.log(`  Total columnas: ${fila.children.length}`);
-            
-            if (celdaVeranoAnterior) {
-                const textoVerano = celdaVeranoAnterior.textContent.trim();
-                console.log(`🔍 Celda Verano [5]: "${textoVerano}"`);
-                ventaVeranoAnterior = CalculadoraVerano.parsearNumeroConSeparadorMiles(textoVerano);
-            } else {
-                console.error(`❌ Celda Verano Anterior [5] no encontrada`);
-            }
-            
-            if (celdaInviernoAnterior) {
-                const textoInvierno = celdaInviernoAnterior.textContent.trim();
-                console.log(`🔍 Celda Invierno [8]: "${textoInvierno}"`);
-                ventaInviernoAnterior = CalculadoraVerano.parsearNumeroConSeparadorMiles(textoInvierno);
-            } else {
-                console.error(`❌ Celda Invierno Anterior [8] no encontrada`);
-            }
-            
-            // DEBUG: Mostrar contenido de todas las celdas
-            console.log(`🔍 Contenido de todas las celdas:`);
-            for (let i = 0; i < Math.min(fila.children.length, 11); i++) {
-                console.log(`  [${i}]: "${fila.children[i].textContent.trim()}"`);
-            }
-        } else {
-            console.error(`❌ Fila no encontrada o insuficientes columnas. Fila: ${!!fila}, Columnas: ${fila?.children?.length || 0}`);
-        }
-        
-        console.log(`📊 ${indiceEditando.solapa.toUpperCase()} - Ventas parseadas: V=${ventaVeranoAnterior}, I=${ventaInviernoAnterior}`);
-        return { ventaVeranoAnterior, ventaInviernoAnterior };
-    }
-    
-    /**
-     * CORREGIDA: Actualizar fila específica con nuevo orden de columnas
+     * Escribe en la fila de la tabla los valores recalculados de un registro.
+     *
+     * Delega en TablaRendererUtils, que ubica las celdas por data-col. Acá vivía
+     * una copia que las ubicaba por número de columna (celdas[4], [6], [10]...), y
+     * otra que leía las ventas anteriores parseando el texto de la celda: agregar
+     * la columna del índice Total Empresa las habría corrido a todas.
      */
     static actualizarFilaTabla(indiceEditando, registro) {
-        const tbody = document.getElementById(`tbody-${indiceEditando.solapa}`);
-        const fila = tbody.children[indiceEditando.index];
-        
-        if (!fila) {
-            console.error('Fila no encontrada para actualizar');
-            return;
-        }
-        
-        const celdas = fila.children;
-        const temporadaEditada = indiceEditando.temporada;
-        
-        console.log(`🔄 ${indiceEditando.solapa.toUpperCase()} - Actualizando fila, temporada editada: ${temporadaEditada}`);
-        
-        // NUEVO ORDEN: Solo actualizar el índice que se editó
-        if (temporadaEditada === 'verano' && celdas[4]) { // Índice Ver. Variación
-            const input = celdas[4].querySelector('.indice-input');
-            if (input) {
-                input.value = (registro.INDICE_VARIACION || 1.0).toFixed(2);
-                console.log(`✅ Índice VERANO actualizado: ${input.value}`);
-            }
-        } else if (temporadaEditada === 'invierno' && celdas[7]) { // Índice Inv. Variación
-            const input = celdas[7].querySelector('.indice-input');
-            if (input) {
-                const indiceInvierno = registro.INDICE_VARIACION_INVIERNO || registro.INDICE_VARIACION || 1.0;
-                input.value = indiceInvierno.toFixed(2);
-                console.log(`✅ Índice INVIERNO actualizado: ${input.value}`);
-            }
-        }
-        
-        // Mantener celda de Índice Var. Original
-        if (celdas[3] && typeof TablaRendererUtils !== 'undefined') {
-            const orig = TablaRendererUtils.obtenerIndiceOriginal(registro);
-            celdas[3].textContent = orig.toFixed(2);
-        }
-
-        // Actualizar ventas proyectadas y compra (nuevas posiciones)
-        if (celdas[6]) { // Venta Proy. Verano
-            celdas[6].textContent = FormatoUtils.formatearNumero(registro.VENTA_PROY_VERANO || 0);
-        }
-        if (celdas[9]) { // Venta Proy. Invierno
-            celdas[9].textContent = FormatoUtils.formatearNumero(registro.VENTA_PROY_INVIERNO || 0);
-        }
-        
-        if (celdas[10]) { // Compra Proyectada
-            const compraProyectada = registro.COMPRA_PROYECTADA || 0;
-            celdas[10].textContent = FormatoUtils.formatearNumero(compraProyectada);
-            celdas[10].className = `text-end bg-success-subtle text-success-emphasis fw-bold ${FormatoUtils.obtenerClaseValor(compraProyectada)}`;
-        }
-        
-        console.log(`✅ ${indiceEditando.solapa.toUpperCase()} - Fila actualizada correctamente`);
+        const fila = TablaRendererUtils.filaDeRegistro(
+            indiceEditando.solapa, registro.RUBRO, registro.CATEGORIA_PADRE);
+        TablaRendererUtils.actualizarCeldasCalculadas(fila, registro);
     }
-    
+
     /**
      * Temporada en curso, según el servidor.
      * Ya no se deduce del mes con `new Date()`: esa deducción era la que podía

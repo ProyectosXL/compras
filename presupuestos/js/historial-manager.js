@@ -563,7 +563,17 @@ class HistorialManager {
                 rubro: item.RUBRO,
                 categoria_padre: item.CATEGORIA_PADRE,
                 stock_proyectado: item.STOCK_PROYECTADO || 0,
-                indice_variacion_original: TablaRendererUtils.obtenerIndiceOriginal(item),
+                // indice_variacion_original sigue siendo el LP del SP, como en todas
+                // las versiones anteriores; el original del índice editable va aparte
+                // (indice_total_empresa_original). Las dos columnas significan lo
+                // mismo en una versión vieja que en una nueva.
+                indice_variacion_original: parseFloat(item.INDICE_LP ?? TablaRendererUtils.obtenerIndiceOriginal(item)),
+                indice_lp: item.INDICE_LP ?? null,
+                // NULL sin TE: es lo que marca a la versión como anterior al índice
+                // Total Empresa (o de una base que no lo tiene).
+                indice_total_empresa_original: item.TE_DISPONIBLE ? parseFloat(item.INDICE_TE) : null,
+                // indice_*_variacion conserva su significado: el índice que movió la
+                // proyección, es decir el editable (TE, o LP si no hay TE).
                 indice_verano_variacion: parseFloat(item.INDICE_VARIACION || 1.0),
                 venta_verano_anterior: TablaRendererUtils.buscarVentaHistoricaCorrecta(item, 'VERANO'),
                 venta_proyectada_verano: item.VENTA_PROY_VERANO || 0,

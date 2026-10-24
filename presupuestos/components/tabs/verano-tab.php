@@ -43,17 +43,20 @@
         <table class="table table-striped table-hover mb-0" id="tabla-verano">
             <thead class="table-dark sticky-header">
                 <tr>
-                    <th>Rubro</th>
-                    <th>Categoría</th>
-                    <th class="text-center bg-info">Stock<br>Proyectado</th>
-                    <th class="text-center bg-secondary text-white">Índice Var.<br>Original</th>
-                    <th class="text-center bg-warning">Índice Ver.<br>Variación</th>
-                    <th class="text-center header-venta-anterior" id="header-venta-verano-ant">Venta Ver.<br>Anterior</th>
-                    <th class="text-center header-venta-proyectada" id="header-venta-verano">Venta Proy.<br>Verano</th>
-                    <th class="text-center bg-warning">Índice Inv.<br>Variación</th>
-                    <th class="text-center header-venta-anterior" id="header-venta-invierno-ant">Venta Inv.<br>Anterior</th>
-                    <th class="text-center header-venta-proyectada" id="header-venta-invierno">Venta Proy.<br>Invierno</th>
-                    <th class="text-center header-compra-proyectada">Compra<br>Proyectada</th>
+                    <th data-col="rubro">Rubro</th>
+                    <th data-col="categoria">Categoría</th>
+                    <th class="text-center bg-info" data-col="stock-proyectado">Stock<br>Proyectado</th>
+                    <th class="text-center bg-secondary text-white" data-col="indice-original"
+                        title="Índice editable tal como vino del SP, antes de cualquier edición. Es el valor al que vuelve Restaurar.">Índice Var.<br>Original</th>
+                    <th class="text-center bg-secondary-subtle text-dark" data-col="indice-ver-lp" data-indice-tipo="lp">Índice Ver.<br>LP</th>
+                    <th class="text-center bg-warning" data-col="indice-ver-te" data-indice-tipo="te">Índice Ver.<br>Total Empresa</th>
+                    <th class="text-center header-venta-anterior" data-col="venta-ver-ant" id="header-venta-verano-ant">Venta Ver.<br>Anterior</th>
+                    <th class="text-center header-venta-proyectada" data-col="venta-proy-ver" id="header-venta-verano">Venta Proy.<br>Verano</th>
+                    <th class="text-center bg-secondary-subtle text-dark" data-col="indice-inv-lp" data-indice-tipo="lp">Índice Inv.<br>LP</th>
+                    <th class="text-center bg-warning" data-col="indice-inv-te" data-indice-tipo="te">Índice Inv.<br>Total Empresa</th>
+                    <th class="text-center header-venta-anterior" data-col="venta-inv-ant" id="header-venta-invierno-ant">Venta Inv.<br>Anterior</th>
+                    <th class="text-center header-venta-proyectada" data-col="venta-proy-inv" id="header-venta-invierno">Venta Proy.<br>Invierno</th>
+                    <th class="text-center header-compra-proyectada" data-col="compra-proyectada">Compra<br>Proyectada</th>
                 </tr>
             </thead>
             <tbody id="tbody-verano">
