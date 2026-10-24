@@ -72,6 +72,25 @@ class ProcesadorDatos {
     }
 
     /**
+     * Ventas de 60 días con las que el SP calcula cada índice (script 06).
+     *
+     * Viajan con la fila para que la pantalla calcule el índice GENERAL de lo que se
+     * ve: SUM(venta) / SUM(venta año anterior), ponderado por venta. Un promedio de
+     * los índices de cada fila daría el mismo peso a un rubro que vende 10 unidades
+     * que a uno que vende 10.000.
+     *
+     * Sin las columnas (Uruguay, o antes del 06) van en null y no en 0: 0 sería "no
+     * se vendió nada", que es otra cosa que "no hay dato".
+     */
+    private function ventasParaIndiceGeneral($registro) {
+        $campos = [];
+        foreach (['VTA_60D_LP', 'VTA_60D_ANT_LP', 'VTA_60D_TE', 'VTA_60D_ANT_TE'] as $campo) {
+            $campos[$campo] = array_key_exists($campo, $registro) ? (float)($registro[$campo] ?? 0) : null;
+        }
+        return $campos;
+    }
+
+    /**
      * Procesar datos para la solapa de compra verano
      */
     public function procesarDatosCompraVerano($datos) {
@@ -145,7 +164,7 @@ class ProcesadorDatos {
                     // el Excel y el guardado usen el mismo reparto que calculó el servidor,
                     // en vez de que cada uno lo rehaga por su cuenta.
                     'TRAMOS' => $calculosCompra['tramos']
-                ];
+                ] + $this->ventasParaIndiceGeneral($registro);
 
                 // Agregar columnas de ventas históricas de forma controlada
                 $columnasVenta = $this->obtenerColumnasVentasSeguras($registro);

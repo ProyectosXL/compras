@@ -77,6 +77,11 @@ class TotalesCompra {
                 itemsNegativos: 0,
                 itemsPositivos: 0,
                 dinamicos: {},
+                // Ventas de 60 días para el índice general de cada universo. `hay`
+                // distingue "suma 0" de "la base no trae el dato" (Uruguay, o antes
+                // del script 06): lo primero es un índice indefinido, lo segundo
+                // directamente no existe.
+                ventas60: { lp: 0, lpAnt: 0, te: 0, teAnt: 0, hayLp: false, hayTe: false },
                 // Indexado por `orden` y no por código de temporada: el orden es la
                 // posición de la columna, y es lo que mantiene alineada la fila de
                 // totales aunque dos tramos compartieran código.
@@ -96,6 +101,17 @@ class TotalesCompra {
                 acc.totalVentaInviernoAnt += TotalesCompra.obtenerValorVentaAnterior(item, 'INVIERNO');
                 acc.totalVentaVeranoProy += TotalesCompra.obtenerValorProyeccion(item, 'VERANO');
                 acc.totalVentaInviernoProy += TotalesCompra.obtenerValorProyeccion(item, 'INVIERNO');
+
+                if (item.VTA_60D_LP !== null && item.VTA_60D_LP !== undefined) {
+                    acc.ventas60.hayLp = true;
+                    acc.ventas60.lp += parseFloat(item.VTA_60D_LP || 0);
+                    acc.ventas60.lpAnt += parseFloat(item.VTA_60D_ANT_LP || 0);
+                }
+                if (item.VTA_60D_TE !== null && item.VTA_60D_TE !== undefined) {
+                    acc.ventas60.hayTe = true;
+                    acc.ventas60.te += parseFloat(item.VTA_60D_TE || 0);
+                    acc.ventas60.teAnt += parseFloat(item.VTA_60D_ANT_TE || 0);
+                }
 
                 // Sumar Dinámicos
                 clavesDinamicas.forEach(k => {
@@ -127,6 +143,46 @@ class TotalesCompra {
             console.error('Error calculando totales:', error);
             TotalesCompra.ocultarTotales(solapa);
         }
+    }
+
+    /**
+     * Índice general de un universo sobre las filas sumadas: SUM(venta 60 días) /
+     * SUM(venta mismos 60 días del año anterior).
+     *
+     * Es ponderado por venta, no un promedio de índices, y sale de la venta real: no
+     * cambia al editar el índice de una fila. Por eso sirve de referencia contra la
+     * cual comparar lo que se editó.
+     *
+     * @param {string} tipo 'lp' o 'te'
+     * @returns {{valor: number|null, texto: string, ayuda: string}}
+     */
+    static indiceGeneral(totales, tipo) {
+        const v = totales.ventas60;
+        const nombre = tipo === 'te' ? 'Total Empresa' : 'Locales Propios';
+        const universo = tipo === 'te' ? 'Locales Propios + Central' : 'solo Locales Propios';
+        const hay = tipo === 'te' ? v.hayTe : v.hayLp;
+        const actual = tipo === 'te' ? v.te : v.lp;
+        const anterior = tipo === 'te' ? v.teAnt : v.lpAnt;
+
+        if (!hay) {
+            return {
+                valor: null, texto: '—',
+                ayuda: `Índice general ${nombre}: esta base no trae las ventas de 60 días con las que se `
+                     + 'calcula (Uruguay, o falta correr el script 06).'
+            };
+        }
+
+        const formula = `Índice general ${nombre} (${universo}), sobre las filas visibles:\n`
+            + `venta últimos 60 días / venta mismos 60 días del año anterior\n`
+            + `= ${TotalesCompra.formatearNumero(actual)} / ${TotalesCompra.formatearNumero(anterior)}\n`
+            + 'Ponderado por venta, no es un promedio de índices. No cambia al editar índices.';
+
+        if (anterior === 0) {
+            return { valor: null, texto: '—', ayuda: formula + '\nSin venta el año anterior: no se puede calcular.' };
+        }
+
+        const valor = actual / anterior;
+        return { valor, texto: valor.toFixed(2), ayuda: formula };
     }
 
     /**
@@ -234,6 +290,14 @@ class TotalesCompra {
                     ayuda: 'Temporada que esta compra tiene que cubrir: '
                          + periodos.objetivo.desde + ' a ' + periodos.objetivo.hasta }
                 : null,
+            // Un solo ítem con los dos índices generales, para no sumar dos casilleros
+            // a una barra que ya es ancha. Solo si la base trae las ventas de 60 días.
+            (totales.ventas60.hayLp || totales.ventas60.hayTe)
+                ? { label: 'Índice general',
+                    valor: `LP ${TotalesCompra.indiceGeneral(totales, 'lp').texto} · TE ${TotalesCompra.indiceGeneral(totales, 'te').texto}`,
+                    ayuda: TotalesCompra.indiceGeneral(totales, 'lp').ayuda + '\n\n'
+                         + TotalesCompra.indiceGeneral(totales, 'te').ayuda }
+                : null,
             { label: 'Con faltante', valor: totales.itemsNegativos, tono: 'alerta',
               ayuda: 'Rubro/categoría cuya compra proyectada da negativa, es decir que '
                    + 'el stock proyectado no alcanza a cubrir la venta proyectada.' },
@@ -328,6 +392,18 @@ class TotalesCompra {
                 ${TotalesCompra.formatearNumero(totales.totalCompraProyectada)}
             </td>`
         };
+
+        // Índice general debajo de cada columna de índice: el LP bajo las LP y el TE
+        // bajo las TE. Es el mismo número para verano e invierno porque el SP da un
+        // solo índice por fila.
+        ['lp', 'te'].forEach(tipo => {
+            const general = TotalesCompra.indiceGeneral(totales, tipo);
+            const td = `<td class="text-center fw-bold ${general.valor === null ? 'text-muted' : 'text-dark'}"`
+                     + ` title="${general.ayuda.replace(/"/g, '&quot;')}">`
+                     + `<span class="d-block small fw-normal text-muted">General</span>${general.texto}</td>`;
+            celdas[`indice-ver-${tipo}`] = td;
+            celdas[`indice-inv-${tipo}`] = td;
+        });
 
         // Compra por tramo. El tramo no comprable se muestra en rojo: no es parte de
         // lo que hay que comprar, así que sumarlo con los otros daría un total que no existe.

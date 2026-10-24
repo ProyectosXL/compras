@@ -277,8 +277,10 @@ class ExcelExporter {
 
                 Object.keys(item).forEach(key => {
                     // Si es una columna de historial (contiene VERANO, INVIERNO o VTA_)
-                    if (!columnasIgnorar.includes(key) && 
-                        (key.includes('VERANO') || key.includes('INVIERNO') || key.includes('VTA_')) &&
+                    // Misma regla que la tabla: solo columnas de una temporada
+                    // identificable. Con "contiene VTA_" se colaban VTA_60D_LP y compañía.
+                    if (!columnasIgnorar.includes(key) &&
+                        TemporadaServidor.temporadaDeColumna(key) &&
                         !key.startsWith('PROY') &&
                         !isNaN(parseFloat(item[key]))) {
                         
