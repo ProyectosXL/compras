@@ -327,6 +327,10 @@ class IndiceEditor {
         
         const input = document.getElementById('modal-nuevo-indice');
         input.value = parseFloat(indiceActual).toFixed(2);
+
+        // La nota que ya tenga la fila, para corregirla en vez de reescribirla.
+        const notaInput = document.getElementById('modal-nota-indice');
+        if (notaInput) notaInput.value = (registro && registro.NOTA) || '';
         
         // Mostrar preview inicial
         IndiceEditor.mostrarPreviewCalculo(parseFloat(indiceActual));
@@ -357,6 +361,10 @@ class IndiceEditor {
             
             // USAR LA FUNCIÓN CENTRALIZADA
             IndiceEditor.aplicarCambio(rubro, categoria, solapa, temporada, nuevoIndice);
+
+            // La nota viaja con la fila, como el índice editado, hasta que se guarda la versión.
+            const notaInput = document.getElementById('modal-nota-indice');
+            if (notaInput) IndiceEditor.asignarNota(solapa, rubro, categoria, notaInput.value);
             
             UIUtils.mostrarAlerta('Índice actualizado', 'success');
             IndiceEditor.modalInstancia.hide();
@@ -429,8 +437,73 @@ class IndiceEditor {
         });
     }
 
+    // ==========================================
+    // NOTAS POR FILA
+    // ==========================================
+
+    /**
+     * Deja la nota en el registro en memoria y actualiza el ícono de la fila.
+     * Vive con la fila, igual que el índice editado, hasta que se guarda la versión
+     * (detalle.nota). Una nota vacía la borra.
+     */
+    static asignarNota(solapa, rubro, categoria, texto) {
+        const datos = window.presupuestoApp.getDatos(solapa) || [];
+        const registro = datos.find(r => r.RUBRO === rubro && r.CATEGORIA_PADRE === categoria);
+        if (!registro) return;
+
+        const nota = String(texto || '').trim().slice(0, 500);
+        registro.NOTA = nota || null;
+
+        const fila = TablaRendererUtils.filaDeRegistro(solapa, rubro, categoria);
+        if (fila) TablaRendererUtils.pintarNota(fila, registro);
+    }
+
+    /** Agregar o editar la nota de una fila sin tocar sus índices. */
+    static editarNota(solapa, rubro, categoria) {
+        const registro = (window.presupuestoApp.getDatos(solapa) || [])
+            .find(r => r.RUBRO === rubro && r.CATEGORIA_PADRE === categoria);
+        if (!registro) return;
+
+        const id = 'modal-nota-' + Date.now();
+        const div = document.createElement('div');
+        div.innerHTML = `
+            <div class="modal fade" id="${id}" tabindex="-1">
+              <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                  <div class="modal-header">
+                    <h5 class="modal-title"><i class="fas fa-comment-dots me-2"></i>Nota</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                  </div>
+                  <div class="modal-body">
+                    <p class="small mb-2"><strong>${HistorialManager.escaparHtml(rubro)}</strong> · ${HistorialManager.escaparHtml(categoria)}</p>
+                    <textarea class="form-control" rows="3" maxlength="500"
+                              placeholder="Por qué se cambió el índice, o cualquier aclaración de esta fila">${HistorialManager.escaparHtml(registro.NOTA || '')}</textarea>
+                    <div class="form-text">Se guarda con la versión. Dejala vacía para borrarla.</div>
+                  </div>
+                  <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="button" class="btn btn-primary" data-accion="guardar">Aceptar</button>
+                  </div>
+                </div>
+              </div>
+            </div>`;
+        document.body.appendChild(div);
+
+        const el = document.getElementById(id);
+        const modal = new bootstrap.Modal(el);
+        el.querySelector('[data-accion="guardar"]').addEventListener('click', () => {
+            IndiceEditor.asignarNota(solapa, rubro, categoria, el.querySelector('textarea').value);
+            modal.hide();
+        });
+        el.addEventListener('shown.bs.modal', () => el.querySelector('textarea').focus());
+        el.addEventListener('hidden.bs.modal', () => div.remove());
+        modal.show();
+    }
+
     static limpiarFormulario() {
         document.getElementById('modal-nuevo-indice').value = '';
+        const nota = document.getElementById('modal-nota-indice');
+        if (nota) nota.value = '';
         const preview = document.getElementById('preview-calculo');
         if (preview) preview.innerHTML = '';
     }

@@ -363,6 +363,7 @@ class MainController {
             // Versiones del presupuesto (cabecera) y trazabilidad de la oficial
             case 'versiones-presupuesto':
             case 'historial-oficial':
+            case 'validar-nombre-version':
                 $this->delegarHistorial($accion);
                 break;
                 
@@ -645,6 +646,9 @@ class MainController {
                 break;
             case 'versiones-presupuesto':
                 $historialController->listarVersiones();
+                break;
+            case 'validar-nombre-version':
+                $historialController->validarNombreVersion();
                 break;
             case 'marcar-oficial':
                 $historialController->marcarOficial();

@@ -98,7 +98,7 @@ class Historial {
             return ['success' => false, 'message' => 'Error de conexión a la base de datos.'];
         }
 
-        $nombrePresupuesto = $datos['nombre_presupuesto'] ?? null;
+        $nombrePresupuesto = trim((string)($datos['nombre_presupuesto'] ?? ''));
         $solapa = strtolower(trim($datos['temporada'] ?? '')) === 'invierno' ? 'invierno' : 'verano';
         $filas = $datos['filas'] ?? [];
         $pais = $this->paisActual();
@@ -130,9 +130,27 @@ class Historial {
 
         $tramosGuardados = 0;
 
+        // Comentario general y versión de origen (script 07). Vacío es NULL: "no hay
+        // comentario" y "comentario en blanco" son lo mismo para quien lo lee.
+        $comentario = trim((string)($datos['comentario'] ?? ''));
+        $comentario = $comentario === '' ? null : mb_substr($comentario, 0, 1000);
+        $idVersionOrigen = !empty($datos['id_version_origen']) ? (int)$datos['id_version_origen'] : null;
+
         try {
             if (sqlsrv_begin_transaction($this->cid) === false) {
                 throw new Exception("No se pudo iniciar la transacción: " . print_r(sqlsrv_errors(), true));
+            }
+
+            // El nombre se valida acá además de en el modal: el modal valida contra la
+            // lista que tenía abierta, y entre que se abrió y se guardó otra persona
+            // pudo haber guardado una versión con el mismo nombre.
+            if (!$this->nombreDisponible($nombrePresupuesto)) {
+                sqlsrv_rollback($this->cid);
+                return [
+                    'success' => false,
+                    'codigo' => 'nombre_repetido',
+                    'message' => "Ya existe una versión llamada '{$nombrePresupuesto}'. Elegí otro nombre."
+                ];
             }
 
             $idCabecera = null;
@@ -176,6 +194,19 @@ class Historial {
                 }
                 $idCabecera = (int)sqlsrv_fetch_array($stmtCab, SQLSRV_FETCH_NUMERIC)[0];
                 sqlsrv_free_stmt($stmtCab);
+
+                // Aparte del INSERT y solo si la base tiene las columnas: Uruguay, o
+                // Argentina antes del 07, guardan igual, sin comentario ni origen.
+                if ($this->tieneColumna('RO_T_HISTORIAL_COMPRAS_PROYECTADAS_CABECERA', 'comentario')) {
+                    $up = sqlsrv_query($this->cid,
+                        "UPDATE RO_T_HISTORIAL_COMPRAS_PROYECTADAS_CABECERA
+                            SET comentario = ?, id_version_origen = ? WHERE id = ?",
+                        [$comentario, $idVersionOrigen, $idCabecera]);
+                    if ($up === false) {
+                        throw new Exception("Al guardar el comentario: " . print_r(sqlsrv_errors(), true));
+                    }
+                    sqlsrv_free_stmt($up);
+                }
             }
 
             $registrosGuardados = $this->insertarDetalle(
@@ -237,6 +268,9 @@ class Historial {
         $extras = [];
         if ($ampliado && $this->tieneColumna('RO_T_HISTORIAL_COMPRAS_PROYECTADAS_PRESUPUESTO', 'indice_lp')) {
             $extras = ['indice_lp', 'indice_total_empresa_original'];
+        }
+        if ($ampliado && $this->tieneColumna('RO_T_HISTORIAL_COMPRAS_PROYECTADAS_PRESUPUESTO', 'nota')) {
+            $extras[] = 'nota';
         }
 
         if ($ampliado) {
@@ -479,6 +513,44 @@ class Historial {
     }
 
     /**
+     * Indica si un nombre está libre entre las versiones NO dadas de baja.
+     *
+     * Cuenta también las versiones viejas sin cabecera, que solo existen en el
+     * detalle y se identifican únicamente por nombre: un nombre repetido entre ellas
+     * hacía imposible filtrar o eliminar una sin arrastrar a la otra. La comparación
+     * respeta la intercalación de la base (sin distinguir mayúsculas), igual que el
+     * filtro por nombre del historial.
+     */
+    public function nombreDisponible($nombre) {
+        $nombre = trim((string)$nombre);
+        if ($nombre === '' || !$this->cid) {
+            return false;
+        }
+
+        $conCabecera = $this->hayCabecera();
+        $sql = $conCabecera
+            ? "SELECT
+                 (SELECT COUNT(*) FROM RO_T_HISTORIAL_COMPRAS_PROYECTADAS_CABECERA c
+                   WHERE c.nombre_presupuesto = ?" . ($this->filtroNoEliminada('c') !== '' ? ' AND ' . $this->filtroNoEliminada('c') : '') . ")
+               + (SELECT COUNT(*) FROM RO_T_HISTORIAL_COMPRAS_PROYECTADAS_PRESUPUESTO d
+                   WHERE d.nombre_presupuesto = ?" . ($this->detalleAmpliado() ? ' AND d.id_cabecera IS NULL' : '') . ") AS usados"
+            : "SELECT COUNT(*) AS usados FROM RO_T_HISTORIAL_COMPRAS_PROYECTADAS_PRESUPUESTO d
+                WHERE d.nombre_presupuesto = ?";
+        $params = $conCabecera ? [$nombre, $nombre] : [$nombre];
+
+        $stmt = sqlsrv_query($this->cid, $sql, $params);
+        if ($stmt === false) {
+            // Ante la duda, no disponible: un falso "libre" permitiría el duplicado.
+            error_log('No se pudo validar el nombre de la versión: ' . print_r(sqlsrv_errors(), true));
+            return false;
+        }
+        $row = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC);
+        sqlsrv_free_stmt($stmt);
+
+        return (int)$row['usados'] === 0;
+    }
+
+    /**
      * Indica si una tabla tiene una columna, con el mismo criterio que
      * detalleAmpliado(): se consulta el catálogo una vez por instancia y columna.
      */
@@ -558,6 +630,14 @@ class Historial {
                        d.compra_proyectada, d.indice_variacion_original,
                        d.indice_verano_variacion, d.indice_invierno_variacion";
 
+            // Columnas del script 07, si la base las tiene: la nota de la fila y los
+            // índices LP / TE original con los que se guardó.
+            foreach (['nota', 'indice_lp', 'indice_total_empresa_original'] as $col) {
+                if ($this->tieneColumna('RO_T_HISTORIAL_COMPRAS_PROYECTADAS_PRESUPUESTO', $col)) {
+                    $campos .= ", d.$col";
+                }
+            }
+
             if ($conCabecera) {
                 $campos .= ", c.id AS id_cabecera, c.temporada_objetivo,
                              c.temporada_objetivo_desde, c.temporada_objetivo_hasta,
@@ -568,6 +648,9 @@ class Historial {
                     // Sin esto, una versión sin reparto no se distingue en pantalla de
                     // una que sí lo tiene pero cuyas filas todavía no se leyeron.
                     $campos .= ", c.tramos_estado, c.tramos_observacion";
+                }
+                if ($this->tieneColumna('RO_T_HISTORIAL_COMPRAS_PROYECTADAS_CABECERA', 'comentario')) {
+                    $campos .= ", c.comentario";
                 }
                 $sql = "SELECT $campos
                         FROM RO_T_HISTORIAL_COMPRAS_PROYECTADAS_PRESUPUESTO d

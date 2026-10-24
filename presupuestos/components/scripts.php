@@ -10,26 +10,26 @@
      el exportador a Excel y las calculadoras. -->
 <script src="js/temporada-servidor.js?v=2.1"></script>
 <script src="js/api-client.js?v=13.0"></script>
-<script src="js/tabla-renderer.js?v=4.1"></script>
+<script src="js/tabla-renderer.js?v=4.2"></script>
 <script src="js/busqueda-manager.js"></script>
 
 <!-- Gestor de filtros persistentes -->
 <script src="js/filtros-manager.js"></script>
-<script src="js/historial-manager.js?v=5.1"></script>
+<script src="js/historial-manager.js?v=5.2"></script>
 
 <!-- Calculadoras específicas (CARGAR ANTES del indice-editor) -->
 <script src="js/calculadora-verano.js?v=3.1"></script>
 <script src="js/calculadora-invierno.js?v=3.1"></script>
 
 <!-- Editor de índices (DESPUÉS de las calculadoras) -->
-<script src="js/indice-editor.js?v=2.1"></script>
+<script src="js/indice-editor.js?v=2.2"></script>
 
 <!-- Resto de módulos -->
 <script src="js/compras-manager.js?v=2.0"></script>
 <script src="js/contenedores-manager.js?v=2.0"></script>
 <script src="js/totales-compra.js?v=3.1"></script>
 <script src="js/totales-stock.js?v=2.0"></script>
-<script src="js/excel-exporter.js?v=14.1"></script>
+<script src="js/excel-exporter.js?v=14.2"></script>
 <script src="js/ventas-manager.js?v=2.0"></script>
 <script src="js/distribucion-manager.js?v=21.0"></script>
 

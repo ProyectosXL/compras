@@ -448,6 +448,21 @@ const TablaRendererUtils = {
         }
     },
 
+    /**
+     * Ícono de nota de una fila: resaltado y con la nota en el tooltip si la fila
+     * tiene una; tenue si no, para que se vea que se puede agregar.
+     */
+    pintarNota(fila, item) {
+        const btn = fila.querySelector('.btn-nota');
+        if (!btn) return;
+        const nota = item.NOTA || '';
+        btn.innerHTML = nota
+            ? '<i class="fas fa-comment-dots text-warning"></i>'
+            : '<i class="far fa-comment text-muted opacity-50"></i>';
+        btn.title = nota ? `Nota: ${nota}` : 'Agregar una nota a esta fila';
+        btn.classList.toggle('tiene-nota', !!nota);
+    },
+
     /** Celda de una columna (data-col) dentro de una fila. */
     celdaDeColumna(fila, col) {
         return fila ? fila.querySelector(`td[data-col="${col}"]`) : null;
@@ -755,6 +770,16 @@ class TablaRenderer {
 
         tr.appendChild(celda('rubro', 'fw-medium', null));
         tr.lastChild.textContent = item.RUBRO || '';
+        // Ícono de nota, dentro de la celda del rubro para no sumar una columna.
+        const btnNota = document.createElement('button');
+        btnNota.type = 'button';
+        btnNota.className = 'btn btn-link btn-sm p-0 ms-1 btn-nota';
+        btnNota.addEventListener('click', (e) => {
+            e.stopPropagation();
+            IndiceEditor.editarNota(solapa, item.RUBRO, item.CATEGORIA_PADRE);
+        });
+        tr.lastChild.appendChild(btnNota);
+        TablaRendererUtils.pintarNota(tr, item);
         tr.appendChild(celda('categoria', '', null));
         tr.lastChild.textContent = item.CATEGORIA_PADRE || '';
 
@@ -943,6 +968,17 @@ class TablaRenderer {
         return html;
     }
 
+    /**
+     * Nota de una fila del historial, como ícono con la nota en el tooltip. El
+     * texto va además oculto en la celda para que la columna se pueda ordenar.
+     */
+    static iconoNotaHistorial(item) {
+        if (!item.nota) return '';
+        const nota = HistorialManager.escaparHtml(item.nota);
+        return `<i class="fas fa-comment-dots text-warning" title="${nota}"></i>`
+             + `<span class="visually-hidden">${nota}</span>`;
+    }
+
     static renderizarTablaHistorial(datos) {
         const tbody = document.getElementById('tbody-historial');
         if (!tbody) {
@@ -951,7 +987,7 @@ class TablaRenderer {
         }
 
         if (!datos || datos.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="15" class="text-center text-muted py-4">No se encontraron resultados para los filtros aplicados.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="16" class="text-center text-muted py-4">No se encontraron resultados para los filtros aplicados.</td></tr>`;
             return;
         }
 
@@ -975,6 +1011,7 @@ class TablaRenderer {
                     <td class="text-center bg-primary-subtle">${FormatoUtils.formatearNumero(item.venta_proyectada_invierno)}</td>
                     <td class="text-center bg-success-subtle"><strong>${FormatoUtils.formatearNumero(item.compra_proyectada)}</strong></td>
                     <td class="text-center bg-success-subtle">${TablaRenderer.desgloseTramos(item)}</td>
+                    <td class="text-center">${TablaRenderer.iconoNotaHistorial(item)}</td>
                 </tr>
             `;
         }).join('');

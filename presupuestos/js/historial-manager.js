@@ -169,7 +169,9 @@ class HistorialManager {
             return `
                 <tr class="${oficial ? 'table-success' : ''}">
                     <td class="small">${FormatoUtils.formatearFechaHora(v.fecha_guardado)}</td>
-                    <td class="small">${v.nombre_presupuesto || ''}</td>
+                    <td class="small">${v.nombre_presupuesto || ''}${v.comentario
+                        ? ` <i class="fas fa-comment-dots text-info" title="${HistorialManager.escaparHtml(v.comentario)}"></i>`
+                        : ''}</td>
                     <td><span class="badge bg-secondary">${v.solapa || ''}</span></td>
                     <td><span class="badge bg-info text-dark"
                               title="${v.temporada_objetivo_desde || ''} a ${v.temporada_objetivo_hasta || ''}">
@@ -551,13 +553,25 @@ class HistorialManager {
                 }
             }
 
-            UIUtils.mostrarLoading(true);
-
             const ahora = new Date();
             const pad = (num) => num.toString().padStart(2, '0');
             const fecha = `${ahora.getFullYear()}-${pad(ahora.getMonth() + 1)}-${pad(ahora.getDate())}`;
             const hora = `${pad(ahora.getHours())}-${pad(ahora.getMinutes())}`;
-            const nombrePresupuesto = `Presupuesto_${fecha}_${hora}_${temporada}`;
+
+            // Nombre y comentario los elige el usuario; el formato de siempre queda
+            // como sugerencia. Si la solapa se armó retomando una versión, se ofrece
+            // su comentario y se guarda de cuál salió: guardar nunca la pisa, crea
+            // una versión nueva.
+            const origen = HistorialManager.versionDeOrigen(temporada);
+            const datosVersion = await HistorialManager.pedirNombreYComentario(
+                `Presupuesto_${fecha}_${hora}_${temporada}`,
+                origen ? (origen.comentario || '') : '',
+                origen
+            );
+            if (!datosVersion) return;
+            const nombrePresupuesto = datosVersion.nombre;
+
+            UIUtils.mostrarLoading(true);
 
             const filasParaGuardar = datosAGuardar.map(item => ({
                 rubro: item.RUBRO,
@@ -594,7 +608,11 @@ class HistorialManager {
 
                 // De qué temporada salió cada base. Varía por fila.
                 temporada_base_verano: item.TEMPORADA_BASE_VERANO || null,
-                temporada_base_invierno: item.TEMPORADA_BASE_INVIERNO || null
+                temporada_base_invierno: item.TEMPORADA_BASE_INVIERNO || null,
+
+                // Nota de la fila: por qué se tocó el índice. Una por rubro/categoría
+                // y solapa, la última que se escribió.
+                nota: item.NOTA || null
             }));
 
             // La fecha y el país los pone el servidor: la fecha del navegador es
@@ -604,7 +622,9 @@ class HistorialManager {
                 nombre_presupuesto: nombrePresupuesto,
                 temporada: temporada,
                 filas: filasParaGuardar,
-                filas_totales: datosOriginales.length
+                filas_totales: datosOriginales.length,
+                comentario: datosVersion.comentario || null,
+                id_version_origen: origen && origen.id ? origen.id : null
             };
 
             const respuesta = await APIClient.llamarAPI('guardar-presupuesto', {}, 'POST', payload);
@@ -677,6 +697,129 @@ class HistorialManager {
             el.addEventListener('hidden.bs.modal', () => {
                 div.remove();
                 resolve(elegido);
+            });
+
+            modal.show();
+        });
+    }
+
+    /**
+     * Versión retomada sobre la que se está trabajando en una solapa, o null.
+     * La administra RetomarVersion; acá solo se consulta para ofrecer su comentario
+     * y grabar id_version_origen.
+     */
+    static versionDeOrigen(solapa) {
+        return (typeof RetomarVersion !== 'undefined') ? RetomarVersion.versionActiva(solapa) : null;
+    }
+
+    static escaparHtml(texto) {
+        return String(texto ?? '').replace(/[&<>"']/g, c =>
+            ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
+    /**
+     * Pide el nombre y el comentario general de la versión.
+     *
+     * El nombre viene precargado con el formato de siempre y se puede cambiar, pero no
+     * puede repetir el de otra versión vigente: se valida mientras se escribe contra
+     * el servidor, que lo vuelve a validar al guardar.
+     *
+     * @returns {Promise<{nombre: string, comentario: string}|null>} null si se cancela
+     */
+    static pedirNombreYComentario(nombreSugerido, comentarioSugerido = '', origen = null) {
+        return new Promise((resolve) => {
+            const id = 'modal-nombre-version-' + Date.now();
+            const div = document.createElement('div');
+            const avisoOrigen = origen
+                ? `<div class="alert alert-info small py-2">
+                     <i class="fas fa-code-branch me-1"></i>
+                     Se guarda como una versión <strong>nueva</strong>, armada a partir de
+                     <strong>${HistorialManager.escaparHtml(origen.nombre)}</strong>. La versión retomada no se modifica.
+                   </div>`
+                : '';
+
+            div.innerHTML = `
+                <div class="modal fade" id="${id}" tabindex="-1">
+                  <div class="modal-dialog modal-dialog-centered">
+                    <div class="modal-content">
+                      <div class="modal-header">
+                        <h5 class="modal-title"><i class="fas fa-save me-2"></i>Guardar versión</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                      </div>
+                      <div class="modal-body">
+                        ${avisoOrigen}
+                        <label class="form-label small mb-1" for="${id}-nombre">Nombre</label>
+                        <input type="text" class="form-control" id="${id}-nombre" maxlength="255"
+                               value="${HistorialManager.escaparHtml(nombreSugerido)}">
+                        <div class="invalid-feedback" id="${id}-error"></div>
+                        <label class="form-label small mb-1 mt-3" for="${id}-comentario">Comentario general (opcional)</label>
+                        <textarea class="form-control" id="${id}-comentario" rows="3" maxlength="1000"
+                                  placeholder="Qué tiene de particular esta versión">${HistorialManager.escaparHtml(comentarioSugerido)}</textarea>
+                      </div>
+                      <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="button" class="btn btn-primary" data-accion="guardar">
+                          <i class="fas fa-save me-1"></i>Guardar
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>`;
+            document.body.appendChild(div);
+
+            const el = document.getElementById(id);
+            const modal = new bootstrap.Modal(el);
+            const input = document.getElementById(`${id}-nombre`);
+            const error = document.getElementById(`${id}-error`);
+            const boton = el.querySelector('[data-accion="guardar"]');
+            let resultado = null;
+            let consulta = 0;
+
+            // Devuelve true si el nombre está libre. Cada consulta lleva un número para
+            // descartar las respuestas que llegan tarde, después de seguir escribiendo.
+            const validar = async () => {
+                const nombre = input.value.trim();
+                const n = ++consulta;
+                if (!nombre) {
+                    input.classList.add('is-invalid');
+                    error.textContent = 'El nombre no puede quedar vacío.';
+                    return false;
+                }
+                try {
+                    const r = await APIClient.llamarAPI('validar-nombre-version', { nombre }, 'GET');
+                    if (n !== consulta) return false;
+                    input.classList.toggle('is-invalid', !r.disponible);
+                    error.textContent = r.disponible ? '' : (r.message || 'Ese nombre ya existe.');
+                    return !!r.disponible;
+                } catch (e) {
+                    // Sin respuesta no se bloquea: el servidor valida igual al guardar.
+                    input.classList.remove('is-invalid');
+                    return true;
+                }
+            };
+
+            let temporizador = null;
+            input.addEventListener('input', () => {
+                clearTimeout(temporizador);
+                temporizador = setTimeout(validar, 400);
+            });
+
+            boton.addEventListener('click', async () => {
+                boton.disabled = true;
+                const ok = await validar();
+                boton.disabled = false;
+                if (!ok) { input.focus(); return; }
+                resultado = {
+                    nombre: input.value.trim(),
+                    comentario: document.getElementById(`${id}-comentario`).value.trim()
+                };
+                modal.hide();
+            });
+
+            el.addEventListener('shown.bs.modal', () => { input.select(); validar(); });
+            el.addEventListener('hidden.bs.modal', () => {
+                div.remove();
+                resolve(resultado);
             });
 
             modal.show();

@@ -305,6 +305,10 @@ class ExcelExporter {
                         resultado[TemporadaServidor.etiquetaHistorica(key)] = item[key];
                     }
                 });
+
+                // La nota de la fila, al final: es texto libre y en el medio cortaría
+                // la lectura de los números.
+                resultado['Nota'] = item.NOTA || '';
             }
             return resultado;
         });
