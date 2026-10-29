@@ -809,8 +809,8 @@ class DistribucionController {
             require_once __DIR__ . '/../class/DolarFuturoService.php';
             $rofexService = new DolarFuturoService();
             
-            // 1. Intentar actualizar desde API y obtener cotizaciones guardadas en dbo.FP_DOLAR_FUTURO_ROFEX
-            $rofexService->actualizarDesdeAPI();
+            // 1. Obtener cotizaciones vigentes guardadas en dbo.FP_DOLAR_FUTURO_ROFEX
+            // (La sincronización se realiza diariamente mediante tarea programada en el servidor a las 8:00 AM)
             $tasasFuturo = $rofexService->obtenerCotizacionesGuardadas();
 
             // 2. Cargar histórico del BCRA para meses no cubiertos por futuros

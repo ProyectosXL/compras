@@ -3,3 +3,7 @@
 README.md
 images
 AutorizacionesOc/vendor
+dbo.FP_DOLAR_FUTURO_ROFEX
+presupuestos/cron/ejecutar_sync_dolar_rofex.bat
+presupuestos/cron/registrar_tarea_programada.bat
+presupuestos/cron/logs

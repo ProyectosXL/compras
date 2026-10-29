@@ -65,13 +65,15 @@ class DolarFuturoService {
         curl_setopt($ch, CURLOPT_URL, $refUrl);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 3);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 15);
         curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)');
         $refJson = curl_exec($ch);
+        $curlErr = curl_error($ch);
         curl_close($ch);
 
         if (empty($refJson)) {
-            return ['success' => false, 'message' => 'No se pudo conectar a la API de Matba Rofex Primary.'];
+            $msg = 'No se pudo conectar a la API de Matba Rofex Primary.' . (!empty($curlErr) ? ' Error: ' . $curlErr : '');
+            return ['success' => false, 'message' => $msg];
         }
 
         $refData = json_decode($refJson, true);
@@ -105,7 +107,7 @@ class DolarFuturoService {
                 curl_setopt($ch, CURLOPT_URL, $seriesUrl);
                 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
                 curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-                curl_setopt($ch, CURLOPT_TIMEOUT, 2);
+                curl_setopt($ch, CURLOPT_TIMEOUT, 5);
                 $seriesJson = curl_exec($ch);
                 curl_close($ch);
 
