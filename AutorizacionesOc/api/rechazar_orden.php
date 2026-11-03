@@ -16,9 +16,9 @@ $motivo = isset($_POST['motivo']) ? trim($_POST['motivo']) : '';
 if (empty($n_orden_co) || empty($usuario_rechaza) || empty($motivo)) { http_response_code(400); exit('...'); }
 
 // --- SEGURIDAD: RODRIAL NO PUEDE RECHAZAR ---
-if ($usuario_rechaza === 'RODRIAL') {
+if (in_array(strtoupper(trim((string)$usuario_rechaza)), ['RODRIAL', 'RODRIGOAL', 'RODRIGOALGANARAZ'])) {
     http_response_code(403);
-    echo json_encode(['status' => 'error', 'message' => 'El usuario RODRIAL no tiene permisos para rechazar órdenes. Solo puede derivar.']);
+    echo json_encode(['status' => 'error', 'message' => 'El usuario ' . htmlspecialchars($usuario_rechaza) . ' es responsable de derivaciones y no tiene permisos para rechazar órdenes directamente.']);
     exit();
 }
 

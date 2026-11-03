@@ -34,9 +34,36 @@ if (empty($cod_provee) || empty($usuario_asignado) || empty($asignado_por)) {
 }
 
 // --- SEGURIDAD: SOLO RODRIAL PUEDE DERIVAR ---
-if ($asignado_por !== 'RODRIAL') {
+// --- SEGURIDAD: SOLO DISPATCHERS (RODRIAL, ANALISTA PAGO A PROVEEDORES O ADMIN) PUEDEN DERIVAR ---
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+$permitido = false;
+$uUpper = strtoupper(trim((string)$asignado_por));
+if (in_array($uUpper, ['RODRIAL', 'RODRIGOAL', 'RODRIGOALGANARAZ', 'SISTEMAS', 'FRANCOPERTUS'])) {
+    $permitido = true;
+}
+if (!$permitido && !empty($_SESSION['fp_auth_user'])) {
+    $sessUser = $_SESSION['fp_auth_user'];
+    if (!empty($sessUser['es_admin']) || ($sessUser['rol_id'] ?? 0) == 27 || ($sessUser['rol_nombre'] ?? '') === 'Analista Pago A Proveedores') {
+        $permitido = true;
+    }
+}
+if (!$permitido && isset($conn_sistemas) && $conn_sistemas) {
+    $sqlPerm = "SELECT u.rol_id, r.nombre as rol_nombre, r.es_admin 
+                FROM sistemas.dbo.FP_SOF_USUARIOS u 
+                LEFT JOIN sistemas.dbo.FP_ROLES_PERMISOS_MAP r ON r.id = u.rol_id 
+                WHERE u.username = ? OR u.usuario_tango = ?";
+    $stmtPerm = sqlsrv_query($conn_sistemas, $sqlPerm, [$asignado_por, $asignado_por]);
+    if ($stmtPerm && ($rP = sqlsrv_fetch_array($stmtPerm, SQLSRV_FETCH_ASSOC))) {
+        if (!empty($rP['es_admin']) || (int)$rP['rol_id'] === 27 || stripos($rP['rol_nombre'] ?? '', 'Pago A Proveedores') !== false) {
+            $permitido = true;
+        }
+    }
+}
+if (!$permitido) {
     http_response_code(403);
-    echo json_encode(['status' => 'error', 'message' => 'No tienes permisos para realizar derivaciones. Solo el usuario RODRIAL está autorizado.']);
+    echo json_encode(['status' => 'error', 'message' => 'No tienes permisos para realizar derivaciones. Solo el analista de pagos o administradores están autorizados.']);
     exit();
 }
 

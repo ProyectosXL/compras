@@ -13,7 +13,32 @@ if ($conn === null || $conn_sistemas === null) {
 }
 
 $usuario_seleccionado = isset($_GET['usuario']) ? trim($_GET['usuario']) : null;
-$esDispatcher = ($usuario_seleccionado === 'RODRIAL' || $usuario_seleccionado === 'RODRIGOAL');
+
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+$uUpper = strtoupper(trim((string)$usuario_seleccionado));
+$esDispatcher = in_array($uUpper, ['RODRIAL', 'RODRIGOAL', 'RODRIGOALGANARAZ', 'SISTEMAS', 'FRANCOPERTUS']);
+
+if (!$esDispatcher && !empty($_SESSION['fp_auth_user'])) {
+    $sessUser = $_SESSION['fp_auth_user'];
+    if (!empty($sessUser['es_admin']) || ($sessUser['rol_id'] ?? 0) == 27 || ($sessUser['rol_nombre'] ?? '') === 'Analista Pago A Proveedores') {
+        $esDispatcher = true;
+    }
+}
+if (!$esDispatcher && $conn_sistemas && !empty($usuario_seleccionado)) {
+    $sqlPerm = "SELECT u.rol_id, r.nombre as rol_nombre, r.es_admin 
+                FROM sistemas.dbo.FP_SOF_USUARIOS u 
+                LEFT JOIN sistemas.dbo.FP_ROLES_PERMISOS_MAP r ON r.id = u.rol_id 
+                WHERE u.username = ? OR u.usuario_tango = ?";
+    $stmtPerm = sqlsrv_query($conn_sistemas, $sqlPerm, [$usuario_seleccionado, $usuario_seleccionado]);
+    if ($stmtPerm && ($rP = sqlsrv_fetch_array($stmtPerm, SQLSRV_FETCH_ASSOC))) {
+        if (!empty($rP['es_admin']) || (int)$rP['rol_id'] === 27 || stripos($rP['rol_nombre'] ?? '', 'Pago A Proveedores') !== false) {
+            $esDispatcher = true;
+        }
+    }
+}
 
 // 1. Obtener Reglas (Sistemas Server)
 $sql_reglas = "SELECT COMPRADOR, USR_HASTA_100K, USR_HASTA_500K, USR_HASTA_2M, USR_MAYOR_2M FROM sistemas.dbo.FP_OC_REGLAS_AUTORIZACION";
@@ -68,7 +93,7 @@ while ($row = sqlsrv_fetch_array($stmt_pendientes, SQLSRV_FETCH_ASSOC)) {
     if (!$usuario_seleccionado || $esDispatcher) {
         $sumar = true;
     } else {
-        if ($autorizador_asignado === $usuario_seleccionado) {
+        if ($autorizador_asignado !== null && strcasecmp(trim($autorizador_asignado), trim((string)$usuario_seleccionado)) === 0) {
             $sumar = true;
         }
     }

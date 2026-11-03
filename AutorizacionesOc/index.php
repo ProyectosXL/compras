@@ -13,18 +13,55 @@
             session_start();
         }
 
-        // Si el usuario está autenticado en la plataforma corporativa / Hub, usamos su identidad validada:
-        if (!empty($_SESSION['fp_auth_user'])) {
-            $uAuth = $_SESSION['fp_auth_user'];
+        require_once __DIR__ . '/config/database.php';
+
+        // Identidad del usuario (Hub, sesión o parámetro URL)
+        $uAuth = $_SESSION['fp_auth_user'] ?? null;
+        if (!empty($uAuth)) {
             $usuario_externo = !empty($uAuth['usuario_tango']) ? $uAuth['usuario_tango'] : ($uAuth['username'] ?? '');
         } else {
-            // Compatibilidad histórica: si accede por parámetro directo sin sesión
-            $usuario_externo = isset($_GET['usuario']) ? htmlspecialchars($_GET['usuario'], ENT_QUOTES, 'UTF-8') : '';
+            $usuario_externo = isset($_GET['usuario']) ? htmlspecialchars($_GET['usuario'], ENT_QUOTES, 'UTF-8') : ($_SESSION['usuario_tango'] ?? $_SESSION['usuario'] ?? $_SESSION['username'] ?? '');
+        }
+
+        // Determinar si el usuario tiene rol de dispatcher / gestor de autorizaciones (RODRIAL, Analista Pago a Proveedores o Admin)
+        $es_dispatcher = false;
+        $username_actual = strtoupper(trim((string)($uAuth['username'] ?? $usuario_externo)));
+        $tango_actual = strtoupper(trim((string)($uAuth['usuario_tango'] ?? $usuario_externo)));
+        $rol_id_actual = (int)($uAuth['rol_id'] ?? 0);
+        $rol_nombre_actual = $uAuth['rol_nombre'] ?? '';
+
+        // Si no tenemos rol en sesión, pero tenemos conexión, consultamos FP_SOF_USUARIOS
+        if ($rol_id_actual === 0 && !empty($usuario_externo) && isset($conn_sistemas) && $conn_sistemas) {
+            $sqlU = "SELECT u.usuario_tango, u.rol_id, r.nombre as rol_nombre, r.es_admin 
+                     FROM sistemas.dbo.FP_SOF_USUARIOS u 
+                     LEFT JOIN sistemas.dbo.FP_ROLES_PERMISOS_MAP r ON r.id = u.rol_id 
+                     WHERE u.username = ? OR u.usuario_tango = ?";
+            $stmtU = sqlsrv_query($conn_sistemas, $sqlU, [$usuario_externo, $usuario_externo]);
+            if ($stmtU && ($rU = sqlsrv_fetch_array($stmtU, SQLSRV_FETCH_ASSOC))) {
+                if (!empty($rU['usuario_tango']) && empty($tango_actual)) {
+                    $tango_actual = strtoupper(trim($rU['usuario_tango']));
+                }
+                $rol_id_actual = (int)$rU['rol_id'];
+                $rol_nombre_actual = $rU['rol_nombre'] ?? '';
+                if (!empty($rU['es_admin'])) {
+                    $es_dispatcher = true;
+                }
+            }
+        }
+
+        if (!empty($uAuth['es_admin'])) {
+            $es_dispatcher = true;
+        }
+        if ($rol_id_actual === 27 || stripos($rol_nombre_actual, 'Pago A Proveedores') !== false) {
+            $es_dispatcher = true;
+        }
+        if (in_array($tango_actual, ['RODRIAL', 'RODRIGOAL']) || in_array($username_actual, ['RODRIAL', 'RODRIGOAL', 'RODRIGOALGANARAZ', 'SISTEMAS', 'FRANCOPERTUS'])) {
+            $es_dispatcher = true;
         }
     ?>
 
     <main class="container">
-        <?php $es_rodrial = ($usuario_externo === 'RODRIAL'); ?>
+        <?php $es_rodrial = $es_dispatcher; ?>
         <!-- Pestaña 1: RESUMEN (Dashboard) -->
         <div id="tab-resumen" class="tab-content active">
             <div class="header"><h1>Resumen General</h1><p>Indicadores clave de tus órdenes de compra.</p></div>
@@ -85,7 +122,7 @@
         <a href="#resumen" class="nav-item active"><i class="bi bi-pie-chart-fill"></i><span>Resumen</span></a>
         <a href="#gestion" class="nav-item"><i class="bi bi-card-checklist"></i><span>Gestión</span></a>
         <a href="#consulta" class="nav-item"><i class="bi bi-search"></i><span>Consulta</span></a>
-        <?php if ($usuario_externo === 'RODRIGOAL' || $usuario_externo === 'RODRIAL'): ?>
+        <?php if ($es_dispatcher): ?>
         <a href="#reglas" class="nav-item"><i class="bi bi-gear-fill"></i><span>Reglas</span></a>
         <?php endif; ?>
     </nav>
@@ -174,8 +211,15 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', () => {
-    let usuarioActivo = "<?php echo $usuario_externo; ?>";
-    const esDispatcher = (usuarioActivo === 'RODRIAL' || usuarioActivo === 'RODRIGOAL');
+    let usuarioActivo = "<?php echo htmlspecialchars($usuario_externo, ENT_QUOTES, 'UTF-8'); ?>";
+    let esDispatcher = <?php echo $es_dispatcher ? 'true' : 'false'; ?>;
+    if (!esDispatcher && usuarioActivo) {
+        const uUp = usuarioActivo.toUpperCase();
+        if (uUp === 'RODRIAL' || uUp === 'RODRIGOAL' || uUp === 'RODRIGOALGANARAZ') {
+            esDispatcher = true;
+        }
+    }
+    let filtroAutorizadorSeleccionado = '';
 
     const navItems = document.querySelectorAll('.nav-item');
     const tabs = document.querySelectorAll('.tab-content');
@@ -485,9 +529,16 @@ const buscarPendientesParaUsuario = (usuario) => {
                 </div>
             `;
 
-            // Botones de Autorizar/Rechazar: Solo si NO es un responsable de reglas (RODRIAL/RODRIGOAL)
+            // Botones según rol: el dispatcher deriva, el autorizador aprueba/rechaza
             let actionButtonsHTML = '';
-            if (!esDispatcher) {
+            if (esDispatcher) {
+                actionButtonsHTML = `
+                <div class="action-card-buttons">
+                    <button class="btn btn-primary btn-flex derivar-btn" data-cod-provee="${oc.cod_provee || ''}" data-proveedor="${oc.proveedor || ''}">
+                        <i class="bi bi-arrow-right-circle"></i> Derivar Proveedor
+                    </button>
+                </div>`;
+            } else {
                 actionButtonsHTML = `
                 <div class="action-card-buttons">
                     <button class="btn btn-danger btn-flex rechazar" data-oc="${oc.numero}">Rechazar</button>
@@ -505,26 +556,60 @@ const buscarPendientesParaUsuario = (usuario) => {
 };
 
     const loadGestionData = () => {
-        const subtituloGestion = document.getElementById('gestion-subtitulo'); const filtroUsuarioCard = document.getElementById('gestion-filtro-usuario');
-        if (usuarioActivo) {
+        const subtituloGestion = document.getElementById('gestion-subtitulo'); 
+        const filtroUsuarioCard = document.getElementById('gestion-filtro-usuario');
+        const gestionSelect = document.getElementById('autorizador-select');
+        const btnBuscar = document.getElementById('buscar-pendientes-btn');
+
+        if (esDispatcher) {
+            subtituloGestion.textContent = filtroAutorizadorSeleccionado ? `Monitoreo: Asignadas a ${filtroAutorizadorSeleccionado}` : 'Monitoreo Global de Pendientes';
+            filtroUsuarioCard.style.display = 'block';
+            const labelEl = filtroUsuarioCard.querySelector('label');
+            if (labelEl) labelEl.textContent = 'Filtrar por Autorizador (Opcional):';
+            if (btnBuscar) btnBuscar.textContent = 'Filtrar';
+
+            fetch('api/get_autorizadores.php').then(r => r.json()).then(data => {
+                let options = '<option value="">-- Ver Todas (Global) --</option>';
+                if (Array.isArray(data)) {
+                    data.forEach(c => {
+                        const sel = (filtroAutorizadorSeleccionado === c) ? 'selected' : '';
+                        options += `<option value="${c}" ${sel}>${c}</option>`;
+                    });
+                }
+                gestionSelect.innerHTML = options;
+            });
+            buscarPendientesParaUsuario(filtroAutorizadorSeleccionado || usuarioActivo);
+        } else if (usuarioActivo) {
             filtroUsuarioCard.style.display = 'none';
-            const subtitulo = esDispatcher ? 'Monitoreo Global de Pendientes' : `Mostrando pendientes para: ${usuarioActivo}`;
-            subtituloGestion.textContent = subtitulo;
+            subtituloGestion.textContent = `Mostrando pendientes para: ${usuarioActivo}`;
             buscarPendientesParaUsuario(usuarioActivo);
         } else {
-            filtroUsuarioCard.style.display = 'block'; subtituloGestion.textContent = 'Selecciona tu usuario para ver las OCs.'; gestionContainer.innerHTML = '';
-            const gestionSelect = document.getElementById('autorizador-select');
+            filtroUsuarioCard.style.display = 'block'; 
+            subtituloGestion.textContent = 'Selecciona tu usuario para ver las OCs.'; 
+            gestionContainer.innerHTML = '';
             fetch('api/get_autorizadores.php').then(r => r.json()).then(data => {
-                gestionSelect.innerHTML = '<option value="">-- Seleccionar --</option>';
-                if (Array.isArray(data)) data.forEach(c => gestionSelect.innerHTML += `<option value="${c}">${c}</option>`);
+                let options = '<option value="">-- Seleccionar --</option>';
+                if (Array.isArray(data)) data.forEach(c => options += `<option value="${c}">${c}</option>`);
+                gestionSelect.innerHTML = options;
             });
         }
     };
     
     document.getElementById('buscar-pendientes-btn').addEventListener('click', () => {
-        usuarioActivo = document.getElementById('autorizador-select').value;
-        if (usuarioActivo) { loadGestionData(); document.getElementById('tab-resumen').dataset.loaded = 'false'; document.getElementById('tab-consulta').dataset.loaded = 'false';
-        } else { alert('Por favor, selecciona un usuario.'); }
+        const valSelect = document.getElementById('autorizador-select').value;
+        if (esDispatcher) {
+            filtroAutorizadorSeleccionado = valSelect;
+            loadGestionData();
+        } else {
+            usuarioActivo = valSelect;
+            if (usuarioActivo) { 
+                loadGestionData(); 
+                document.getElementById('tab-resumen').dataset.loaded = 'false'; 
+                document.getElementById('tab-consulta').dataset.loaded = 'false';
+            } else { 
+                alert('Por favor, selecciona un usuario.'); 
+            }
+        }
     });
 
     const detalleModal = document.getElementById('detalle-modal');
@@ -534,6 +619,22 @@ const buscarPendientesParaUsuario = (usuario) => {
     detalleCerrarBtn.addEventListener('click', () => detalleModal.classList.remove('active'));
 
     gestionContainer.addEventListener('click', e => {
+        const btnDerivar = e.target.closest('.derivar-btn');
+        if (btnDerivar) {
+            const codProvee = btnDerivar.dataset.codProvee;
+            const nomProvee = btnDerivar.dataset.proveedor;
+            derivarModal.dataset.codProvee = codProvee;
+            derivarTitle.textContent = `Derivar Proveedor: ${codProvee}`;
+            derivarMessage.textContent = `Asignar a un usuario autorizador para las compras del proveedor ${nomProvee} (${codProvee}):`;
+            derivarModal.classList.add('active');
+
+            fetch('api/get_autorizadores.php').then(r => r.json()).then(data => {
+                derivarSelect.innerHTML = '<option value="">-- Seleccionar Usuario --</option>';
+                if (Array.isArray(data)) data.forEach(c => derivarSelect.innerHTML += `<option value="${c}">${c}</option>`);
+            });
+            return;
+        }
+
         const detailBtn = e.target.closest('.ver-detalle-btn');
         if (detailBtn) {
             const numeroOC = detailBtn.dataset.oc;

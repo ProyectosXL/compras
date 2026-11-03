@@ -54,7 +54,32 @@ if ($stmt_ordenes === false) {
     exit(); 
 }
 
-$esDispatcher = ($usuario_seleccionado === 'RODRIAL' || $usuario_seleccionado === 'RODRIGOAL');
+if (session_status() === PHP_SESSION_NONE) {
+    session_start();
+}
+
+$uUpper = strtoupper(trim($usuario_seleccionado));
+$esDispatcher = in_array($uUpper, ['RODRIAL', 'RODRIGOAL', 'RODRIGOALGANARAZ', 'SISTEMAS', 'FRANCOPERTUS']);
+
+if (!$esDispatcher && !empty($_SESSION['fp_auth_user'])) {
+    $sessUser = $_SESSION['fp_auth_user'];
+    if (!empty($sessUser['es_admin']) || ($sessUser['rol_id'] ?? 0) == 27 || ($sessUser['rol_nombre'] ?? '') === 'Analista Pago A Proveedores') {
+        $esDispatcher = true;
+    }
+}
+if (!$esDispatcher && $conn_sistemas) {
+    $sqlPerm = "SELECT u.rol_id, r.nombre as rol_nombre, r.es_admin 
+                FROM sistemas.dbo.FP_SOF_USUARIOS u 
+                LEFT JOIN sistemas.dbo.FP_ROLES_PERMISOS_MAP r ON r.id = u.rol_id 
+                WHERE u.username = ? OR u.usuario_tango = ?";
+    $stmtPerm = sqlsrv_query($conn_sistemas, $sqlPerm, [$usuario_seleccionado, $usuario_seleccionado]);
+    if ($stmtPerm && ($rP = sqlsrv_fetch_array($stmtPerm, SQLSRV_FETCH_ASSOC))) {
+        if (!empty($rP['es_admin']) || (int)$rP['rol_id'] === 27 || stripos($rP['rol_nombre'] ?? '', 'Pago A Proveedores') !== false) {
+            $esDispatcher = true;
+        }
+    }
+}
+
 $resultado_final = [];
 
 while ($row = sqlsrv_fetch_array($stmt_ordenes, SQLSRV_FETCH_ASSOC)) {
@@ -79,11 +104,11 @@ while ($row = sqlsrv_fetch_array($stmt_ordenes, SQLSRV_FETCH_ASSOC)) {
     // Filtrado por usuario
     $mostrar = false;
     if ($esDispatcher) {
-        // Los administradores ven TODAS las órdenes pendientes para monitoreo
+        // Los administradores y dispatchers ven TODAS las órdenes pendientes para monitoreo
         $mostrar = true;
     } else {
-        // Usuario normal ve solo lo asignado
-        if ($autorizador_asignado === $usuario_seleccionado) {
+        // Usuario normal ve solo lo asignado (comparación insensible a mayúsculas/minúsculas)
+        if ($autorizador_asignado !== null && strcasecmp(trim($autorizador_asignado), trim($usuario_seleccionado)) === 0) {
             $mostrar = true;
         }
     }
