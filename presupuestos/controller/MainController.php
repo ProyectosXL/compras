@@ -731,8 +731,10 @@ class MainController {
                 $distribucionController->obtenerParametrosGlobales();
                 break;
             case 'guardar-parametros-costos':
-            case 'calcular-costo-mediana':
                 $distribucionController->guardarParametrosGlobales();
+                break;
+            case 'calcular-costo-mediana':
+                $distribucionController->calcularCostoMedianaParametros();
                 break;
             case 'eliminar-version':
                 $distribucionController->eliminarVersion();

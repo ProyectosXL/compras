@@ -5,7 +5,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <!-- Scripts modulares del sistema - ORDEN CORRECTO -->
-<script src="js/utils.js?v=4.0"></script>
+<script src="js/utils.js?v=4.1"></script>
 <!-- Temporada calculada por el servidor. Va temprano porque la consultan el renderer,
      el exportador a Excel y las calculadoras. -->
 <script src="js/temporada-servidor.js?v=2.1"></script>
@@ -31,7 +31,7 @@
 <script src="js/totales-stock.js?v=2.0"></script>
 <script src="js/excel-exporter.js?v=14.3"></script>
 <script src="js/ventas-manager.js?v=2.0"></script>
-<script src="js/distribucion-manager.js?v=21.0"></script>
+<script src="js/distribucion-manager.js?v=25.0"></script>
 
 <!-- Script principal (SIEMPRE AL FINAL) -->
 <script src="js/main.js?v=13.2"></script>

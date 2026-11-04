@@ -1989,21 +1989,59 @@ class DistribucionManager {
     }
 
     /**
-     * Guardar los parámetros globales editados
+     * Muestra u oculta el overlay de carga dentro del modal de Parámetros Globales
      */
+    static mostrarLoadingModal(mostrar, titulo = 'Calculando Mediana de Costos en Tango...', subtitulo = 'Consultando compras de los últimos 90 días en Tango y convirtiendo a U$D oficial. Por favor aguarde...') {
+        const overlay = document.getElementById('modal-parametros-loading');
+        const btnCalcular = document.getElementById('btn-calcular-mediana-modal');
+        const btnGuardar = document.getElementById('btn-guardar-parametros-modal');
+        const btnCancelar = document.getElementById('btn-cancelar-parametros-modal');
+
+        if (overlay) {
+            if (mostrar) {
+                const elTitulo = overlay.querySelector('.modal-loading-titulo');
+                const elSub = overlay.querySelector('.modal-loading-subtitulo');
+                if (elTitulo && titulo) elTitulo.textContent = titulo;
+                if (elSub && subtitulo) elSub.textContent = subtitulo;
+                overlay.classList.remove('d-none');
+                overlay.classList.add('d-flex');
+            } else {
+                overlay.classList.remove('d-flex');
+                overlay.classList.add('d-none');
+            }
+        }
+
+        if (btnCalcular) {
+            btnCalcular.disabled = mostrar;
+            if (mostrar) {
+                btnCalcular.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status"></span>Calculando en Tango...';
+            } else {
+                btnCalcular.innerHTML = '<i class="fas fa-calculator me-1"></i>Calcular Costos Mediana (Últimos 90 días)';
+            }
+        }
+        if (btnGuardar) btnGuardar.disabled = mostrar;
+        if (btnCancelar) btnCancelar.disabled = mostrar;
+    }
+
     /**
      * Calcular costos mediana ejecutando SP RO_SP_COSTO_MEDIANA_RUBRO_CATEGORIA con últimos 90 días
      * y convertir a USD con el dólar oficial de hoy
      */
     static async calcularCostoMedianaModal() {
         try {
-            const confirmar = await UIUtils.confirmar(
-                '¿Desea calcular y actualizar automáticamente el COSTO PROM (U) por Rubro y Categoría ejecutando la mediana de los últimos 90 días en Tango?',
-                'Calcular Costo Mediana (90 Días)'
+            const confirmar = await UIUtils.confirmarAccion(
+                'Calcular Costo Mediana (Últimos 90 Días)',
+                '¿Desea calcular y actualizar automáticamente el COSTO PROM (U$D) por Rubro y Categoría ejecutando la mediana de compras de los últimos 90 días en Tango?',
+                'primary'
             );
             if (!confirmar) return;
 
-            UIUtils.mostrarLoading(true);
+            // Mostrar estado de carga claro e interactivo dentro del modal
+            DistribucionManager.mostrarLoadingModal(true, 
+                'Calculando Mediana de Costos en Tango...', 
+                'Consultando compras de los últimos 90 días en Tango y convirtiendo a U$D oficial. Por favor aguarde...'
+            );
+
             const res = await APIClient.calcularCostoMedianaParametros();
             if (res.success) {
                 UIUtils.mostrarAlerta(res.message || 'Costos mediana calculados y guardados con éxito.', 'success');
@@ -2018,10 +2056,35 @@ class DistribucionManager {
                             item.costo_prom = mapa[k].costo_prom;
                             item.vcosto = mapa[k].vcosto;
                             item.inc_fob = mapa[k].inc_fob;
+                            delete mapa[k];
                         }
                     });
+
+                    // Si hay combinaciones nuevas
+                    Object.values(mapa).forEach(nuevo => {
+                        DistribucionManager.parametrosGlobalesModal.push({
+                            rubro: nuevo.rubro,
+                            categoria_padre: nuevo.categoria_padre,
+                            costo_prom: nuevo.costo_prom || 0,
+                            inc_fob: nuevo.inc_fob || 0,
+                            vcosto: nuevo.vcosto || 0,
+                            markup_locales_propios: nuevo.markup_locales_propios || 0,
+                            markup_franquicias: nuevo.markup_franquicias || 0,
+                            markup_mayoristas: nuevo.markup_mayoristas || 0,
+                            markup_ecommerce: nuevo.markup_ecommerce || 0
+                        });
+                    });
+
                     DistribucionManager.renderizarParametrosModal();
                 }
+
+                // Cambiar automáticamente a la solapa de Costos Globales para que el usuario vea los nuevos valores
+                const tabCostosEl = document.getElementById('modal-tab-costos');
+                if (tabCostosEl) {
+                    const tabInstance = bootstrap.Tab.getInstance(tabCostosEl) || new bootstrap.Tab(tabCostosEl);
+                    tabInstance.show();
+                }
+
                 // Recargar costos generales del paso 2
                 await DistribucionManager.cargarCostos();
             } else {
@@ -2031,13 +2094,13 @@ class DistribucionManager {
             console.error(e);
             UIUtils.mostrarAlerta('Error al calcular mediana de costos: ' + e.message, 'error');
         } finally {
-            UIUtils.mostrarLoading(false);
+            DistribucionManager.mostrarLoadingModal(false);
         }
     }
 
     static async guardarParametrosModal() {
         try {
-            UIUtils.mostrarLoading(true);
+            DistribucionManager.mostrarLoadingModal(true, 'Guardando Parámetros...', 'Guardando los cambios de costos y mark-up en la base de datos...');
             const response = await APIClient.guardarParametrosCostos(DistribucionManager.parametrosGlobalesModal);
             if (response.success) {
                 UIUtils.mostrarAlerta('Parámetros globales guardados correctamente', 'success');
@@ -2058,6 +2121,7 @@ class DistribucionManager {
             console.error(e);
             UIUtils.mostrarAlerta('Error al guardar parámetros globales: ' + e.message, 'error');
         } finally {
+            DistribucionManager.mostrarLoadingModal(false);
             UIUtils.mostrarLoading(false);
         }
     }

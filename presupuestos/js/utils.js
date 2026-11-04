@@ -425,24 +425,41 @@ class UIUtils {
         return UIUtils.confirmarAccion(titulo, mensaje, tipoBoton, true);
     }
 
+    /**
+     * Alias flexible para confirmaciones: soporta UIUtils.confirmar(mensaje, titulo) o UIUtils.confirmar(titulo, mensaje)
+     */
+    static async confirmar(primerParam, segundoParam = 'Confirmación', tipoBoton = 'primary') {
+        let titulo = segundoParam;
+        let mensaje = primerParam;
+        if (typeof segundoParam === 'string' && segundoParam.length > 50 && typeof primerParam === 'string' && primerParam.length <= 50) {
+            titulo = primerParam;
+            mensaje = segundoParam;
+        }
+        return UIUtils.confirmarAccion(titulo, mensaje, tipoBoton, false);
+    }
+
     static async confirmarAccion(titulo, mensaje, tipoBoton = 'danger', soloInformar = false) {
         return new Promise((resolve) => {
             const modalId = 'modal-confirmacion-' + Date.now();
             
+            // Si ya hay un modal abierto (como el de parámetros globales), nos aseguramos de que el modal de confirmación quede por encima
+            const modalesAbiertos = document.querySelectorAll('.modal.show').length;
+            const zIndexModal = 1060 + (modalesAbiertos * 20);
+
             const modalHTML = `
-                <div class="modal fade" id="${modalId}" tabindex="-1">
-                    <div class="modal-dialog">
-                        <div class="modal-content">
-                            <div class="modal-header">
-                                <h5 class="modal-title">${titulo}</h5>
+                <div class="modal fade" id="${modalId}" tabindex="-1" style="z-index: ${zIndexModal};">
+                    <div class="modal-dialog modal-dialog-centered">
+                        <div class="modal-content shadow-lg border-0" style="border-radius: 12px;">
+                            <div class="modal-header border-0 pb-0">
+                                <h5 class="modal-title fw-bold">${titulo}</h5>
                                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                             </div>
-                            <div class="modal-body">
+                            <div class="modal-body py-3">
                                 ${mensaje}
                             </div>
-                            <div class="modal-footer">
-                                ${soloInformar ? '' : '<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>'}
-                                <button type="button" class="btn btn-${tipoBoton}" id="btn-confirmar">
+                            <div class="modal-footer border-0 pt-0">
+                                ${soloInformar ? '' : '<button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-3" data-bs-dismiss="modal">Cancelar</button>'}
+                                <button type="button" class="btn btn-sm btn-${tipoBoton} rounded-pill px-4 fw-bold" id="btn-confirmar">
                                     ${soloInformar ? 'Entendido' : 'Confirmar'}
                                 </button>
                             </div>
@@ -453,17 +470,29 @@ class UIUtils {
             
             document.body.insertAdjacentHTML('beforeend', modalHTML);
             
-            const modal = new bootstrap.Modal(document.getElementById(modalId));
-            const btnConfirmar = document.getElementById('btn-confirmar');
+            const modalEl = document.getElementById(modalId);
+            const modal = new bootstrap.Modal(modalEl);
+            const btnConfirmar = modalEl.querySelector('#btn-confirmar');
+            let resuelto = false;
+
+            modalEl.addEventListener('shown.bs.modal', () => {
+                const backdrops = document.querySelectorAll('.modal-backdrop');
+                if (backdrops.length > 1) {
+                    backdrops[backdrops.length - 1].style.zIndex = (zIndexModal - 5).toString();
+                }
+            });
             
             btnConfirmar.addEventListener('click', () => {
+                resuelto = true;
                 modal.hide();
                 resolve(true);
             });
             
-            document.getElementById(modalId).addEventListener('hidden.bs.modal', () => {
-                document.getElementById(modalId).remove();
-                resolve(false);
+            modalEl.addEventListener('hidden.bs.modal', () => {
+                modalEl.remove();
+                if (!resuelto) {
+                    resolve(false);
+                }
             });
             
             modal.show();
