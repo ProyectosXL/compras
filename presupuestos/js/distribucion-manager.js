@@ -644,6 +644,36 @@ class DistribucionManager {
                     });
                 }
             });
+        } else {
+            // Si la suma no es exactamente 100%, igualmente calcular las unidades proporcionales para cada canal
+            const compraProyectada = grupo[0].COMPRA_PROYECTADA;
+            grupo.forEach(item => {
+                const dist = Math.round(compraProyectada * (item.PARTICIPACION / 100));
+                item.COMPRA_DISTRIBUIDA = dist;
+                item.DISTRIBUCION_FINAL = dist;
+
+                const idx = DistribucionManager.datos.indexOf(item);
+                const cellDist = document.getElementById(`distribucion-${idx}`);
+                if (cellDist) {
+                    cellDist.textContent = FormatoUtils.formatearNumero(item.COMPRA_DISTRIBUIDA);
+                }
+
+                if (item.DISTRIBUCION_MENSUAL) {
+                    Object.keys(item.DISTRIBUCION_MENSUAL).forEach(m => {
+                        const p = (item.DISTRIBUCION_MENSUAL[m].porcentaje || 0) / 100;
+                        const unidades = Math.round(item.COMPRA_DISTRIBUIDA * p);
+                        item.DISTRIBUCION_MENSUAL[m].unidades = unidades;
+
+                        const cellMes = document.getElementById(`mes-${idx}-${m}`);
+                        if (cellMes) {
+                            const valCell = cellMes.querySelector('.fw-bold');
+                            if (valCell) {
+                                valCell.textContent = FormatoUtils.formatearNumero(unidades);
+                            }
+                        }
+                    });
+                }
+            });
         }
     }
 

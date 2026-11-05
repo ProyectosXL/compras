@@ -167,22 +167,10 @@ class DistribucionController {
                 $rubroClave = trim($rubro);
                 $categoriaClave = trim($categoria);
 
-                // Se utiliza el valor correspondiente de la Venta Proyectada según temporada
-                $compraProyectada = (strtoupper($temporadaFiltro) === 'VERANO') ? (int)$registro['VENTA_PROY_VERANO'] : (int)$registro['VENTA_PROY_INVIERNO'];
-
-                // Si existe un valor guardado previamente en la versión para este grupo (rubro / categoría), respetarlo
-                $compraProyectadaGuardada = null;
-                foreach ($canales as $canal) {
-                    $claveGuardado = $rubroClave . '|' . $categoriaClave . '|' . trim($canal);
-                    if (isset($mapeoGuardados[$claveGuardado]) && isset($mapeoGuardados[$claveGuardado]['compra_proyectada'])) {
-                        $compraProyectadaGuardada = (int)$mapeoGuardados[$claveGuardado]['compra_proyectada'];
-                        break;
-                    }
-                }
-
-                if ($compraProyectadaGuardada !== null) {
-                    $compraProyectada = $compraProyectadaGuardada;
-                }
+                // La Venta Proyectada proviene SIEMPRE dinámicamente del presupuesto oficial seleccionado
+                $compraProyectada = (strtoupper($temporadaFiltro) === 'VERANO') 
+                    ? (int)round($registro['VENTA_PROY_VERANO'] ?? 0) 
+                    : (int)round($registro['VENTA_PROY_INVIERNO'] ?? 0);
 
                 if ($compraProyectada < 0) {
                     $compraProyectada = 0;
@@ -276,29 +264,18 @@ class DistribucionController {
                     ];
                 }
 
-                // Calcular las unidades distribuidas por canal en base a su participación (%) o valor guardado
+                // Calcular las unidades distribuidas por canal en base a la Venta Proyectada Oficial y la participación (%) de la versión
                 $sumaUnidadesDistribuidas = 0;
-                $tieneDistribucionGuardada = false;
                 foreach ($canales as $canal) {
-                    $claveGuardado = $rubroClave . '|' . $categoriaClave . '|' . trim($canal);
                     $part = $filasCanal[$canal]['participacion'];
-                    
-                    if (isset($mapeoGuardados[$claveGuardado]) && isset($mapeoGuardados[$claveGuardado]['distribucion_final'])) {
-                        $unidadesDist = (int)$mapeoGuardados[$claveGuardado]['distribucion_final'];
-                        $tieneDistribucionGuardada = true;
-                    } elseif (isset($mapeoGuardados[$claveGuardado]) && isset($mapeoGuardados[$claveGuardado]['compra_distribuida'])) {
-                        $unidadesDist = (int)$mapeoGuardados[$claveGuardado]['compra_distribuida'];
-                        $tieneDistribucionGuardada = true;
-                    } else {
-                        $unidadesDist = (int)round($compraProyectada * ($part / 100));
-                    }
+                    $unidadesDist = (int)round($compraProyectada * ($part / 100));
 
                     $filasCanal[$canal]['venta_distribuida'] = $unidadesDist;
                     $sumaUnidadesDistribuidas += $unidadesDist;
                 }
 
-                // Si no hay distribución guardada previamente y las participaciones suman 100% (o muy cerca), ajustar diferencia de redondeo en el canal más fuerte
-                if (!$tieneDistribucionGuardada && abs($sumaParticipacion - 100.0) < 0.1 && $canalMasFuerte !== null) {
+                // Si las participaciones suman 100% (o muy cerca), ajustar diferencia de redondeo en el canal más fuerte
+                if (abs($sumaParticipacion - 100.0) < 0.1 && $canalMasFuerte !== null) {
                     $diferencia = $compraProyectada - $sumaUnidadesDistribuidas;
                     $filasCanal[$canalMasFuerte]['venta_distribuida'] += $diferencia;
                 }
@@ -335,12 +312,12 @@ class DistribucionController {
                     
                     foreach ($mesesTemporada as $mClave => $mLabel) {
                         if ($savedMonthly && isset($savedMonthly[$mLabel])) {
-                            $p = (float)$savedMonthly[$mLabel]['porcentaje'] / 100;
-                            $unidadesProyectadas = (int)$savedMonthly[$mLabel]['unidades'];
+                            $p = (float)($savedMonthly[$mLabel]['porcentaje'] ?? 0) / 100;
                         } else {
                             $p = $porcentajesMesCanal[$mClave];
-                            $unidadesProyectadas = (int)round($distFinal * $p);
                         }
+                        // Las unidades mensuales se calculan siempre sobre la nueva venta distribuida oficial
+                        $unidadesProyectadas = (int)round($distFinal * $p);
 
                         if ($p > $maxP) {
                             $maxP = $p;
@@ -354,8 +331,8 @@ class DistribucionController {
                         $sumaMesesDistribuidos += $unidadesProyectadas;
                     }
                     
-                    // Ajustar diferencias de redondeo con el mes de mayor porcentaje (solo si no es override guardado)
-                    if (!$savedMonthly && $distFinal !== $sumaMesesDistribuidos && $mesMayorPorcentaje !== null) {
+                    // Ajustar diferencias de redondeo con el mes de mayor porcentaje
+                    if ($distFinal !== $sumaMesesDistribuidos && $mesMayorPorcentaje !== null) {
                         $diferenciaMes = $distFinal - $sumaMesesDistribuidos;
                         $mesesDistribuidos[$mesMayorPorcentaje]['unidades'] += $diferenciaMes;
                     }

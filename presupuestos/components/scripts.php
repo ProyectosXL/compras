@@ -31,7 +31,7 @@
 <script src="js/totales-stock.js?v=2.0"></script>
 <script src="js/excel-exporter.js?v=14.3"></script>
 <script src="js/ventas-manager.js?v=2.0"></script>
-<script src="js/distribucion-manager.js?v=25.0"></script>
+<script src="js/distribucion-manager.js?v=26.0"></script>
 
 <!-- Script principal (SIEMPRE AL FINAL) -->
 <script src="js/main.js?v=13.2"></script>
