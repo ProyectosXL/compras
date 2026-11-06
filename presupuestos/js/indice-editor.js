@@ -294,6 +294,11 @@ class IndiceEditor {
         if (modal) {
             IndiceEditor.modalInstancia = new bootstrap.Modal(modal);
             modal.addEventListener('hidden.bs.modal', () => {
+                document.querySelectorAll('.fila-datos.table-warning').forEach(f => {
+                    f.classList.remove('table-warning');
+                    f.style.transform = '';
+                    f.style.boxShadow = '';
+                });
                 IndiceEditor.limpiarFormulario();
                 IndiceEditor.indiceEditando = null;
             });
@@ -316,29 +321,121 @@ class IndiceEditor {
     }
 
     static editarIndice(rubro, categoria, indiceActual, solapa, index, temporada = 'verano') {
-        IndiceEditor.indiceEditando = { rubro, categoria, indiceActual: parseFloat(indiceActual), solapa, index, temporada };
+        IndiceEditor.indiceEditando = { rubro, categoria, indiceActual: parseFloat(indiceActual), solapa, index, temporada, tipo: 'variacion' };
         
         document.getElementById('modal-rubro').textContent = rubro;
         document.getElementById('modal-categoria').textContent = categoria;
-        // El título dice qué índice se edita: con TE disponible es el Total Empresa, y
-        // sin él (Uruguay) sigue siendo el de Locales Propios.
+
+        const modalEl = document.getElementById('modalEditarIndice');
         const registro = (window.presupuestoApp.getDatos(solapa) || [])
-            .find(r => r.RUBRO === rubro && r.CATEGORIA_PADRE === categoria);
+            .find(r => r.RUBRO === rubro && (r.CATEGORIA_PADRE === categoria || r.CATEGORIA === categoria));
         const tipoIndice = registro && registro.TE_DISPONIBLE ? 'Total Empresa' : 'Locales Propios';
-        document.querySelector('#modalEditarIndice .modal-title').textContent =
+        modalEl.querySelector('.modal-title').textContent =
             `Editar Índice ${tipoIndice} - ${temporada.charAt(0).toUpperCase() + temporada.slice(1)}`;
         
+        const labelIndice = modalEl.querySelector('label[for="modal-nuevo-indice"]');
+        if (labelIndice) labelIndice.textContent = 'Nuevo Índice:';
+
+        const formText = modalEl.querySelector('.form-text');
+        if (formText) {
+            formText.innerHTML = `
+                <strong>Ejemplos:</strong><br>
+                • 1.0 = Sin cambio (100%)<br>
+                • 1.2 = Aumento 20%<br>
+                • 0.8 = Reducción 20%
+            `;
+        }
+
+        const notaGroup = document.getElementById('modal-nota-indice')?.closest('.mb-3');
+        if (notaGroup) notaGroup.classList.remove('d-none');
+
         const input = document.getElementById('modal-nuevo-indice');
         input.value = parseFloat(indiceActual).toFixed(2);
+        input.step = '0.01';
+        input.min = '0';
+        input.max = '10';
 
         // La nota que ya tenga la fila, para corregirla en vez de reescribirla.
         const notaInput = document.getElementById('modal-nota-indice');
         if (notaInput) notaInput.value = (registro && registro.NOTA) || '';
         
+        // Botón restaurar en modal si difiere del original
+        const btnRestaurar = document.getElementById('btn-modal-restaurar-indice');
+        const valorOriginal = registro ? TablaRendererUtils.obtenerIndiceOriginal(registro) : parseFloat(indiceActual);
+        if (btnRestaurar) {
+            if (Math.abs(parseFloat(indiceActual) - valorOriginal) > 0.001) {
+                btnRestaurar.classList.remove('d-none');
+                btnRestaurar.innerHTML = `<i class="fas fa-undo me-1"></i>Restaurar Original (${valorOriginal.toFixed(2)})`;
+            } else {
+                btnRestaurar.classList.add('d-none');
+            }
+        }
+
         // Mostrar preview inicial
         IndiceEditor.mostrarPreviewCalculo(parseFloat(indiceActual));
         
-        TablaRenderer.resaltarFila(solapa, rubro, categoria, true);
+        // Fila no resaltada para evitar distorsiones
+        IndiceEditor.modalInstancia.show();
+        setTimeout(() => input.select(), 500);
+    }
+
+    /**
+     * Modal para editar el factor de cobertura de stock (en meses de venta promedio)
+     */
+    static editarIndiceCobertura(rubro, categoria, indiceActual, solapa) {
+        IndiceEditor.indiceEditando = {
+            rubro,
+            categoria,
+            indiceActual: parseFloat(indiceActual),
+            solapa,
+            tipo: 'cobertura'
+        };
+
+        document.getElementById('modal-rubro').textContent = rubro;
+        document.getElementById('modal-categoria').textContent = categoria;
+
+        const modalEl = document.getElementById('modalEditarIndice');
+        modalEl.querySelector('.modal-title').textContent = 'Editar Índice de Cobertura (Meses)';
+
+        const labelIndice = modalEl.querySelector('label[for="modal-nuevo-indice"]');
+        if (labelIndice) labelIndice.textContent = 'Factor Cobertura (Meses):';
+
+        const formText = modalEl.querySelector('.form-text');
+        if (formText) {
+            formText.innerHTML = `
+                <strong>Meses de venta promedio (45 días = 1.50):</strong><br>
+                • 1.50 = 45 días (cobertura por defecto)<br>
+                • 2.00 = 60 días (aumenta stock de reserva)<br>
+                • 1.00 = 30 días (reduce stock de reserva)
+            `;
+        }
+
+        const notaGroup = document.getElementById('modal-nota-indice')?.closest('.mb-3');
+        if (notaGroup) notaGroup.classList.add('d-none');
+
+        const input = document.getElementById('modal-nuevo-indice');
+        input.value = parseFloat(indiceActual).toFixed(2);
+        input.step = '0.1';
+        input.min = '0';
+        input.max = '12';
+
+        // Botón restaurar en modal si difiere del original
+        const reg = (window.presupuestoApp.getDatos(solapa) || [])
+            .find(r => r.RUBRO === rubro && (r.CATEGORIA_PADRE === categoria || r.CATEGORIA === categoria));
+        const factorOriginal = reg ? parseFloat(reg._factorCoberturaOriginal !== undefined ? reg._factorCoberturaOriginal : (parseFloat(reg.STOCK_COBERTURA || 0) > 0 ? 1.5 : 0.0)) : 1.5;
+        const btnRestaurar = document.getElementById('btn-modal-restaurar-indice');
+        if (btnRestaurar) {
+            if (Math.abs(parseFloat(indiceActual) - factorOriginal) > 0.001) {
+                btnRestaurar.classList.remove('d-none');
+                btnRestaurar.innerHTML = `<i class="fas fa-undo me-1"></i>Restaurar Original (${factorOriginal.toFixed(2)})`;
+            } else {
+                btnRestaurar.classList.add('d-none');
+            }
+        }
+
+        IndiceEditor.mostrarPreviewCalculo(parseFloat(indiceActual));
+
+        // Fila no resaltada para evitar distorsiones
         IndiceEditor.modalInstancia.show();
         setTimeout(() => input.select(), 500);
     }
@@ -360,16 +457,22 @@ class IndiceEditor {
         try {
             await new Promise(r => setTimeout(r, 300)); // Pequeña pausa UX
             
-            const { rubro, categoria, solapa, temporada } = IndiceEditor.indiceEditando;
+            const { rubro, categoria, solapa, temporada, tipo } = IndiceEditor.indiceEditando;
             
-            // USAR LA FUNCIÓN CENTRALIZADA
-            IndiceEditor.aplicarCambio(rubro, categoria, solapa, temporada, nuevoIndice);
+            if (tipo === 'cobertura') {
+                IndiceEditor.aplicarCambioCobertura(rubro, categoria, solapa, nuevoIndice);
+                UIUtils.mostrarAlerta(`Índice de cobertura actualizado a ${nuevoIndice.toFixed(2)} meses`, 'success');
+            } else {
+                // USAR LA FUNCIÓN CENTRALIZADA
+                IndiceEditor.aplicarCambio(rubro, categoria, solapa, temporada, nuevoIndice);
 
-            // La nota viaja con la fila, como el índice editado, hasta que se guarda la versión.
-            const notaInput = document.getElementById('modal-nota-indice');
-            if (notaInput) IndiceEditor.asignarNota(solapa, rubro, categoria, notaInput.value);
-            
-            UIUtils.mostrarAlerta('Índice actualizado', 'success');
+                // La nota viaja con la fila, como el índice editado, hasta que se guarda la versión.
+                const notaInput = document.getElementById('modal-nota-indice');
+                if (notaInput) IndiceEditor.asignarNota(solapa, rubro, categoria, notaInput.value);
+                
+                UIUtils.mostrarAlerta('Índice actualizado', 'success');
+            }
+
             IndiceEditor.modalInstancia.hide();
             
         } catch (error) {
@@ -426,11 +529,148 @@ class IndiceEditor {
         if (btn) btn.remove();
     }
 
+    /**
+     * Aplica el cambio de índice de cobertura sincronizando Verano e Invierno
+     */
+    static aplicarCambioCobertura(rubro, categoria, solapa, nuevoIndice) {
+        const app = window.presupuestoApp;
+        if (!app) return;
+
+        ['verano', 'invierno'].forEach(tab => {
+            const datos = app.getDatos(tab);
+            if (!datos || !datos.length) return;
+            const idx = datos.findIndex(r => r.RUBRO === rubro && (r.CATEGORIA_PADRE === categoria || r.CATEGORIA === categoria));
+            if (idx === -1) return;
+            const reg = datos[idx];
+
+            const stockCob = parseFloat(reg.STOCK_COBERTURA || 0);
+            if (reg._stockCoberturaOriginal === undefined) reg._stockCoberturaOriginal = stockCob;
+            if (reg._baseCoberturaMensual === undefined) {
+                reg._baseCoberturaMensual = stockCob > 0 ? (stockCob / 1.5) : 0;
+            }
+            if (reg._factorCoberturaOriginal === undefined) {
+                reg._factorCoberturaOriginal = reg._stockCoberturaOriginal > 0 ? 1.5 : 0.0;
+            }
+
+            const factorOriginal = reg._factorCoberturaOriginal;
+            const nuevoStockCob = Math.round(reg._baseCoberturaMensual * nuevoIndice);
+            reg.INDICE_COBERTURA = parseFloat(nuevoIndice.toFixed(2));
+            reg.STOCK_COBERTURA = nuevoStockCob;
+
+            // Recalcular Stock Proyectado
+            const stock = parseFloat(reg.STOCK || reg.CANT_STOCK || 0);
+            const stockGuardar = parseFloat(reg.STOCK_GUARDAR || reg.CANT_STOCK_GUARDAR || 0);
+            const ocVer = parseFloat(reg.CANT_PEND_OC_VERANO || 0);
+            const ocInv = parseFloat(reg.CANT_PEND_OC_INVIERNO || 0);
+            const ocAtemp = parseFloat(reg.CANT_PEND_OC_ATEMPORAL || 0);
+            reg.STOCK_PROYECTADO = Math.round(stock + stockGuardar + ocVer + ocInv + ocAtemp - nuevoStockCob);
+
+            // Recalcular Compra Proyectada
+            const vVer = parseFloat(reg.VENTA_PROY_VERANO || 0);
+            const vInv = parseFloat(reg.VENTA_PROY_INVIERNO || 0);
+            reg.COMPRA_PROYECTADA = Math.round(reg.STOCK_PROYECTADO - vVer - vInv);
+
+            // Marcas de edición
+            const esDiferente = Math.abs(nuevoIndice - factorOriginal) > 0.001;
+            if (esDiferente) {
+                reg._coberturaEditada = { valorOriginal: factorOriginal, valorActual: nuevoIndice };
+            } else {
+                delete reg._coberturaEditada;
+            }
+
+            // Actualizar fila visual si está visible en pantalla
+            const filaVisual = TablaRendererUtils.filaDeRegistro(tab, rubro, categoria);
+            if (filaVisual) {
+                TablaRendererUtils.actualizarCeldasCalculadas(filaVisual, reg);
+                if (esDiferente) {
+                    IndiceEditor.aplicarMarcasVisualesCobertura(filaVisual, nuevoIndice);
+                } else {
+                    IndiceEditor.limpiarMarcasVisualesCobertura(filaVisual, factorOriginal);
+                }
+            }
+
+            // Notificar a totales para recalcular tarjetas y footer
+            if (typeof TotalesCompra !== 'undefined') {
+                TotalesCompra.actualizarDatos(tab, datos);
+            }
+
+            // Marcar cambios para no perderlos al retomar versión
+            if (typeof RetomarVersion !== 'undefined') {
+                RetomarVersion.marcarCambios(tab);
+            }
+
+            // Refrescar tramos en el servidor con el nuevo stock proyectado
+            IndiceEditor.refrescarTramos(tab, idx, reg, filaVisual);
+        });
+    }
+
+    static restaurarCoberturaDesdeDatos(fila) {
+        const rubro = fila.dataset.rubro;
+        const categoria = fila.dataset.categoria;
+        const solapaActiva = (fila.closest('tbody')?.id || '').replace('tbody-', '');
+        const datos = window.presupuestoApp.getDatos(solapaActiva);
+        const reg = datos?.find(item => item.RUBRO === rubro && (item.CATEGORIA_PADRE === categoria || item.CATEGORIA === categoria));
+        if (!reg) return;
+
+        const factorOriginal = reg._factorCoberturaOriginal !== undefined
+            ? reg._factorCoberturaOriginal
+            : (parseFloat(reg._stockCoberturaOriginal || reg.STOCK_COBERTURA || 0) > 0 ? 1.5 : 0.0);
+
+        IndiceEditor.aplicarCambioCobertura(rubro, categoria, solapaActiva, factorOriginal);
+        UIUtils.mostrarAlerta(`Índice de cobertura restaurado a ${factorOriginal.toFixed(2)} meses`, 'info');
+    }
+
+    static aplicarMarcasVisualesCobertura(fila, nuevoValor) {
+        const celda = fila.querySelector('td[data-col="indice-cobertura"]');
+        if (!celda) return;
+        celda.classList.add('indice-editado');
+        const input = celda.querySelector('.indice-input');
+        if (input) {
+            input.classList.add('input-editado');
+            input.value = nuevoValor.toFixed(2);
+        }
+        if (!celda.querySelector('.btn-restaurar-original')) {
+            const btn = document.createElement('button');
+            btn.className = 'btn-restaurar-original';
+            btn.innerHTML = '×';
+            btn.title = 'Restaurar valor original';
+            btn.onclick = (e) => {
+                e.stopPropagation();
+                if (confirm('¿Restaurar índice de cobertura original?')) {
+                    IndiceEditor.restaurarCoberturaDesdeDatos(fila);
+                }
+            };
+            celda.appendChild(btn);
+        }
+    }
+
+    static limpiarMarcasVisualesCobertura(fila, valorOriginal) {
+        const celda = fila.querySelector('td[data-col="indice-cobertura"]');
+        if (!celda) return;
+        celda.classList.remove('indice-editado');
+        const input = celda.querySelector('.indice-input');
+        if (input) {
+            input.classList.remove('input-editado');
+            input.value = valorOriginal.toFixed(2);
+        }
+        const btn = celda.querySelector('.btn-restaurar-original');
+        if (btn) btn.remove();
+    }
+
     static configurarEventosRestaurar() {
         document.addEventListener('dblclick', (e) => {
             if (e.target.classList.contains('input-editado')) {
                 const celda = e.target.closest('td');
                 const fila = celda.closest('tr');
+                if (!fila) return;
+
+                if (celda.dataset.col === 'indice-cobertura') {
+                    if (confirm('¿Restaurar índice de cobertura original?')) {
+                        IndiceEditor.restaurarCoberturaDesdeDatos(fila);
+                    }
+                    return;
+                }
+
                 const temp = celda.dataset.temporada;
                 if (!temp) return;
                 if (confirm('¿Restaurar original?')) {
@@ -504,6 +744,33 @@ class IndiceEditor {
         modal.show();
     }
 
+    static restaurarDesdeModal() {
+        if (!IndiceEditor.indiceEditando) return;
+        const { rubro, categoria, solapa, temporada, tipo } = IndiceEditor.indiceEditando;
+        const filaVisual = TablaRendererUtils.filaDeRegistro(solapa, rubro, categoria);
+
+        if (tipo === 'cobertura') {
+            if (filaVisual) {
+                IndiceEditor.restaurarCoberturaDesdeDatos(filaVisual);
+            } else {
+                const reg = (window.presupuestoApp.getDatos(solapa) || [])
+                    .find(r => r.RUBRO === rubro && (r.CATEGORIA_PADRE === categoria || r.CATEGORIA === categoria));
+                const factorOrig = reg ? (reg._factorCoberturaOriginal || 1.5) : 1.5;
+                IndiceEditor.aplicarCambioCobertura(rubro, categoria, solapa, factorOrig);
+            }
+        } else {
+            if (filaVisual) {
+                IndiceEditor.restaurarIndiceOriginalDesdeDatos(filaVisual, temporada);
+            } else {
+                const reg = (window.presupuestoApp.getDatos(solapa) || [])
+                    .find(r => r.RUBRO === rubro && (r.CATEGORIA_PADRE === categoria || r.CATEGORIA === categoria));
+                const orig = reg ? (reg._indicesOriginales?.[temporada] || 1.0) : 1.0;
+                IndiceEditor.aplicarCambio(rubro, categoria, solapa, temporada, orig);
+            }
+        }
+        IndiceEditor.modalInstancia.hide();
+    }
+
     static limpiarFormulario() {
         document.getElementById('modal-nuevo-indice').value = '';
         const nota = document.getElementById('modal-nota-indice');
@@ -514,8 +781,6 @@ class IndiceEditor {
 
     static mostrarPreviewCalculo(nuevoIndice) {
         if (!IndiceEditor.indiceEditando || isNaN(nuevoIndice)) return;
-        const diff = nuevoIndice - IndiceEditor.indiceEditando.indiceActual;
-        const pct = IndiceEditor.indiceEditando.indiceActual ? (diff / IndiceEditor.indiceEditando.indiceActual) * 100 : 0;
         
         let div = document.getElementById('preview-calculo');
         if (!div) {
@@ -524,6 +789,69 @@ class IndiceEditor {
             div.className = 'alert alert-light mt-2 mb-0 py-2 small';
             document.querySelector('#modalEditarIndice .modal-body').appendChild(div);
         }
+
+        if (IndiceEditor.indiceEditando.tipo === 'cobertura') {
+            const { rubro, categoria, solapa, indiceActual } = IndiceEditor.indiceEditando;
+            const registro = (window.presupuestoApp.getDatos(solapa) || [])
+                .find(r => r.RUBRO === rubro && (r.CATEGORIA_PADRE === categoria || r.CATEGORIA === categoria));
+            
+            if (!registro) return;
+
+            const baseCob = registro._baseCoberturaMensual !== undefined
+                ? registro._baseCoberturaMensual
+                : (parseFloat(registro.STOCK_COBERTURA || 0) > 0 ? parseFloat(registro.STOCK_COBERTURA) / 1.5 : 0);
+            
+            const cobActual = Math.round(baseCob * indiceActual);
+            const cobNueva = Math.round(baseCob * nuevoIndice);
+            const diffCob = cobNueva - cobActual;
+
+            const stockActual = parseFloat(registro.STOCK || registro.CANT_STOCK || 0);
+            const stockGuardar = parseFloat(registro.STOCK_GUARDAR || registro.CANT_STOCK_GUARDAR || 0);
+            const ocVer = parseFloat(registro.CANT_PEND_OC_VERANO || 0);
+            const ocInv = parseFloat(registro.CANT_PEND_OC_INVIERNO || 0);
+            const ocAtemp = parseFloat(registro.CANT_PEND_OC_ATEMPORAL || 0);
+            const disponible = stockActual + stockGuardar + ocVer + ocInv + ocAtemp;
+
+            const stockProyActual = Math.round(disponible - cobActual);
+            const stockProyNuevo = Math.round(disponible - cobNueva);
+            const diffStock = stockProyNuevo - stockProyActual;
+
+            const vVer = parseFloat(registro.VENTA_PROY_VERANO || 0);
+            const vInv = parseFloat(registro.VENTA_PROY_INVIERNO || 0);
+            const compraActual = Math.round(stockProyActual - vVer - vInv);
+            const compraNueva = Math.round(stockProyNuevo - vVer - vInv);
+            const diffCompra = compraNueva - compraActual;
+
+            div.innerHTML = `
+                <div class="row g-1 text-center py-1">
+                    <div class="col-4 border-end">
+                        <span class="d-block text-muted" style="font-size:0.75rem;">Stock Cobertura</span>
+                        <strong>${FormatoUtils.formatearNumero(cobNueva)}</strong>
+                        <span class="d-block small ${diffCob > 0 ? 'text-primary' : (diffCob < 0 ? 'text-secondary' : 'text-muted')}">
+                            ${diffCob >= 0 ? '+' : ''}${FormatoUtils.formatearNumero(diffCob)}
+                        </span>
+                    </div>
+                    <div class="col-4 border-end">
+                        <span class="d-block text-muted" style="font-size:0.75rem;">Stock Proyectado</span>
+                        <strong class="text-info">${FormatoUtils.formatearNumero(stockProyNuevo)}</strong>
+                        <span class="d-block small ${diffStock > 0 ? 'text-success' : (diffStock < 0 ? 'text-danger' : 'text-muted')}">
+                            ${diffStock >= 0 ? '+' : ''}${FormatoUtils.formatearNumero(diffStock)}
+                        </span>
+                    </div>
+                    <div class="col-4">
+                        <span class="d-block text-muted" style="font-size:0.75rem;">Compra Proyectada</span>
+                        <strong class="${compraNueva < 0 ? 'text-danger' : 'text-success'}">${FormatoUtils.formatearNumero(compraNueva)}</strong>
+                        <span class="d-block small ${diffCompra > 0 ? 'text-success' : (diffCompra < 0 ? 'text-danger' : 'text-muted')}">
+                            ${diffCompra >= 0 ? '+' : ''}${FormatoUtils.formatearNumero(diffCompra)}
+                        </span>
+                    </div>
+                </div>
+            `;
+            return;
+        }
+
+        const diff = nuevoIndice - IndiceEditor.indiceEditando.indiceActual;
+        const pct = IndiceEditor.indiceEditando.indiceActual ? (diff / IndiceEditor.indiceEditando.indiceActual) * 100 : 0;
         
         div.innerHTML = `
             <strong>Cambio:</strong> 

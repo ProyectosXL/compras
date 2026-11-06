@@ -153,6 +153,7 @@ class ProcesadorDatos {
                     'CANT_PEND_OC_INVIERNO' => (int)($registro['CANT_PEND_OC_INVIERNO'] ?? 0),
                     'CANT_PEND_OC_ATEMPORAL' => (int)($registro['CANT_PEND_OC_ATEMPORAL'] ?? 0),
                     'STOCK_COBERTURA' => (int)($registro['STOCK_COBERTURA'] ?? 0),
+                    'INDICE_COBERTURA' => ((int)($registro['STOCK_COBERTURA'] ?? 0) > 0 ? 1.5 : 0.0),
                     // Bases efectivas del cálculo: la pantalla muestra estas, no las que
                     // el front buscaba por su cuenta (ver presupuestoCalculos).
                     'VENTA_VERANO_ANTERIOR' => round($calculosCompra['venta_verano_anterior'], 0),

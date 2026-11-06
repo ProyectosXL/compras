@@ -38,6 +38,7 @@
                 </div>
             </div>
             <div class="modal-footer">
+                <button type="button" class="btn btn-outline-danger me-auto d-none" id="btn-modal-restaurar-indice" onclick="IndiceEditor.restaurarDesdeModal()"><i class="fas fa-undo me-1"></i>Restaurar Original</button>
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
                 <button type="button" class="btn btn-primary" onclick="guardarNuevoIndice()">Guardar</button>
             </div>

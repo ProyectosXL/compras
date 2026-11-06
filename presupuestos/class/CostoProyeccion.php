@@ -263,6 +263,249 @@ class CostoProyeccion {
     }
 
     /**
+     * Obtener el período por defecto con datos para el cálculo de Mark-up.
+     * Toma la fecha máxima registrada en dbo.RO_T_RENT_BRUTA_RUBRO en central
+     * y define el rango como los últimos 60 días (mes anterior + mes actual con datos).
+     */
+    public function obtenerPeriodoDefaultMarkup() {
+        try {
+            $conexion = new Conexion();
+            $cidCentral = $conexion->conectar('central');
+
+            if (!$cidCentral) {
+                throw new Exception("No se pudo conectar a la base central (XL-TANGO -> LAKER_SA).");
+            }
+
+            $sqlMax = "SELECT MAX(FECHA) AS MAX_FECHA FROM dbo.RO_T_RENT_BRUTA_RUBRO WHERE RUBRO NOT IN ('RECUPEROS','PRORRATEABLES','SIN RUBRO')";
+            $stmt = sqlsrv_query($cidCentral, $sqlMax);
+            if ($stmt === false) {
+                throw new Exception("Error al consultar fecha máxima: " . print_r(sqlsrv_errors(), true));
+            }
+            $row = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC);
+            sqlsrv_free_stmt($stmt);
+            sqlsrv_close($cidCentral);
+
+            $maxFecha = ($row && $row['MAX_FECHA'] instanceof DateTime) 
+                ? $row['MAX_FECHA']->format('Y-m-d') 
+                : ($row['MAX_FECHA'] ?? date('Y-m-d'));
+
+            $hasta = (new DateTime($maxFecha))->format('Y-m-d');
+            $desde = (new DateTime($maxFecha))->modify('first day of this month')->modify('-1 month')->format('Y-m-d');
+
+            return [
+                'success' => true,
+                'desde' => $desde,
+                'hasta' => $hasta,
+                'max_fecha' => $maxFecha,
+                'texto' => date('d/m/Y', strtotime($desde)) . ' al ' . date('d/m/Y', strtotime($hasta))
+            ];
+        } catch (Exception $e) {
+            error_log("Error en CostoProyeccion::obtenerPeriodoDefaultMarkup: " . $e->getMessage());
+            $hasta = date('Y-m-t');
+            $desde = (new DateTime($hasta))->modify('first day of this month')->modify('-1 month')->format('Y-m-d');
+            return [
+                'success' => true,
+                'desde' => $desde,
+                'hasta' => $hasta,
+                'texto' => date('d/m/Y', strtotime($desde)) . ' al ' . date('d/m/Y', strtotime($hasta)),
+                'warning' => $e->getMessage()
+            ];
+        }
+    }
+
+    /**
+     * Calcular y sincronizar automáticamente el Mark-Up real (Venta / Costo)
+     * por Rubro, Categoría y Canal desde dbo.RO_T_RENT_BRUTA_RUBRO en central.
+     * Actualiza los markups de cada canal en FP_T_COSTOS_PARAMETROS preservando
+     * los costos unitarios y cualquier valor no modificado.
+     *
+     * @param string|null $fechaDesde Fecha inicio (ej: '2026-09-01')
+     * @param string|null $fechaHasta Fecha fin (ej: '2026-10-31')
+     */
+    public function sincronizarMarkupReal($fechaDesde = null, $fechaHasta = null) {
+        try {
+            $conexion = new Conexion();
+            $cidCentral = $conexion->conectar('central');
+
+            if (!$cidCentral) {
+                throw new Exception("No se pudo conectar a la base central (XL-TANGO -> LAKER_SA).");
+            }
+
+            // Si no se proporcionaron fechas, obtener el período default de 60 días
+            if (empty($fechaDesde) || empty($fechaHasta)) {
+                $periodoDef = $this->obtenerPeriodoDefaultMarkup();
+                if (empty($fechaDesde)) $fechaDesde = $periodoDef['desde'];
+                if (empty($fechaHasta)) $fechaHasta = $periodoDef['hasta'];
+            }
+
+            // Normalizar a límites de mes completo para abarcar todos los cierres mensuales incluidos
+            $desdeNormalizado = date('Y-m-01', strtotime($fechaDesde));
+            $hastaNormalizado = date('Y-m-t', strtotime($fechaHasta));
+
+            if ($desdeNormalizado > $hastaNormalizado) {
+                throw new Exception("La fecha desde ($fechaDesde) no puede ser posterior a la fecha hasta ($fechaHasta).");
+            }
+
+            // Consultar Venta y Costo agrupados por Canal, Rubro y Categoría Padre
+            $sql = "
+                SELECT 
+                    CASE
+                        WHEN NRO_SUCURS = 102 THEN 'ECOMMERCE'
+                        WHEN NRO_SUCURS = 100 THEN 'FRANQUICIAS'
+                        WHEN NRO_SUCURS = 101 THEN 'MAYORISTAS'
+                        WHEN NRO_SUCURS = 103 THEN 'OTROS'
+                        ELSE 'LOCALES PROPIOS'
+                    END AS CANAL,
+                    TRIM(RUBRO) AS RUBRO,
+                    TRIM(CATEGORIA_PADRE) AS CATEGORIA_PADRE,
+                    SUM(VENTA) AS TOTAL_VENTA,
+                    SUM(COSTO) AS TOTAL_COSTO
+                FROM dbo.RO_T_RENT_BRUTA_RUBRO
+                WHERE FECHA BETWEEN ? AND ?
+                  AND RUBRO NOT IN ('RECUPEROS','PRORRATEABLES','SIN RUBRO')
+                GROUP BY 
+                    CASE
+                        WHEN NRO_SUCURS = 102 THEN 'ECOMMERCE'
+                        WHEN NRO_SUCURS = 100 THEN 'FRANQUICIAS'
+                        WHEN NRO_SUCURS = 101 THEN 'MAYORISTAS'
+                        WHEN NRO_SUCURS = 103 THEN 'OTROS'
+                        ELSE 'LOCALES PROPIOS'
+                    END,
+                    TRIM(RUBRO),
+                    TRIM(CATEGORIA_PADRE)
+            ";
+
+            $stmt = sqlsrv_query($cidCentral, $sql, [$desdeNormalizado, $hastaNormalizado]);
+
+            if ($stmt === false) {
+                throw new Exception("Error al consultar rentabilidad por rubro: " . print_r(sqlsrv_errors(), true));
+            }
+
+            // Mapear los markups calculados: rubro|categoria => [CANAL => markup]
+            $calculados = [];
+            while ($row = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC)) {
+                $canal = trim($row['CANAL'] ?? '');
+                if ($canal === 'OTROS') continue; // Solo los 4 canales presupuestarios
+
+                $rubro = trim($row['RUBRO'] ?? '');
+                $cat = trim($row['CATEGORIA_PADRE'] ?? '');
+                $venta = (float)($row['TOTAL_VENTA'] ?? 0);
+                $costo = (float)($row['TOTAL_COSTO'] ?? 0);
+
+                if ($rubro === '' || $cat === '') continue;
+
+                $clave = "$rubro|$cat";
+                if (!isset($calculados[$clave])) {
+                    $calculados[$clave] = [
+                        'rubro' => $rubro,
+                        'categoria_padre' => $cat,
+                        'LOCALES PROPIOS' => null,
+                        'FRANQUICIAS' => null,
+                        'MAYORISTAS' => null,
+                        'ECOMMERCE' => null
+                    ];
+                }
+
+                // Mark-up = Venta / Costo (solo si costo > 0 y venta > 0)
+                if ($costo > 0 && $venta > 0) {
+                    $calculados[$clave][$canal] = round($venta / $costo, 2);
+                }
+            }
+            sqlsrv_free_stmt($stmt);
+            sqlsrv_close($cidCentral);
+
+            if (empty($calculados)) {
+                throw new Exception("No se encontraron datos de rentabilidad para el período seleccionado ($desdeNormalizado a $hastaNormalizado).");
+            }
+
+            // Obtener los parámetros globales actuales para conservar costos y markups previos cuando no haya datos nuevos
+            $paramsActuales = $this->obtenerParametrosGlobales();
+            $filasParaGuardar = [];
+            $categoriasActualizadas = 0;
+
+            // 1. Actualizar registros existentes en FP_T_COSTOS_PARAMETROS
+            foreach ($paramsActuales as $clave => $item) {
+                $rubro = $item['rubro'];
+                $cat = $item['categoria_padre'];
+                $calc = $calculados[$clave] ?? null;
+
+                $markupLP = ($calc && $calc['LOCALES PROPIOS'] !== null) 
+                    ? $calc['LOCALES PROPIOS'] 
+                    : (float)$item['markup_locales_propios'];
+
+                $markupFR = ($calc && $calc['FRANQUICIAS'] !== null) 
+                    ? $calc['FRANQUICIAS'] 
+                    : (float)$item['markup_franquicias'];
+
+                $markupMY = ($calc && $calc['MAYORISTAS'] !== null) 
+                    ? $calc['MAYORISTAS'] 
+                    : (float)$item['markup_mayoristas'];
+
+                $markupEC = ($calc && $calc['ECOMMERCE'] !== null) 
+                    ? $calc['ECOMMERCE'] 
+                    : (float)$item['markup_ecommerce'];
+
+                if ($calc) {
+                    $categoriasActualizadas++;
+                }
+
+                $filasParaGuardar[] = [
+                    'rubro' => $rubro,
+                    'categoria_padre' => $cat,
+                    'costo_prom' => (float)$item['costo_prom'],
+                    'inc_fob' => (float)$item['inc_fob'],
+                    'vcosto' => (float)$item['vcosto'],
+                    'markup_locales_propios' => $markupLP,
+                    'markup_franquicias' => $markupFR,
+                    'markup_mayoristas' => $markupMY,
+                    'markup_ecommerce' => $markupEC
+                ];
+            }
+
+            // 2. Si hay categorías nuevas en el reporte de rentabilidad que no existían en parámetros globales
+            foreach ($calculados as $clave => $calc) {
+                if (!isset($paramsActuales[$clave])) {
+                    $filasParaGuardar[] = [
+                        'rubro' => $calc['rubro'],
+                        'categoria_padre' => $calc['categoria_padre'],
+                        'costo_prom' => 0.0,
+                        'inc_fob' => 0.0,
+                        'vcosto' => 0.0,
+                        'markup_locales_propios' => $calc['LOCALES PROPIOS'] ?? 0.0,
+                        'markup_franquicias' => $calc['FRANQUICIAS'] ?? 0.0,
+                        'markup_mayoristas' => $calc['MAYORISTAS'] ?? 0.0,
+                        'markup_ecommerce' => $calc['ECOMMERCE'] ?? 0.0
+                    ];
+                    $categoriasActualizadas++;
+                }
+            }
+
+            // Guardar en la base de datos
+            $resGuardar = $this->guardarParametrosGlobales($filasParaGuardar);
+            if ($resGuardar !== true) {
+                throw new Exception($resGuardar['mensaje'] ?? 'Error al guardar los markups calculados en la base de datos.');
+            }
+
+            $textoPeriodo = date('d/m/Y', strtotime($desdeNormalizado)) . ' al ' . date('d/m/Y', strtotime($hastaNormalizado));
+
+            return [
+                'success' => true,
+                'total_actualizados' => $categoriasActualizadas,
+                'periodo_desde' => $desdeNormalizado,
+                'periodo_hasta' => $hastaNormalizado,
+                'periodo_formateado' => $textoPeriodo,
+                'message' => "Mark-up real calculado y actualizado con éxito para $categoriasActualizadas categorías (Período: $textoPeriodo)."
+            ];
+        } catch (Exception $e) {
+            error_log("Error en CostoProyeccion::sincronizarMarkupReal: " . $e->getMessage());
+            return [
+                'success' => false,
+                'message' => $e->getMessage()
+            ];
+        }
+    }
+
+    /**
      * Obtener parámetros globales de costo por rubro y categoría
      */
     public function obtenerParametrosGlobales() {

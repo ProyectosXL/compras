@@ -442,6 +442,7 @@ class MainController {
             case 'costos-proyeccion':
             case 'obtener-tipo-cambio':
             case 'obtener-parametros-costos':
+            case 'obtener-periodo-default-markup':
             case 'obtener-desvios':
                 $this->delegarDistribucion($accion);
                 break;
@@ -497,6 +498,7 @@ class MainController {
             case 'guardar-costos':
             case 'guardar-parametros-costos':
             case 'calcular-costo-mediana':
+            case 'calcular-markup-real':
             case 'eliminar-version':
                 $this->delegarDistribucion($accion);
                 break;
@@ -730,11 +732,17 @@ class MainController {
             case 'obtener-parametros-costos':
                 $distribucionController->obtenerParametrosGlobales();
                 break;
+            case 'obtener-periodo-default-markup':
+                $distribucionController->obtenerPeriodoDefaultMarkup();
+                break;
             case 'guardar-parametros-costos':
                 $distribucionController->guardarParametrosGlobales();
                 break;
             case 'calcular-costo-mediana':
                 $distribucionController->calcularCostoMedianaParametros();
+                break;
+            case 'calcular-markup-real':
+                $distribucionController->calcularMarkupReal();
                 break;
             case 'eliminar-version':
                 $distribucionController->eliminarVersion();

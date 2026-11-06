@@ -751,6 +751,43 @@ class DistribucionController {
     }
 
     /**
+     * Obtener el período por defecto con datos para el cálculo de Mark-up (últimos 60 días con datos)
+     */
+    public function obtenerPeriodoDefaultMarkup() {
+        try {
+            $costosModel = new CostoProyeccion();
+            $res = $costosModel->obtenerPeriodoDefaultMarkup();
+            $this->jsonResponse($res);
+        } catch (Exception $e) {
+            $this->jsonResponse(['success' => false, 'message' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * Calcular y sincronizar automáticamente el Mark-Up real (Venta / Costo)
+     * por Rubro, Categoría y Canal desde Rentabilidad por Rubro
+     */
+    public function calcularMarkupReal() {
+        try {
+            $raw = file_get_contents('php://input');
+            $data = json_decode($raw, true) ?? [];
+            $desde = $data['desde'] ?? $_POST['desde'] ?? null;
+            $hasta = $data['hasta'] ?? $_POST['hasta'] ?? null;
+
+            $costosModel = new CostoProyeccion();
+            $res = $costosModel->sincronizarMarkupReal($desde, $hasta);
+
+            if ($res['success']) {
+                $this->jsonResponse($res);
+            } else {
+                $this->jsonResponse(['success' => false, 'message' => $res['message'] ?? 'Error desconocido al calcular mark-up real'], 500);
+            }
+        } catch (Exception $e) {
+            $this->jsonResponse(['success' => false, 'message' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
      * Guardar costos de proyección (Mantenido por compatibilidad de firma o auditoría)
      */
     public function guardarCostos() {

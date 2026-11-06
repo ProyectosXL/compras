@@ -301,6 +301,49 @@ const TablaRendererUtils = {
         return td;
     },
 
+    /**
+     * Celda para el índice de cobertura de stock (factor en meses, default 1.50)
+     */
+    celdaIndiceCobertura(item, solapa) {
+        const td = document.createElement('td');
+        td.dataset.col = 'indice-cobertura';
+        td.className = 'text-center editable-cell';
+
+        const stockCob = parseFloat(item.STOCK_COBERTURA || 0);
+        const factorDefecto = stockCob > 0 ? 1.5 : 0.0;
+        const valor = parseFloat(item.INDICE_COBERTURA !== undefined ? item.INDICE_COBERTURA : factorDefecto);
+
+        td.dataset.valor = valor;
+        td.dataset.indiceCobertura = 'true';
+        td.innerHTML = `<input type="number" class="indice-input" value="${valor.toFixed(2)}" step="0.1" min="0" max="12" readonly>`;
+        td.title = 'Factor de Cobertura de Stock (en meses de venta promedio). Clic para editarlo.';
+
+        const factorOriginal = parseFloat(item._factorCoberturaOriginal !== undefined ? item._factorCoberturaOriginal : factorDefecto);
+        if (Math.abs(valor - factorOriginal) > 0.001) {
+            td.classList.add('indice-editado');
+            td.querySelector('.indice-input')?.classList.add('input-editado');
+            const btn = document.createElement('button');
+            btn.className = 'btn-restaurar-original';
+            btn.innerHTML = '×';
+            btn.title = 'Restaurar valor original';
+            btn.onclick = (e) => {
+                e.stopPropagation();
+                const fila = td.closest('tr');
+                if (fila && confirm('¿Restaurar índice de cobertura original?')) {
+                    IndiceEditor.restaurarCoberturaDesdeDatos(fila);
+                }
+            };
+            td.appendChild(btn);
+        }
+
+        td.addEventListener('click', () => {
+            const actual = parseFloat(td.querySelector('.indice-input')?.value) || valor;
+            IndiceEditor.editarIndiceCobertura(item.RUBRO, item.CATEGORIA_PADRE, actual, solapa);
+        });
+
+        return td;
+    },
+
     // ----------------------------------------------------------------------
     // Venta de la temporada en curso: real + proyectada
     // ----------------------------------------------------------------------
@@ -506,6 +549,47 @@ const TablaRendererUtils = {
             if (input) input.value = valor.toFixed(2);
             td.dataset.valor = valor;
         });
+
+        // Actualizar celda de Índice de Cobertura
+        const tdCob = fila.querySelector('td[data-col="indice-cobertura"]');
+        if (tdCob) {
+            const stockCob = parseFloat(item.STOCK_COBERTURA || 0);
+            const factorDefecto = stockCob > 0 ? 1.5 : 0.0;
+            const factor = parseFloat(item.INDICE_COBERTURA !== undefined ? item.INDICE_COBERTURA : factorDefecto);
+            const inputCob = tdCob.querySelector('.indice-input');
+            if (inputCob) inputCob.value = factor.toFixed(2);
+            tdCob.dataset.valor = factor;
+
+            const factorOrig = parseFloat(item._factorCoberturaOriginal !== undefined ? item._factorCoberturaOriginal : factorDefecto);
+            if (Math.abs(factor - factorOrig) > 0.001) {
+                tdCob.classList.add('indice-editado');
+                inputCob?.classList.add('input-editado');
+                if (!tdCob.querySelector('.btn-restaurar-original')) {
+                    const btn = document.createElement('button');
+                    btn.className = 'btn-restaurar-original';
+                    btn.innerHTML = '×';
+                    btn.title = 'Restaurar valor original';
+                    btn.onclick = (e) => {
+                        e.stopPropagation();
+                        if (confirm('¿Restaurar índice de cobertura original?')) {
+                            IndiceEditor.restaurarCoberturaDesdeDatos(fila);
+                        }
+                    };
+                    tdCob.appendChild(btn);
+                }
+            } else {
+                tdCob.classList.remove('indice-editado');
+                inputCob?.classList.remove('input-editado');
+                const btn = tdCob.querySelector('.btn-restaurar-original');
+                if (btn) btn.remove();
+            }
+        }
+
+        // Actualizar Stock Proyectado
+        const celdaStockProy = c('stock-proyectado');
+        if (celdaStockProy) {
+            TablaRendererUtils.escribirNumero(celdaStockProy, item.STOCK_PROYECTADO || 0);
+        }
 
         if (c('venta-proy-ver')) TablaRendererUtils.escribirNumero(c('venta-proy-ver'), item.VENTA_PROY_VERANO || 0);
         if (c('venta-proy-inv')) TablaRendererUtils.escribirNumero(c('venta-proy-inv'), item.VENTA_PROY_INVIERNO || 0);
@@ -783,6 +867,8 @@ class TablaRenderer {
         tr.appendChild(celda('categoria', '', null));
         tr.lastChild.textContent = item.CATEGORIA_PADRE || '';
 
+        tr.appendChild(TablaRendererUtils.celdaIndiceCobertura(item, solapa));
+
         tr.appendChild(celda('stock-proyectado', 'text-end bg-info-subtle', item.STOCK_PROYECTADO || 0));
 
         // OC pendientes: las cuatro columnas existen siempre y la vista (agrupada o
@@ -914,18 +1000,12 @@ class TablaRenderer {
      * posición: con filtros u orden aplicados, el n-ésimo hijo del tbody es otra fila.
      */
     static resaltarFila(solapa, rubro, categoria, resaltar = true) {
+        // No aplicamos transform scale ni clases que deformen la fila de la tabla
         const fila = TablaRendererUtils.filaDeRegistro(solapa, rubro, categoria);
-
         if (fila) {
-            if (resaltar) {
-                fila.classList.add('table-warning');
-                fila.style.transform = 'scale(1.02)';
-                fila.style.boxShadow = '0 4px 8px rgba(255, 193, 7, 0.3)';
-            } else {
-                fila.classList.remove('table-warning');
-                fila.style.transform = '';
-                fila.style.boxShadow = '';
-            }
+            fila.classList.remove('table-warning');
+            fila.style.transform = '';
+            fila.style.boxShadow = '';
         }
     }
 

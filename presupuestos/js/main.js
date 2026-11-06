@@ -347,6 +347,16 @@ class PresupuestoApp {
             if (!item._indicesOriginales) {
                 item._indicesOriginales = { verano: original, invierno: original };
             }
+
+            // Cobertura de stock y factor
+            const stockCob = parseFloat(item.STOCK_COBERTURA || 0);
+            if (item._stockCoberturaOriginal === undefined) {
+                item._stockCoberturaOriginal = stockCob;
+                item._baseCoberturaMensual = stockCob > 0 ? (stockCob / 1.5) : 0;
+                const factorDefecto = stockCob > 0 ? 1.5 : 0.0;
+                item._factorCoberturaOriginal = factorDefecto;
+                item.INDICE_COBERTURA = item.INDICE_COBERTURA !== undefined ? parseFloat(item.INDICE_COBERTURA) : factorDefecto;
+            }
         });
     }
 

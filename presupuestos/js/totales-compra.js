@@ -397,6 +397,7 @@ class TotalesCompra {
         const celdas = {
             'rubro': '<td class="fw-bold text-uppercase bg-warning"><i class="fas fa-calculator me-2"></i>TOTALES</td>',
             'categoria': `<td class="text-center bg-warning"><span class="badge bg-dark text-white">${totales.totalRegistros} ITEMS</span></td>`,
+            'indice-cobertura': '<td class="text-center text-muted fw-normal" title="Índice de cobertura">—</td>',
             'stock-proyectado': numero(totales.totalStockProyectado),
             'oc-total': numero(totales.oc.ver + totales.oc.inv + totales.oc.atemp),
             'oc-ver': numero(totales.oc.ver),

@@ -53,6 +53,7 @@
                 <tr>
                     <th data-col="rubro">Rubro</th>
                     <th data-col="categoria">Categoría</th>
+                    <th class="text-center bg-warning text-dark" data-col="indice-cobertura" title="Factor en meses de cobertura de stock (por defecto 1.50 meses / 45 días de venta promedio). Clic para editarlo.">Índice<br>Cobertura</th>
                     <th class="text-center bg-info" data-col="stock-proyectado">Stock<br>Proyectado</th>
                     <!-- OC pendientes: ya están DENTRO del stock proyectado. Se muestran agrupadas
                          (una columna) o abiertas por temporada, según el botón de la barra. -->

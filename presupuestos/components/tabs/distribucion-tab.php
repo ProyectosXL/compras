@@ -489,7 +489,7 @@
                 <button type="button" class="btn-close btn-close-dark" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body p-3">
-                <div class="mb-3">
+                <div class="mb-2 flex-shrink-0">
                     <div class="input-group input-group-sm">
                         <span class="input-group-text bg-white"><i class="fas fa-filter"></i></span>
                         <input type="text" class="form-control" id="buscar-parametro-modal" placeholder="Filtrar parámetros por rubro o categoría..." onkeyup="DistribucionManager.filtrarParametrosModal(this.value)">
@@ -497,7 +497,7 @@
                 </div>
 
                 <!-- Pestañas internas del Modal -->
-                <ul class="nav nav-pills nav-fill mb-3" id="modalParametrosTabs" role="tablist" style="background: #eef2f7; padding: 4px; border-radius: 8px;">
+                <ul class="nav nav-pills nav-fill mb-2 flex-shrink-0" id="modalParametrosTabs" role="tablist" style="background: #eef2f7; padding: 4px; border-radius: 8px;">
                     <li class="nav-item" role="presentation">
                         <button class="nav-link active fw-bold py-2" id="modal-tab-costos" data-bs-toggle="pill" data-bs-target="#modal-pane-costos" type="button" role="tab" aria-controls="modal-pane-costos" aria-selected="true">
                             <i class="fas fa-dollar-sign me-2"></i>Costos Globales
@@ -510,9 +510,9 @@
                     </li>
                 </ul>
 
-                <div class="tab-content" id="modalParametrosTabContent">
+                <div class="tab-content flex-grow-1" id="modalParametrosTabContent">
                     <!-- PANEL DE COSTOS -->
-                    <div class="tab-pane fade show active" id="modal-pane-costos" role="tabpanel" aria-labelledby="modal-tab-costos">
+                    <div class="tab-pane fade show active h-100 flex-column" id="modal-pane-costos" role="tabpanel" aria-labelledby="modal-tab-costos">
                         <div class="table-responsive" id="scroll-costos-modal">
                             <table class="table table-sm table-hover align-middle mb-0">
                                 <thead>
@@ -542,7 +542,7 @@
                     </div>
 
                     <!-- PANEL DE MARK-UP -->
-                    <div class="tab-pane fade" id="modal-pane-markup" role="tabpanel" aria-labelledby="modal-tab-markup">
+                    <div class="tab-pane fade h-100 flex-column" id="modal-pane-markup" role="tabpanel" aria-labelledby="modal-tab-markup">
                         <div class="table-responsive" id="scroll-markup-modal">
                             <table class="table table-sm table-hover align-middle mb-0">
                                 <thead>
@@ -587,9 +587,68 @@
                 <button type="button" class="btn btn-outline-primary btn-sm rounded-pill px-3 me-auto fw-bold" id="btn-calcular-mediana-modal" onclick="DistribucionManager.calcularCostoMedianaModal()" title="Ejecuta RO_SP_COSTO_MEDIANA_RUBRO_CATEGORIA con los últimos 90 días en Tango y convierte a U$D">
                     <i class="fas fa-calculator me-1"></i>Calcular Costos Mediana (Últimos 90 días)
                 </button>
+                <button type="button" class="btn btn-outline-success btn-sm rounded-pill px-3 me-auto fw-bold d-none" id="btn-calcular-markup-modal" onclick="DistribucionManager.abrirModalCalcularMarkup()" title="Calcula el Mark-up real de cada categoría para cada canal desde Rentabilidad por Rubro">
+                    <i class="fas fa-chart-line me-1"></i>Calcular Mark-Up Real (Últimos 60 días)
+                </button>
                 <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill px-3" id="btn-cancelar-parametros-modal" data-bs-dismiss="modal">Cancelar</button>
                 <button type="button" class="btn btn-warning btn-sm fw-bold text-dark rounded-pill px-4" id="btn-guardar-parametros-modal" onclick="DistribucionManager.guardarParametrosModal()">
                     <i class="fas fa-save me-1"></i>Guardar Parámetros
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- MODAL SELECCIÓN DE PERÍODO PARA CALCULAR MARK-UP REAL -->
+<div class="modal fade" id="modal-periodo-markup" tabindex="-1" aria-labelledby="modalPeriodoMarkupLabel" aria-hidden="true" style="z-index: 1065;">
+    <div class="modal-dialog modal-dialog-centered" style="max-width: 520px;">
+        <div class="modal-content shadow-lg border-0" style="border-radius: 16px; overflow: hidden;">
+            <div class="modal-header bg-success text-white border-0 py-3">
+                <h5 class="modal-title fw-bold" id="modalPeriodoMarkupLabel">
+                    <i class="fas fa-chart-line me-2"></i>Calcular Mark-Up Real por Canal
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-4">
+                <p class="text-secondary small mb-3">
+                    Calcula automáticamente el <strong>Mark-up real (Venta / Costo)</strong> de cada Rubro y Categoría para cada uno de los 4 canales (<em>Locales Propios, Franquicias, Mayoristas y Ecommerce</em>) a partir del reporte contable de Rentabilidad por Rubro.
+                </p>
+
+                <div class="p-3 bg-light rounded-3 border mb-3">
+                    <label class="form-label fw-bold text-dark mb-2">
+                        <i class="fas fa-calendar-alt text-success me-1"></i>Seleccionar período de cálculo:
+                    </label>
+                    <div class="row g-2 mb-2">
+                        <div class="col-6">
+                            <label class="form-label small text-muted mb-1" for="markup-fecha-desde">Fecha Desde:</label>
+                            <input type="date" class="form-control form-control-sm font-monospace" id="markup-fecha-desde">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label small text-muted mb-1" for="markup-fecha-hasta">Fecha Hasta:</label>
+                            <input type="date" class="form-control form-control-sm font-monospace" id="markup-fecha-hasta">
+                        </div>
+                    </div>
+                    <div class="d-flex align-items-center justify-content-between mt-2 pt-2 border-top">
+                        <span class="badge bg-success-subtle text-success border border-success-subtle py-1 px-2" id="badge-periodo-default">
+                            <i class="fas fa-history me-1"></i>Default: Últimos 60 días con datos
+                        </span>
+                        <button type="button" class="btn btn-link btn-sm text-decoration-none p-0 fw-semibold" onclick="DistribucionManager.restablecerPeriodoDefaultMarkup()">
+                            Restablecer 60 días
+                        </button>
+                    </div>
+                </div>
+
+                <div class="alert alert-info py-2 px-3 small mb-0 d-flex align-items-start">
+                    <i class="fas fa-info-circle me-2 mt-1 flex-shrink-0 text-info"></i>
+                    <div>
+                        Luego de obtener los datos reales, <strong>cada campo permanecerá 100% editable</strong> tal como lo es hoy para que pueda realizar cualquier ajuste manual antes de guardar.
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer bg-light border-0 py-3">
+                <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill px-3" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-success btn-sm fw-bold rounded-pill px-4" id="btn-confirmar-calcular-markup" onclick="DistribucionManager.confirmarCalcularMarkup()">
+                    <i class="fas fa-check me-1"></i>Confirmar y Calcular
                 </button>
             </div>
         </div>

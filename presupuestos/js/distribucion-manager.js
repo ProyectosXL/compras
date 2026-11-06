@@ -1857,6 +1857,27 @@ class DistribucionManager {
                     }
                     const modal = new bootstrap.Modal(modalEl);
                     modal.show();
+
+                    // Sincronizar visibilidad de botones en el footer según la solapa activa
+                    const tabCostos = document.getElementById('modal-tab-costos');
+                    const tabMarkup = document.getElementById('modal-tab-markup');
+                    const btnMediana = document.getElementById('btn-calcular-mediana-modal');
+                    const btnMarkup = document.getElementById('btn-calcular-markup-modal');
+
+                    if (tabCostos && !tabCostos._tabMarkupSync) {
+                        tabCostos._tabMarkupSync = true;
+                        tabCostos.addEventListener('shown.bs.tab', () => {
+                            if (btnMediana) btnMediana.classList.remove('d-none');
+                            if (btnMarkup) btnMarkup.classList.add('d-none');
+                        });
+                    }
+                    if (tabMarkup && !tabMarkup._tabMarkupSync) {
+                        tabMarkup._tabMarkupSync = true;
+                        tabMarkup.addEventListener('shown.bs.tab', () => {
+                            if (btnMediana) btnMediana.classList.add('d-none');
+                            if (btnMarkup) btnMarkup.classList.remove('d-none');
+                        });
+                    }
                 }
             } else {
                 throw new Error(response.message);
@@ -2024,6 +2045,7 @@ class DistribucionManager {
     static mostrarLoadingModal(mostrar, titulo = 'Calculando Mediana de Costos en Tango...', subtitulo = 'Consultando compras de los últimos 90 días en Tango y convirtiendo a U$D oficial. Por favor aguarde...') {
         const overlay = document.getElementById('modal-parametros-loading');
         const btnCalcular = document.getElementById('btn-calcular-mediana-modal');
+        const btnMarkup = document.getElementById('btn-calcular-markup-modal');
         const btnGuardar = document.getElementById('btn-guardar-parametros-modal');
         const btnCancelar = document.getElementById('btn-cancelar-parametros-modal');
 
@@ -2049,8 +2071,189 @@ class DistribucionManager {
                 btnCalcular.innerHTML = '<i class="fas fa-calculator me-1"></i>Calcular Costos Mediana (Últimos 90 días)';
             }
         }
+        if (btnMarkup) {
+            btnMarkup.disabled = mostrar;
+            if (mostrar) {
+                btnMarkup.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status"></span>Calculando Mark-Up...';
+            } else {
+                btnMarkup.innerHTML = '<i class="fas fa-chart-line me-1"></i>Calcular Mark-Up Real (Últimos 60 días)';
+            }
+        }
         if (btnGuardar) btnGuardar.disabled = mostrar;
         if (btnCancelar) btnCancelar.disabled = mostrar;
+    }
+
+    /**
+     * Período por defecto detectado para el cálculo de Mark-Up real
+     */
+    static periodoDefaultMarkup = null;
+
+    /**
+     * Abre el modal para configurar período y calcular Mark-up real por canal
+     */
+    static async abrirModalCalcularMarkup() {
+        try {
+            let modalEl = document.getElementById('modal-periodo-markup');
+            if (!modalEl) return;
+            if (modalEl.parentNode !== document.body) {
+                document.body.appendChild(modalEl);
+            }
+
+            // Consultar o usar período default
+            if (!DistribucionManager.periodoDefaultMarkup) {
+                try {
+                    const res = await APIClient.obtenerPeriodoDefaultMarkup();
+                    if (res && res.success) {
+                        DistribucionManager.periodoDefaultMarkup = res;
+                    }
+                } catch (e) {
+                    console.warn('No se pudo obtener período default de mark-up:', e);
+                }
+            }
+
+            const def = DistribucionManager.periodoDefaultMarkup;
+            const inputDesde = document.getElementById('markup-fecha-desde');
+            const inputHasta = document.getElementById('markup-fecha-hasta');
+            const badgeDefault = document.getElementById('badge-periodo-default');
+
+            if (inputDesde && def?.desde) inputDesde.value = def.desde;
+            if (inputHasta && def?.hasta) inputHasta.value = def.hasta;
+            if (badgeDefault && def?.texto) {
+                badgeDefault.innerHTML = `<i class="fas fa-history me-1"></i>Default: ${def.texto}`;
+            }
+
+            // Manejo de z-index cuando se abre sobre el modal de parámetros globales
+            if (!modalEl._backdropAdjusted) {
+                modalEl._backdropAdjusted = true;
+                modalEl.addEventListener('shown.bs.modal', () => {
+                    const backdrops = document.querySelectorAll('.modal-backdrop');
+                    if (backdrops.length > 1) {
+                        backdrops[backdrops.length - 1].style.zIndex = '1060';
+                    }
+                });
+            }
+
+            const bsModal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+            bsModal.show();
+        } catch (e) {
+            console.error(e);
+            UIUtils.mostrarAlerta('Error al abrir selector de período de mark-up: ' + e.message, 'error');
+        }
+    }
+
+    /**
+     * Restablece los inputs de fecha al período default de 60 días con datos
+     */
+    static restablecerPeriodoDefaultMarkup() {
+        const def = DistribucionManager.periodoDefaultMarkup;
+        const inputDesde = document.getElementById('markup-fecha-desde');
+        const inputHasta = document.getElementById('markup-fecha-hasta');
+
+        if (def) {
+            if (inputDesde && def.desde) inputDesde.value = def.desde;
+            if (inputHasta && def.hasta) inputHasta.value = def.hasta;
+        } else {
+            const hoy = new Date();
+            const hasta = hoy.toISOString().split('T')[0];
+            const d60 = new Date(hoy.getTime() - (60 * 24 * 60 * 60 * 1000));
+            const desde = d60.toISOString().split('T')[0];
+            if (inputDesde) inputDesde.value = desde;
+            if (inputHasta) inputHasta.value = hasta;
+        }
+    }
+
+    /**
+     * Ejecuta el cálculo y actualización de Mark-up real por canal
+     */
+    static async confirmarCalcularMarkup() {
+        const inputDesde = document.getElementById('markup-fecha-desde');
+        const inputHasta = document.getElementById('markup-fecha-hasta');
+        const desde = inputDesde ? inputDesde.value.trim() : '';
+        const hasta = inputHasta ? inputHasta.value.trim() : '';
+
+        if (!desde || !hasta) {
+            UIUtils.mostrarAlerta('Debe especificar ambas fechas (Desde y Hasta).', 'warning');
+            return;
+        }
+
+        if (desde > hasta) {
+            UIUtils.mostrarAlerta('La fecha Desde no puede ser posterior a la fecha Hasta.', 'warning');
+            return;
+        }
+
+        // Cerrar modal selector de fechas
+        const modalPeriodoEl = document.getElementById('modal-periodo-markup');
+        if (modalPeriodoEl) {
+            const bsModalPeriodo = bootstrap.Modal.getInstance(modalPeriodoEl);
+            if (bsModalPeriodo) bsModalPeriodo.hide();
+        }
+
+        try {
+            // Mostrar loading dentro del modal de parámetros
+            DistribucionManager.mostrarLoadingModal(true, 
+                'Calculando Mark-Up Real por Canal...', 
+                `Consultando Venta y Costo por Rubro, Categoría y Canal en la base de Rentabilidad por Rubro (${desde} al ${hasta}). Por favor aguarde...`
+            );
+
+            const res = await APIClient.calcularMarkupRealParametros(desde, hasta);
+
+            if (res && res.success) {
+                UIUtils.mostrarAlerta(res.message || 'Mark-Up real calculado y actualizado con éxito.', 'success');
+
+                // Recargar el modal con los nuevos parámetros globales guardados en la BD
+                const response = await APIClient.obtenerParametrosCostos();
+                if (response.success && response.parametros) {
+                    const mapa = {};
+                    response.parametros.forEach(p => mapa[`${p.rubro}|${p.categoria_padre}`] = p);
+
+                    DistribucionManager.parametrosGlobalesModal.forEach(item => {
+                        const k = `${item.rubro}|${item.categoria_padre}`;
+                        if (mapa[k]) {
+                            item.markup_locales_propios = mapa[k].markup_locales_propios || 0;
+                            item.markup_franquicias = mapa[k].markup_franquicias || 0;
+                            item.markup_mayoristas = mapa[k].markup_mayoristas || 0;
+                            item.markup_ecommerce = mapa[k].markup_ecommerce || 0;
+                            delete mapa[k];
+                        }
+                    });
+
+                    // Si hay combinaciones nuevas
+                    Object.values(mapa).forEach(nuevo => {
+                        DistribucionManager.parametrosGlobalesModal.push({
+                            rubro: nuevo.rubro,
+                            categoria_padre: nuevo.categoria_padre,
+                            costo_prom: nuevo.costo_prom || 0,
+                            inc_fob: nuevo.inc_fob || 0,
+                            vcosto: nuevo.vcosto || 0,
+                            markup_locales_propios: nuevo.markup_locales_propios || 0,
+                            markup_franquicias: nuevo.markup_franquicias || 0,
+                            markup_mayoristas: nuevo.markup_mayoristas || 0,
+                            markup_ecommerce: nuevo.markup_ecommerce || 0
+                        });
+                    });
+
+                    // Re-renderizar la tabla para mostrar los nuevos valores en los inputs
+                    DistribucionManager.renderizarParametrosModal();
+                }
+
+                // Asegurar que la solapa activa sea Mark-Up por Canal
+                const tabMarkupEl = document.getElementById('modal-tab-markup');
+                if (tabMarkupEl) {
+                    const tabInstance = bootstrap.Tab.getInstance(tabMarkupEl) || new bootstrap.Tab(tabMarkupEl);
+                    tabInstance.show();
+                }
+
+                // Recargar costos generales del paso 2 en segundo plano
+                await DistribucionManager.cargarCostos();
+            } else {
+                throw new Error(res?.message || 'Error desconocido al calcular mark-up real.');
+            }
+        } catch (e) {
+            console.error(e);
+            UIUtils.mostrarAlerta('Error al calcular mark-up real: ' + e.message, 'error');
+        } finally {
+            DistribucionManager.mostrarLoadingModal(false);
+        }
     }
 
     /**

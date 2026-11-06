@@ -491,6 +491,23 @@ class APIClient {
     }
 
     /**
+     * Obtener el período por defecto para el cálculo de Mark-up real (últimos 60 días con datos)
+     */
+    static async obtenerPeriodoDefaultMarkup() {
+        return await APIClient.llamarAPI('obtener-periodo-default-markup', {}, 'GET');
+    }
+
+    /**
+     * Calcular y sincronizar automáticamente Mark-up real por Rubro, Categoría y Canal
+     */
+    static async calcularMarkupRealParametros(desde = '', hasta = '') {
+        return await APIClient.llamarAPI('calcular-markup-real', {}, 'POST', {
+            desde: desde,
+            hasta: hasta
+        });
+    }
+
+    /**
      * Eliminar una versión guardada
      */
     static async eliminarVersion(nombreVersion, temporada = 'VERANO') {
