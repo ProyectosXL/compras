@@ -23,22 +23,23 @@
             <div class="col-md-2">
                 <div id="filtro-categoria-ventas"></div>
             </div>
-            <div class="col-md-2 text-end export-buttons">
-                <button class="btn btn-success btn-sm" onclick="VentasManager.exportarExcel()">
-                    <i class="fas fa-file-excel me-1"></i> Excel
-                </button>
+            <!-- Una acción principal a la vista y el resto en "Más acciones", como en las solapas de compra. -->
+            <div class="col-md-2 d-flex justify-content-end gap-1">
                 <button class="btn btn-primary btn-sm" onclick="VentasManager.cargarDatos()">
                     <i class="fas fa-sync-alt me-1"></i> Cargar
                 </button>
-            </div>
-        </div>
-        
-        <!-- Segunda fila: Limpiar filtros -->
-        <div class="row">
-            <div class="col-md-12 text-end">
-                <button class="btn btn-outline-secondary btn-sm" onclick="VentasManager.limpiarFiltros()">
-                    <i class="fas fa-eraser me-1"></i> Limpiar Filtros
-                </button>
+                <div class="dropdown">
+                    <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        Más acciones
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <li><button class="dropdown-item" type="button" onclick="VentasManager.exportarExcel()">
+                            <i class="fas fa-file-excel fa-fw me-2 text-success"></i>Exportar Excel</button></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><button class="dropdown-item" type="button" onclick="VentasManager.limpiarFiltros()">
+                            <i class="fas fa-eraser fa-fw me-2"></i>Limpiar filtros</button></li>
+                    </ul>
+                </div>
             </div>
         </div>
     </div>

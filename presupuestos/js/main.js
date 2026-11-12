@@ -138,11 +138,11 @@ class PresupuestoApp {
         const switchPais = document.getElementById('country-switch');
         
         if (pais === 'uruguay') {
-            if (titulo) titulo.textContent = 'Sistema de Presupuesto de Compras - Uruguay';
+            if (titulo) titulo.textContent = 'Presupuesto de Compras – Uruguay';
             if (label) label.innerHTML = '<i class="fas fa-flag me-1"></i>Uruguay';
             if (switchPais) switchPais.checked = true;
         } else {
-            if (titulo) titulo.textContent = 'Sistema de Presupuesto de Compras - Argentina';
+            if (titulo) titulo.textContent = 'Presupuesto de Compras – Argentina';
             if (label) label.innerHTML = '<i class="fas fa-flag me-1"></i>Argentina';
             if (switchPais) switchPais.checked = false;
         }
@@ -198,12 +198,6 @@ class PresupuestoApp {
                 UIUtils.actualizarHeadersDinamicos(this.temporadaInfo);
 
                 UIUtils.mostrarTabsContainer(true);
-                
-                // CORREGIDO: Verificar que el elemento existe antes de modificarlo
-                const btnExport = document.getElementById('btn-export-completo-header');
-                if (btnExport) {
-                    btnExport.style.display = 'block';
-                }
                 
                 this.estado.ultimaActualizacion = new Date();
                 UIUtils.mostrarAlerta('Datos cargados correctamente', 'success');
@@ -1086,35 +1080,14 @@ function mostrarEstadoFiltros() {
     }
 }
 
-function agregarBotonLimpiarFiltrosPersistentes() {
-    const exportButtons = document.querySelector('.export-buttons');
-    if (exportButtons && !document.getElementById('btn-limpiar-filtros-persistentes')) {
-        const btnLimpiar = document.createElement('button');
-        btnLimpiar.id = 'btn-limpiar-filtros-persistentes';
-        btnLimpiar.className = 'btn btn-outline-warning btn-sm';
-        btnLimpiar.innerHTML = '<i class="fas fa-filter me-1"></i> Limpiar Filtros';
-        btnLimpiar.onclick = () => {
-            if (typeof FiltrosManager !== 'undefined') {
-                FiltrosManager.limpiarFiltros();
-            }
-        };
-        btnLimpiar.title = 'Limpiar todos los filtros persistentes';
-        
-        exportButtons.insertBefore(btnLimpiar, exportButtons.lastElementChild);
-        console.log('✅ Botón de limpiar filtros persistentes agregado');
-    }
-}
-
 // Hacer funciones disponibles globalmente
 window.mostrarEstadoFiltros = mostrarEstadoFiltros;
-window.agregarBotonLimpiarFiltrosPersistentes = agregarBotonLimpiarFiltrosPersistentes;
 
 // Configurar cuando se carga la página
 document.addEventListener('DOMContentLoaded', function() {
     configurarFixAgresivo();
-    setTimeout(() => {
-    agregarBotonLimpiarFiltrosPersistentes();
-    }, 2000);
+    // "Limpiar filtros" ya no se inyecta en el encabezado: está en el menú
+    // "Más acciones" de cada solapa (components/barra-solapa.php).
         
     // Aplicar fix cuando se active la solapa
     const ventasTab = document.getElementById('ventas-6-meses-tab');

@@ -1398,9 +1398,10 @@ class TablaRenderer {
 
         tabla.dataset.vistaOc = vista === 'abierto' ? 'abierto' : 'agrupado';
         if (boton) {
+            // El botón vive en el menú "Más acciones": dice qué va a hacer, no qué se ve.
             boton.innerHTML = vista === 'abierto'
-                ? '<i class="fas fa-truck me-1"></i> OC: abiertas'
-                : '<i class="fas fa-truck me-1"></i> OC: agrupadas';
+                ? '<i class="fas fa-truck fa-fw me-2"></i>Ver OC agrupadas'
+                : '<i class="fas fa-truck fa-fw me-2"></i>Ver OC abiertas por temporada';
         }
     }
 

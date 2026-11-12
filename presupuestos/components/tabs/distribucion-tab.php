@@ -90,22 +90,28 @@
                 </div>
                 <small class="text-muted ms-1 d-none" id="label-tipo-cambio" style="font-size:0.72rem;"></small>
             </div>
-            <div class="col text-end export-buttons">
-                <button class="btn btn-primary btn-sm me-1" onclick="DistribucionManager.ejecutarCargar()">
+            <!-- Cargar y Guardar a la vista; el resto en "Más acciones". Los id y onclick son los
+                 de siempre (btn-costos-parametros lo muestra/oculta DistribucionManager). -->
+            <div class="col d-flex justify-content-end gap-1 export-buttons">
+                <button class="btn btn-primary btn-sm" onclick="DistribucionManager.ejecutarCargar()">
                     <i class="fas fa-sync-alt me-1"></i> Cargar / Recalcular
                 </button>
-                <button class="btn btn-success btn-sm me-1" onclick="DistribucionManager.ejecutarGuardar()">
+                <button class="btn btn-success btn-sm" onclick="DistribucionManager.ejecutarGuardar()">
                     <i class="fas fa-save me-1"></i> Guardar
                 </button>
-                <button class="btn btn-success btn-sm me-1" onclick="DistribucionManager.ejecutarExcel()">
-                    <i class="fas fa-file-excel me-1"></i> Excel
-                </button>
-                <button class="btn btn-dark btn-sm me-1" onclick="window.print()">
-                    <i class="fas fa-print me-1"></i> Imprimir
-                </button>
-                <button class="btn btn-warning btn-sm fw-bold text-dark" id="btn-costos-parametros" onclick="DistribucionManager.abrirModalParametros()" style="display: none;">
-                    <i class="fas fa-sliders-h me-1"></i> Parámetros
-                </button>
+                <div class="dropdown">
+                    <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        Más acciones
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <li><button class="dropdown-item" type="button" onclick="DistribucionManager.ejecutarExcel()">
+                            <i class="fas fa-file-excel fa-fw me-2 text-success"></i>Exportar Excel</button></li>
+                        <li><button class="dropdown-item" type="button" onclick="window.print()">
+                            <i class="fas fa-print fa-fw me-2"></i>Imprimir</button></li>
+                        <li><button class="dropdown-item fw-bold" type="button" id="btn-costos-parametros" onclick="DistribucionManager.abrirModalParametros()" style="display: none;">
+                            <i class="fas fa-sliders-h fa-fw me-2 text-warning"></i>Parámetros de costos</button></li>
+                    </ul>
+                </div>
             </div>
         </div>
     </div>

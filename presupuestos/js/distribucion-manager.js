@@ -1295,7 +1295,8 @@ class DistribucionManager {
 
         const btnParametros = document.getElementById('btn-costos-parametros');
         if (btnParametros) {
-            btnParametros.style.display = (paso === 2) ? 'inline-block' : 'none';
+            // Vive en el menú "Más acciones": como ítem de lista va en bloque.
+            btnParametros.style.display = (paso === 2) ? 'block' : 'none';
         }
 
         // Mostrar botón Guardar en el paso 1 y 2 (el paso 3 es solo lectura/análisis de desvíos)

@@ -224,7 +224,12 @@ class UIUtils {
 
             // Mostrar ULT_ACTUALIZACION desde la base de datos
             if (ultActElement) {
-                ultActElement.textContent = info.ult_actualizacion || '--';
+                // Compacta ("12/11 08:30") para que la franja entre en una línea; la
+                // fecha completa queda en el tooltip.
+                const ult = info.ult_actualizacion || '--';
+                const m = String(ult).match(/^(\d{2}\/\d{2})\/\d{4}\s+(\d{2}:\d{2})/);
+                ultActElement.textContent = m ? `${m[1]} ${m[2]}` : ult;
+                ultActElement.title = ult;
             }
 
             if (container) {

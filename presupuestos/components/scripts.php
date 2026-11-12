@@ -5,12 +5,12 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <!-- Scripts modulares del sistema - ORDEN CORRECTO -->
-<script src="js/utils.js?v=4.1"></script>
+<script src="js/utils.js?v=4.2"></script>
 <!-- Temporada calculada por el servidor. Va temprano porque la consultan el renderer,
      el exportador a Excel y las calculadoras. -->
 <script src="js/temporada-servidor.js?v=2.1"></script>
 <script src="js/api-client.js?v=13.0"></script>
-<script src="js/tabla-renderer.js?v=4.5"></script>
+<script src="js/tabla-renderer.js?v=4.6"></script>
 <script src="js/busqueda-manager.js"></script>
 
 <!-- Gestor de filtros persistentes -->
@@ -33,10 +33,10 @@
 <script src="js/totales-stock.js?v=2.1"></script>
 <script src="js/excel-exporter.js?v=14.5"></script>
 <script src="js/ventas-manager.js?v=2.1"></script>
-<script src="js/distribucion-manager.js?v=26.1"></script>
+<script src="js/distribucion-manager.js?v=26.2"></script>
 
 <!-- Script principal (SIEMPRE AL FINAL) -->
-<script src="js/main.js?v=13.6"></script>
+<script src="js/main.js?v=13.7"></script>
 <!-- Ordenar y ocultar columnas: después de los renderers, observa las tablas ya armadas. -->
 <!-- Retomar una versión guardada en las solapas de compra. -->
 <script src="js/retomar-version.js?v=1.1"></script>
@@ -89,10 +89,6 @@
 
     function mostrarTabsContainer(mostrar) {
         UIUtils.mostrarTabsContainer(mostrar);
-        const btnExport = document.getElementById('btn-export-completo-header');
-        if (btnExport) {
-            btnExport.style.display = mostrar ? 'inline-block' : 'none';
-        }
     }
 
     function mostrarInfoTemporada(info) {
