@@ -212,6 +212,10 @@ class ExcelExporter {
                 resultado['Compras Verano'] = item.COMPRAS_VERANO || item.CANT_PEND_OC_VERANO || 0;
                 resultado['Compras Invierno'] = item.COMPRAS_INVIERNO || item.CANT_PEND_OC_INVIERNO || 0;
                 resultado['Compras Atemporal'] = item.COMPRAS_ATEMPORAL || item.CANT_PEND_OC_ATEMPORAL || 0;
+                // Argentina: el índice de cobertura (meses) va antes de la cobertura, como en pantalla.
+                if (item.CALCULO_AR) {
+                    resultado['Índice Cobertura'] = parseFloat(item.INDICE_COBERTURA || 0);
+                }
                 resultado['Stock Cobertura'] = item.STOCK_COBERTURA || 0;
                 resultado['Stock Proyectado'] = item.STOCK_PROYECTADO || 0;
             } else {

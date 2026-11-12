@@ -133,6 +133,7 @@ class TotalesStock {
             <td class="text-end bg-success-subtle fw-bold">${TotalesStock.formatearNumero(totales.comprasVerano)}</td>
             <td class="text-end bg-success-subtle fw-bold">${TotalesStock.formatearNumero(totales.comprasInvierno)}</td>
             <td class="text-end bg-success-subtle fw-bold">${TotalesStock.formatearNumero(totales.comprasAtemporal)}</td>
+            ${(typeof StockSincronizado !== 'undefined' && StockSincronizado.columnaIndiceVisible()) ? '<td class="text-center" title="El índice no se suma">—</td>' : ''}
             <td class="text-end bg-danger-subtle fw-bold">${TotalesStock.formatearNumero(totales.stockCobertura)}</td>
             <td class="text-end bg-primary-subtle fw-bold text-primary-emphasis">${TotalesStock.formatearNumero(totales.stockProyectado)}</td>
         `;

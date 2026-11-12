@@ -816,7 +816,9 @@ class TablaRenderer {
         const tbody = document.getElementById('tbody-stock');
         
         if (!datos || datos.length === 0) {
-            TablaRendererUtils.mostrarTablaVacia(tbody, 9, 'No hay datos disponibles para el stock proyectado');
+            // El colspan sale de las columnas visibles: en Argentina hay una más (Índice Cobertura).
+            const columnas = document.querySelectorAll('#tabla-stock thead th:not(.d-none)').length || 9;
+            TablaRendererUtils.mostrarTablaVacia(tbody, columnas, 'No hay datos disponibles para el stock proyectado');
             return;
         }
 
@@ -1050,7 +1052,10 @@ class TablaRenderer {
     static crearFilaStock(item, index) {
         const tr = document.createElement('tr');
         tr.className = 'fila-datos';
-        
+        // Rubro y categoría en el dataset: los usan el editor de cobertura y restaurar.
+        tr.dataset.rubro = item.RUBRO || '';
+        tr.dataset.categoria = item.CATEGORIA_PADRE || '';
+
         const stock = FormatoUtils.formatearNumero(item.STOCK || item.CANT_STOCK || 0);
         const stockGuardar = FormatoUtils.formatearNumero(item.STOCK_GUARDAR || item.CANT_STOCK_GUARDAR || 0);
         const comprasVerano = FormatoUtils.formatearNumero(item.COMPRAS_VERANO || item.CANT_PEND_OC_VERANO || 0);
@@ -1067,10 +1072,18 @@ class TablaRenderer {
             <td class="text-end bg-success-subtle" title="Compras pendientes verano">${comprasVerano}</td>
             <td class="text-end bg-success-subtle" title="Compras pendientes invierno">${comprasInvierno}</td>
             <td class="text-end bg-success-subtle" title="Compras pendientes atemporal">${comprasAtemporal}</td>
-            <td class="text-end bg-danger-subtle" title="Stock cobertura">${stockCobertura}</td>
-            <td class="text-end bg-primary-subtle text-primary-emphasis fw-bold" title="Stock proyectado final">${stockProyectado}</td>
+            <td class="text-end bg-danger-subtle" data-col="stock-cobertura" title="Stock cobertura">${stockCobertura}</td>
+            <td class="text-end bg-primary-subtle text-primary-emphasis fw-bold" data-col="stock-proyectado" title="Stock proyectado final">${stockProyectado}</td>
         `;
-        
+
+        // Argentina: índice de cobertura editable, antes de "Stock Cobertura". Es el
+        // mismo de Verano e Invierno (uno solo por categoría).
+        if (item.CALCULO_AR) {
+            const tdCob = TablaRendererUtils.celdaIndiceCobertura(item, 'stock');
+            tdCob.title = TablaRendererUtils.ayudaCobertura(item);
+            tr.insertBefore(tdCob, tr.querySelector('td[data-col="stock-cobertura"]'));
+        }
+
         return tr;
     }
 

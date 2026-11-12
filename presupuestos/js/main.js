@@ -325,6 +325,10 @@ class PresupuestoApp {
             FiltrosManager.propagarFiltros();
         }
 
+        // Argentina: la solapa Stock muestra la cobertura de la solapa elegida (Verano
+        // por defecto). En Uruguay solo esconde la columna y el selector.
+        if (typeof StockSincronizado !== 'undefined') StockSincronizado.refrescar();
+
     } catch (error) {
         console.error('Error cargando solapas:', error);
         throw error;

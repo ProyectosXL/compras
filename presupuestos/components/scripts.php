@@ -10,7 +10,7 @@
      el exportador a Excel y las calculadoras. -->
 <script src="js/temporada-servidor.js?v=2.1"></script>
 <script src="js/api-client.js?v=13.0"></script>
-<script src="js/tabla-renderer.js?v=4.4"></script>
+<script src="js/tabla-renderer.js?v=4.5"></script>
 <script src="js/busqueda-manager.js"></script>
 
 <!-- Gestor de filtros persistentes -->
@@ -30,16 +30,17 @@
 <script src="js/compras-manager.js?v=2.0"></script>
 <script src="js/contenedores-manager.js?v=2.0"></script>
 <script src="js/totales-compra.js?v=3.1"></script>
-<script src="js/totales-stock.js?v=2.0"></script>
-<script src="js/excel-exporter.js?v=14.4"></script>
+<script src="js/totales-stock.js?v=2.1"></script>
+<script src="js/excel-exporter.js?v=14.5"></script>
 <script src="js/ventas-manager.js?v=2.1"></script>
 <script src="js/distribucion-manager.js?v=26.1"></script>
 
 <!-- Script principal (SIEMPRE AL FINAL) -->
-<script src="js/main.js?v=13.5"></script>
+<script src="js/main.js?v=13.6"></script>
 <!-- Ordenar y ocultar columnas: después de los renderers, observa las tablas ya armadas. -->
 <!-- Retomar una versión guardada en las solapas de compra. -->
 <script src="js/retomar-version.js?v=1.1"></script>
+<script src="js/stock-sincronizado.js?v=1.0"></script>
 <script src="js/parametros-manager.js?v=1.0"></script>
 <script src="js/tabla-columnas.js?v=1.0"></script>
 
