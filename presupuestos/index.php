@@ -20,6 +20,7 @@ date_default_timezone_set('America/Argentina/Buenos_Aires');
     <link href="css/obtener-presupuesto.css?v=1.3" rel="stylesheet">
     <link href="css/tabla-optimizada.css?v=1.7" rel="stylesheet">
     <link href="css/filtros-persistentes.css?v=1.2" rel="stylesheet">
+    <link href="css/filtro-multiple.css?v=1.0" rel="stylesheet">
     <link href="css/proceso-presupuesto.css?v=1.2" rel="stylesheet">
     
     <!-- Estilos específicos -->

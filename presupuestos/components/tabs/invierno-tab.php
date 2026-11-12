@@ -16,14 +16,10 @@
                 <span class="badge bg-info fs-6 contador-animado" id="count-invierno">0 registros</span>
             </div>
             <div class="col-md-2">
-                <select class="form-select form-select-sm" id="filtro-rubro-invierno" onchange="filtrarPorRubroPresupuesto('invierno')">
-                    <option value="">Todos los rubros</option>
-                </select>
+                <div id="filtro-rubro-invierno"></div>
             </div>
             <div class="col-md-2">
-                <select class="form-select form-select-sm" id="filtro-categoria-invierno" onchange="filtrarPorCategoriaPresupuesto('invierno')">
-                    <option value="">Todas las categorías</option>
-                </select>
+                <div id="filtro-categoria-invierno"></div>
             </div>
             <div class="col-md-3 col-lg-5 export-buttons d-flex flex-wrap gap-1 justify-content-end">
                 <button class="btn btn-primary btn-sm" id="btn-guardar-invierno" data-temporada="invierno">

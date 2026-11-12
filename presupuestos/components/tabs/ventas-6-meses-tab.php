@@ -18,14 +18,10 @@
                 <span class="badge bg-info fs-6 contador-animado" id="count-ventas-6-meses">0 registros</span>
             </div>
             <div class="col-md-3">
-                <select class="form-select form-select-sm" id="filtro-rubro-ventas" onchange="filtrarPorRubroVentas()">
-                    <option value="">Todos los rubros</option>
-                </select>
+                <div id="filtro-rubro-ventas"></div>
             </div>
             <div class="col-md-2">
-                <select class="form-select form-select-sm" id="filtro-categoria-ventas" onchange="filtrarPorCategoriaVentas()">
-                    <option value="">Todas las categorías</option>
-                </select>
+                <div id="filtro-categoria-ventas"></div>
             </div>
             <div class="col-md-2 text-end export-buttons">
                 <button class="btn btn-success btn-sm" onclick="VentasManager.exportarExcel()">

@@ -1,31 +1,59 @@
 
-// Sistema de Filtros Persistentes entre Solapas
+// Filtros compartidos entre las solapas Verano, Invierno y Stock Proyectado.
 // Archivo: presupuestos/js/filtros-manager.js
+//
+// Texto del buscador + Rubros y Categorías con selección múltiple (FiltroMultiple).
+// Las tres solapas comparten UN estado: filtrar en Verano deja filtrado Invierno y
+// Stock, como ya pasaba con los <select>.
+//
+// Los filtros NO se guardan entre recargas de página. Antes vivían 24 h en
+// localStorage ('filtros_persistentes') y al volver al otro día la tabla aparecía
+// recortada sin que nadie recordara por qué: los totales no cerraban con lo que la
+// persona esperaba ver. Ahora cada carga de página arranca con todo tildado y el
+// buscador vacío; dentro de la misma sesión de página sí se mantienen.
 
 class FiltrosManager {
     static filtrosActivos = {
-        termino: '',
-        rubro: '',
-        categoria: ''
+        termino: ''
     };
-    
+
     static solapasPresupuesto = ['verano', 'invierno', 'stock'];
     static timeoutActualizacion = null;
+
+    // Estado único de rubros/categorías, con un par de desplegables por solapa.
+    static seleccion = new FiltroMultiple({
+        onCambio: () => FiltrosManager.programarPropagacion()
+    });
+
+    static montado = false;
 
     /**
      * Inicializar el gestor de filtros
      */
     static init() {
+        // La clave vieja se borra para que un filtro de otra sesión no reaparezca.
+        StorageUtils.eliminar('filtros_persistentes');
+
+        FiltrosManager.montarDesplegables();
         FiltrosManager.configurarEventListeners();
-        FiltrosManager.cargarFiltrosGuardados();
         console.log('✅ FiltrosManager inicializado');
+    }
+
+    static montarDesplegables() {
+        if (FiltrosManager.montado) return;
+        FiltrosManager.solapasPresupuesto.forEach(solapa => {
+            FiltrosManager.seleccion.montar(
+                document.getElementById(`filtro-rubro-${solapa}`),
+                document.getElementById(`filtro-categoria-${solapa}`)
+            );
+        });
+        FiltrosManager.montado = true;
     }
 
     /**
      * Configurar event listeners para filtros
      */
     static configurarEventListeners() {
-        // Event listeners para búsqueda
         FiltrosManager.solapasPresupuesto.forEach(solapa => {
             const inputBusqueda = document.getElementById(`search-${solapa}`);
             if (inputBusqueda) {
@@ -33,66 +61,44 @@ class FiltrosManager {
                     FiltrosManager.actualizarFiltro('termino', e.target.value);
                 });
             }
-
-            const selectRubro = document.getElementById(`filtro-rubro-${solapa}`);
-            if (selectRubro) {
-                selectRubro.addEventListener('change', (e) => {
-                    FiltrosManager.actualizarFiltro('rubro', e.target.value);
-                });
-            }
-
-            const selectCategoria = document.getElementById(`filtro-categoria-${solapa}`);
-            if (selectCategoria) {
-                selectCategoria.addEventListener('change', (e) => {
-                    FiltrosManager.actualizarFiltro('categoria', e.target.value);
-                });
-            }
         });
+    }
 
-        // Event listener para cambio de tabs
-        document.addEventListener('DOMContentLoaded', () => {
-            const tabs = document.querySelectorAll('#presupuestoTabs button[data-bs-toggle="tab"]');
-            tabs.forEach(tab => {
-                tab.addEventListener('shown.bs.tab', (event) => {
-                    const targetId = event.target.getAttribute('data-bs-target');
-                    const solapa = targetId.replace('#', '');
-                    
-                    if (FiltrosManager.solapasPresupuesto.includes(solapa)) {
-                        setTimeout(() => {
-                            FiltrosManager.aplicarFiltrosASolapa(solapa);
-                        }, 100);
-                    }
-                });
-            });
-        });
+    /**
+     * Rubros y categorías de una carga de datos. Lo que aparece por primera vez entra
+     * tildado; lo que ya estaba conserva su marca.
+     *
+     * @param {Array<Array>} conjuntos filas de cada solapa (verano, invierno, stock)
+     */
+    static cargarOpciones(conjuntos) {
+        FiltrosManager.montarDesplegables();
+        FiltrosManager.seleccion.iniciarCarga();
+        (conjuntos || []).forEach(datos => FiltrosManager.seleccion.agregarDatos(datos));
+        FiltrosManager.seleccion.finalizarCarga();
     }
 
     /**
      * Actualizar un filtro específico y propagarlo
      */
     static actualizarFiltro(tipoFiltro, valor) {
-        // Actualizar el filtro activo
         FiltrosManager.filtrosActivos[tipoFiltro] = valor;
+        FiltrosManager.programarPropagacion();
+    }
 
-        // Guardar en localStorage
-        FiltrosManager.guardarFiltros();
-
-        // Debounce para evitar demasiadas actualizaciones
+    static programarPropagacion() {
+        // Debounce: al tipear o tildar varias casillas seguidas se dibuja una sola vez.
         if (FiltrosManager.timeoutActualizacion) {
             clearTimeout(FiltrosManager.timeoutActualizacion);
         }
-
         FiltrosManager.timeoutActualizacion = setTimeout(() => {
             FiltrosManager.propagarFiltros();
-        }, 300);
+        }, 250);
     }
 
     /**
      * Propagar filtros a todas las solapas de presupuesto
      */
     static propagarFiltros() {
-        console.log('🔄 Propagando filtros:', FiltrosManager.filtrosActivos);
-
         FiltrosManager.solapasPresupuesto.forEach(solapa => {
             FiltrosManager.sincronizarInputsSolapa(solapa);
             FiltrosManager.aplicarFiltrosASolapa(solapa);
@@ -100,27 +106,14 @@ class FiltrosManager {
     }
 
     /**
-     * Sincronizar inputs de una solapa con los filtros activos
+     * Sincronizar el buscador de una solapa con el texto activo. Los desplegables
+     * no hace falta: los repinta el propio FiltroMultiple.
      */
     static sincronizarInputsSolapa(solapa) {
-        const { termino, rubro, categoria } = FiltrosManager.filtrosActivos;
-
-        // Sincronizar búsqueda
+        const { termino } = FiltrosManager.filtrosActivos;
         const inputBusqueda = document.getElementById(`search-${solapa}`);
         if (inputBusqueda && inputBusqueda.value !== termino) {
             inputBusqueda.value = termino;
-        }
-
-        // Sincronizar rubro
-        const selectRubro = document.getElementById(`filtro-rubro-${solapa}`);
-        if (selectRubro && selectRubro.value !== rubro) {
-            selectRubro.value = rubro;
-        }
-
-        // Sincronizar categoría
-        const selectCategoria = document.getElementById(`filtro-categoria-${solapa}`);
-        if (selectCategoria && selectCategoria.value !== categoria) {
-            selectCategoria.value = categoria;
         }
     }
 
@@ -131,44 +124,43 @@ class FiltrosManager {
         try {
             const app = window.presupuestoApp;
             if (!app || !app.datos || !app.datos[solapa]) {
-                console.warn(`No hay datos disponibles para la solapa ${solapa}`);
                 return;
             }
 
             const datosOriginales = app.datos[solapa];
             if (datosOriginales.length === 0) {
-                console.warn(`No hay datos cargados para la solapa ${solapa}`);
                 return;
             }
 
-            // Aplicar filtros
             const datosFiltrados = FiltrosManager.filtrarDatos(datosOriginales);
 
-            console.log(`📊 ${solapa}: ${datosOriginales.length} -> ${datosFiltrados.length} registros`);
-
-            // Renderizar datos filtrados
-            switch (solapa) {
-                case 'verano':
-                    TablaRenderer.renderizarTablaVerano(datosFiltrados);
-                    break;
-                case 'invierno':
-                    TablaRenderer.renderizarTablaInvierno(datosFiltrados);
-                    break;
-                case 'stock':
-                    TablaRenderer.renderizarTablaStock(datosFiltrados);
-                    break;
+            if (datosFiltrados.length === 0 && FiltrosManager.seleccion.nadaTildado()) {
+                // Sin nada tildado no es un error ni "no hay datos": es una elección del
+                // usuario, y se dice así para que no piense que la carga falló.
+                const tbody = document.getElementById(`tbody-${solapa}`);
+                const columnas = document.querySelectorAll(`#tabla-${solapa} thead tr:last-child th`).length || 10;
+                TablaRendererUtils.mostrarTablaVacia(tbody, columnas, 'No hay rubros/categorías seleccionados');
+            } else {
+                switch (solapa) {
+                    case 'verano':
+                        TablaRenderer.renderizarTablaVerano(datosFiltrados);
+                        break;
+                    case 'invierno':
+                        TablaRenderer.renderizarTablaInvierno(datosFiltrados);
+                        break;
+                    case 'stock':
+                        TablaRenderer.renderizarTablaStock(datosFiltrados);
+                        break;
+                }
             }
 
-            // Actualizar contador
             UIUtils.actualizarContador(`count-${solapa}`, datosFiltrados.length);
 
-            // Notificar cambios a totales
             if (app.notificarCambioFiltros) {
                 app.notificarCambioFiltros(solapa, datosFiltrados);
             }
 
-            // Mostrar indicador de filtros activos
-            FiltrosManager.mostrarIndicadorFiltros(solapa, datosFiltrados.length < datosOriginales.length);
+            FiltrosManager.mostrarIndicadorFiltros(solapa, FiltrosManager.obtenerEstadoFiltros().activos);
 
         } catch (error) {
             console.error(`Error aplicando filtros a ${solapa}:`, error);
@@ -176,56 +168,41 @@ class FiltrosManager {
     }
 
     /**
-     * Filtrar datos según los filtros activos
+     * Filtrar datos según los filtros activos.
+     * Una fila se muestra si su rubro está tildado, su par rubro+categoría está
+     * tildado y coincide con el texto del buscador.
      */
     static filtrarDatos(datos) {
-        const { termino, rubro, categoria } = FiltrosManager.filtrosActivos;
+        const termino = (FiltrosManager.filtrosActivos.termino || '').trim().toLowerCase();
 
-        return datos.filter(item => {
-            // Filtro por término de búsqueda
-            if (termino && termino.trim().length > 0) {
-                const terminoLower = termino.toLowerCase();
+        return (datos || []).filter(item => {
+            if (termino) {
                 const coincideTermino = [
                     item.RUBRO,
                     item.CATEGORIA,
                     item.CATEGORIA_PADRE,
                     item.DESCRIPCION
-                ].some(campo => 
-                    campo && campo.toString().toLowerCase().includes(terminoLower)
-                );
-                
+                ].some(campo => campo && campo.toString().toLowerCase().includes(termino));
+
                 if (!coincideTermino) return false;
             }
 
-            // Filtro por rubro
-            if (rubro && rubro.trim().length > 0) {
-                if (item.RUBRO !== rubro) return false;
-            }
-
-            // Filtro por categoría
-            if (categoria && categoria.trim().length > 0) {
-                const categoriaItem = item.CATEGORIA_PADRE || item.CATEGORIA;
-                if (categoriaItem !== categoria) return false;
-            }
-
-            return true;
+            return FiltrosManager.seleccion.pasa(item);
         });
     }
 
     /**
-     * Mostrar indicador visual de filtros activos
+     * Indicador "F" en la pestaña: solo si hay algo destildado o texto en el buscador.
      */
     static mostrarIndicadorFiltros(solapa, tieneFiltros) {
         const tab = document.querySelector(`#${solapa}-tab`);
         if (!tab) return;
 
-        // Remover indicador anterior
         const indicadorAnterior = tab.querySelector('.filtro-activo-indicator');
         if (indicadorAnterior) {
             indicadorAnterior.remove();
         }
 
-        // Agregar indicador si hay filtros activos
         if (tieneFiltros) {
             const indicador = document.createElement('span');
             indicador.className = 'filtro-activo-indicator badge bg-warning text-dark ms-1';
@@ -237,33 +214,18 @@ class FiltrosManager {
     }
 
     /**
-     * Limpiar todos los filtros
+     * Limpiar filtros = todo tildado + buscador vacío, en las tres solapas.
      */
     static limpiarFiltros() {
-        FiltrosManager.filtrosActivos = {
-            termino: '',
-            rubro: '',
-            categoria: ''
-        };
+        FiltrosManager.filtrosActivos = { termino: '' };
+        FiltrosManager.seleccion.tildarTodo({ notificar: false });
 
-        // Limpiar inputs en todas las solapas
         FiltrosManager.solapasPresupuesto.forEach(solapa => {
             const inputBusqueda = document.getElementById(`search-${solapa}`);
-            const selectRubro = document.getElementById(`filtro-rubro-${solapa}`);
-            const selectCategoria = document.getElementById(`filtro-categoria-${solapa}`);
-
             if (inputBusqueda) inputBusqueda.value = '';
-            if (selectRubro) selectRubro.value = '';
-            if (selectCategoria) selectCategoria.value = '';
-
-            // Remover indicadores de filtros
             FiltrosManager.mostrarIndicadorFiltros(solapa, false);
         });
 
-        // Guardar estado limpio
-        FiltrosManager.guardarFiltros();
-
-        // Aplicar filtros (vacíos) para mostrar todos los datos
         FiltrosManager.propagarFiltros();
 
         UIUtils.mostrarAlerta('Filtros limpiados en todas las solapas', 'info', 2000);
@@ -273,74 +235,20 @@ class FiltrosManager {
      * Obtener estado actual de filtros
      */
     static obtenerEstadoFiltros() {
-        const activos = Object.values(FiltrosManager.filtrosActivos).some(valor => 
-            valor && valor.toString().trim().length > 0
-        );
+        const hayTexto = (FiltrosManager.filtrosActivos.termino || '').trim().length > 0;
+        const hayDestildados = FiltrosManager.seleccion.hayDestildados();
+        const r = FiltrosManager.seleccion.conteoRubros();
+        const c = FiltrosManager.seleccion.conteoCategorias();
 
         return {
-            filtros: { ...FiltrosManager.filtrosActivos },
-            activos: activos,
-            cantidad: Object.values(FiltrosManager.filtrosActivos).filter(valor => 
-                valor && valor.toString().trim().length > 0
-            ).length
+            filtros: {
+                termino: FiltrosManager.filtrosActivos.termino,
+                rubros: `${r.tildados}/${r.total}`,
+                categorias: `${c.tildados}/${c.total}`
+            },
+            activos: hayTexto || hayDestildados,
+            cantidad: (hayTexto ? 1 : 0) + (r.tildados < r.total ? 1 : 0) + (c.tildados < c.total ? 1 : 0)
         };
-    }
-
-    /**
-     * Cargar filtros guardados desde localStorage
-     */
-    static cargarFiltrosGuardados() {
-        const filtrosGuardados = StorageUtils.obtener('filtros_persistentes');
-        if (filtrosGuardados) {
-            FiltrosManager.filtrosActivos = {
-                ...FiltrosManager.filtrosActivos,
-                ...filtrosGuardados
-            };
-            
-            // Aplicar filtros cargados después de un breve delay
-            setTimeout(() => {
-                FiltrosManager.propagarFiltros();
-            }, 1000);
-        }
-    }
-
-    /**
-     * Guardar filtros en localStorage
-     */
-    static guardarFiltros() {
-        StorageUtils.guardar('filtros_persistentes', FiltrosManager.filtrosActivos, 24 * 60 * 60 * 1000);
-    }
-
-    /**
-     * Aplicar filtro específico por rubro (para compatibilidad)
-     */
-    static async aplicarFiltroRubro(rubro, solapa) {
-        FiltrosManager.actualizarFiltro('rubro', rubro);
-        
-        // Esperar un momento para que se propague
-        await new Promise(resolve => setTimeout(resolve, 100));
-        
-        UIUtils.mostrarAlerta(
-            rubro ? `Filtrado por rubro: ${rubro}` : 'Filtro de rubro eliminado',
-            'info',
-            2000
-        );
-    }
-
-    /**
-     * Aplicar filtro específico por categoría (para compatibilidad)
-     */
-    static async aplicarFiltroCategoria(categoria, solapa) {
-        FiltrosManager.actualizarFiltro('categoria', categoria);
-        
-        // Esperar un momento para que se propague
-        await new Promise(resolve => setTimeout(resolve, 100));
-        
-        UIUtils.mostrarAlerta(
-            categoria ? `Filtrado por categoría: ${categoria}` : 'Filtro de categoría eliminado',
-            'info',
-            2000
-        );
     }
 
     /**
@@ -348,21 +256,7 @@ class FiltrosManager {
      */
     static debug() {
         console.group('🔍 DEBUG FILTROS MANAGER');
-        console.log('Filtros activos:', FiltrosManager.filtrosActivos);
         console.log('Estado:', FiltrosManager.obtenerEstadoFiltros());
-        
-        FiltrosManager.solapasPresupuesto.forEach(solapa => {
-            const inputBusqueda = document.getElementById(`search-${solapa}`);
-            const selectRubro = document.getElementById(`filtro-rubro-${solapa}`);
-            const selectCategoria = document.getElementById(`filtro-categoria-${solapa}`);
-            
-            console.log(`${solapa}:`, {
-                busqueda: inputBusqueda?.value || 'N/A',
-                rubro: selectRubro?.value || 'N/A',
-                categoria: selectCategoria?.value || 'N/A'
-            });
-        });
-        
         console.groupEnd();
     }
 }
@@ -374,12 +268,6 @@ window.FiltrosManager = FiltrosManager;
 window.limpiarFiltrosPersistentes = () => FiltrosManager.limpiarFiltros();
 window.debugFiltros = () => FiltrosManager.debug();
 
-// Inicializar cuando el DOM esté listo
 document.addEventListener('DOMContentLoaded', function() {
-    // Esperar un poco para asegurar que todos los elementos estén cargados
-    setTimeout(() => {
-        FiltrosManager.init();
-    }, 500);
+    FiltrosManager.init();
 });
-
-console.log('✅ Sistema de Filtros Persistentes cargado');

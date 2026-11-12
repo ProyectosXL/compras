@@ -16,14 +16,10 @@
                 <span class="badge bg-info fs-6 contador-animado" id="count-verano">0 registros</span>
             </div>
             <div class="col-md-2">
-                <select class="form-select form-select-sm" id="filtro-rubro-verano" onchange="filtrarPorRubroPresupuesto('verano')">
-                    <option value="">Todos los rubros</option>
-                </select>
+                <div id="filtro-rubro-verano"></div>
             </div>
             <div class="col-md-2">
-                <select class="form-select form-select-sm" id="filtro-categoria-verano" onchange="filtrarPorCategoriaPresupuesto('verano')">
-                    <option value="">Todas las categorías</option>
-                </select>
+                <div id="filtro-categoria-verano"></div>
             </div>
             <div class="col-md-3 col-lg-5 export-buttons d-flex flex-wrap gap-1 justify-content-end">
                 <button class="btn btn-primary btn-sm" id="btn-guardar-verano" data-temporada="verano">

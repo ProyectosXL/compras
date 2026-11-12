@@ -33,14 +33,10 @@
                 <span class="badge bg-info fs-6 contador-animado" id="count-distribucion">0 registros</span>
             </div>
             <div class="col-md-2">
-                <select class="form-select form-select-sm" id="filtro-rubro-distribucion" onchange="DistribucionManager.filtrarDatos()">
-                    <option value="">Todos los rubros</option>
-                </select>
+                <div id="filtro-rubro-distribucion"></div>
             </div>
             <div class="col-md-2">
-                <select class="form-select form-select-sm" id="filtro-categoria-distribucion" onchange="DistribucionManager.filtrarDatos()">
-                    <option value="">Todas las categorías</option>
-                </select>
+                <div id="filtro-categoria-distribucion"></div>
             </div>
         </div>
 

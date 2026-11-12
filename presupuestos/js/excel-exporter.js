@@ -158,6 +158,16 @@ class ExcelExporter {
      * Preparar datos tomando lo FILTRADO si existe
      */
     static obtenerDatosFiltradosOCompletos(solapa) {
+        // Prioridad 0: los filtros compartidos de Verano/Invierno/Stock, aplicados en
+        // el momento. Antes se tomaba lo último que habían sumado los totales, y si el
+        // filtro dejaba la tabla vacía (nada tildado) caía al respaldo y exportaba TODO.
+        // Stock, además, no tenía datos filtrados en TotalesCompra y siempre salía completo.
+        const app0 = window.presupuestoApp;
+        if (typeof FiltrosManager !== 'undefined' && ['verano', 'invierno', 'stock'].includes(solapa)
+            && app0 && app0.datos && app0.datos[solapa]) {
+            return FiltrosManager.filtrarDatos(app0.datos[solapa]);
+        }
+
         // Prioridad 1: Datos filtrados por el usuario
         if (typeof TotalesCompra !== 'undefined' && TotalesCompra.datosFiltrados[solapa] && TotalesCompra.datosFiltrados[solapa].length > 0) {
             console.log(`📊 Exportando datos FILTRADOS de ${solapa} (${TotalesCompra.datosFiltrados[solapa].length} registros)`);

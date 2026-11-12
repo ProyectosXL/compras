@@ -7,6 +7,8 @@ class VentasManager {
     static datosFiltrados = [];
     static filtrosActivos = {};
     static timeoutBusqueda = null;
+    static _seleccion = null;      // FiltroMultiple propio (ver seleccion())
+    static mensajeVacio = null;    // texto de la tabla vacía cuando no hay nada tildado
 
     /**
      * Cargar datos de ventas de 6 meses - CORREGIDA
@@ -67,7 +69,7 @@ class VentasManager {
                 <tr>
                     <td colspan="20" class="text-center text-muted py-4">
                         <i class="fas fa-inbox"></i><br>
-                        No hay registros para mostrar
+                        ${VentasManager.mensajeVacio || 'No hay registros para mostrar'}
                     </td>
                 </tr>
             `;
@@ -230,53 +232,31 @@ class VentasManager {
     }
 
     /**
-     * Cargar filtros (rubros y categorías)
+     * Rubros y categorías de selección múltiple, con su propio estado: esta solapa
+     * no comparte filtros con Verano/Invierno/Stock (ver FiltroMultiple).
      */
-    static async cargarFiltros() {
+    static seleccion() {
+        if (!VentasManager._seleccion) {
+            VentasManager._seleccion = new FiltroMultiple({ onCambio: () => VentasManager.aplicarFiltros() });
+            VentasManager._seleccion.montar(
+                document.getElementById('filtro-rubro-ventas'),
+                document.getElementById('filtro-categoria-ventas')
+            );
+        }
+        return VentasManager._seleccion;
+    }
+
+    /**
+     * Cargar filtros (rubros y categorías). Lo nuevo entra tildado y lo que el
+     * usuario destildó antes de recargar sigue destildado.
+     */
+    static cargarFiltros() {
         try {
-            if (!VentasManager.datos || VentasManager.datos.length === 0) {
-                console.warn('No hay datos para generar filtros');
-                return;
-            }
-
-            // Cargar rubros únicos
-            const rubros = [...new Set(
-                VentasManager.datos
-                    .map(item => item.RUBRO)
-                    .filter(r => r && r.trim() !== '')
-            )].sort();
-            
-            const selectRubro = document.getElementById('filtro-rubro-ventas');
-            if (selectRubro) {
-                selectRubro.innerHTML = '<option value="">Todos los rubros</option>';
-                rubros.forEach(rubro => {
-                    const option = document.createElement('option');
-                    option.value = rubro;
-                    option.textContent = rubro;
-                    selectRubro.appendChild(option);
-                });
-                console.log(`Cargados ${rubros.length} rubros`);
-            }
-
-            // Cargar categorías únicas
-            const categorias = [...new Set(
-                VentasManager.datos
-                    .map(item => item.CATEGORIA_PADRE)
-                    .filter(c => c && c.trim() !== '')
-            )].sort();
-            
-            const selectCategoria = document.getElementById('filtro-categoria-ventas');
-            if (selectCategoria) {
-                selectCategoria.innerHTML = '<option value="">Todas las categorías</option>';
-                categorias.forEach(categoria => {
-                    const option = document.createElement('option');
-                    option.value = categoria;
-                    option.textContent = categoria;
-                    selectCategoria.appendChild(option);
-                });
-                console.log(`Cargadas ${categorias.length} categorías`);
-            }
-            
+            const sel = VentasManager.seleccion();
+            sel.iniciarCarga();
+            sel.agregarDatos(VentasManager.datos);
+            sel.finalizarCarga();
+            if (VentasManager.datos.length) VentasManager.aplicarFiltros();
         } catch (error) {
             console.error('Error cargando filtros:', error);
             UIUtils.mostrarAlerta('Error al cargar filtros de búsqueda', 'warning');
@@ -363,28 +343,6 @@ class VentasManager {
     }
 
     /**
-     * Filtrar por rubro
-     */
-    static filtrarPorRubro() {
-        const select = document.getElementById('filtro-rubro-ventas');
-        if (!select) return;
-
-        VentasManager.filtrosActivos.rubro = select.value;
-        VentasManager.aplicarFiltros();
-    }
-
-    /**
-     * Filtrar por categoría
-     */
-    static filtrarPorCategoria() {
-        const select = document.getElementById('filtro-categoria-ventas');
-        if (!select) return;
-
-        VentasManager.filtrosActivos.categoria = select.value;
-        VentasManager.aplicarFiltros();
-    }
-
-    /**
      * Aplicar todos los filtros
      */
     static aplicarFiltros() {
@@ -401,19 +359,10 @@ class VentasManager {
             });
         }
 
-        // Aplicar filtro de rubro
-        if (VentasManager.filtrosActivos.rubro) {
-            datos = datos.filter(item => 
-                item.RUBRO === VentasManager.filtrosActivos.rubro
-            );
-        }
-
-        // Aplicar filtro de categoría
-        if (VentasManager.filtrosActivos.categoria) {
-            datos = datos.filter(item => 
-                item.CATEGORIA_PADRE === VentasManager.filtrosActivos.categoria
-            );
-        }
+        // Rubro y categoría (selección múltiple)
+        const sel = VentasManager.seleccion();
+        datos = datos.filter(item => sel.pasa(item));
+        VentasManager.mensajeVacio = sel.nadaTildado() ? 'No hay rubros/categorías seleccionados' : null;
 
         VentasManager.datosFiltrados = datos;
         VentasManager.renderizarTabla();
@@ -427,14 +376,14 @@ class VentasManager {
     static limpiarFiltros() {
         // Limpiar inputs
         document.getElementById('search-ventas-6-meses').value = '';
-        document.getElementById('filtro-rubro-ventas').value = '';
-        document.getElementById('filtro-categoria-ventas').value = '';
+        VentasManager.seleccion().tildarTodo({ notificar: false });
 
         // Limpiar filtros activos
         VentasManager.filtrosActivos = {};
 
         // Mostrar todos los datos
         VentasManager.datosFiltrados = [...VentasManager.datos];
+        VentasManager.mensajeVacio = null;
         VentasManager.renderizarTabla();
         VentasManager.actualizarContadores();
         VentasManager.mostrarResumen();
@@ -617,14 +566,6 @@ function buscarVentas6Meses() {
     VentasManager.timeoutBusqueda = setTimeout(() => {
         VentasManager.buscarInstantanea();
     }, 300);
-}
-
-function filtrarPorRubroVentas() {
-    VentasManager.filtrarPorRubro();
-}
-
-function filtrarPorCategoriaVentas() {
-    VentasManager.filtrarPorCategoria();
 }
 
 // Hacer disponible globalmente

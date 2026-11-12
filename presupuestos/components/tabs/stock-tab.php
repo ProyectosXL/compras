@@ -16,14 +16,10 @@
                 <span class="badge bg-info fs-6 contador-animado" id="count-stock">0 registros</span>
             </div>
             <div class="col-md-3">
-                <select class="form-select form-select-sm" id="filtro-rubro-stock" onchange="filtrarPorRubroPresupuesto('stock')">
-                    <option value="">Todos los rubros</option>
-                </select>
+                <div id="filtro-rubro-stock"></div>
             </div>
             <div class="col-md-2">
-                <select class="form-select form-select-sm" id="filtro-categoria-stock" onchange="filtrarPorCategoriaPresupuesto('stock')">
-                    <option value="">Todas las categorías</option>
-                </select>
+                <div id="filtro-categoria-stock"></div>
             </div>
             <div class="col-md-2 text-end export-buttons">
                 <button class="btn btn-success btn-sm" onclick="exportarExcel('stock')">

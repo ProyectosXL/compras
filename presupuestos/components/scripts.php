@@ -14,7 +14,8 @@
 <script src="js/busqueda-manager.js"></script>
 
 <!-- Gestor de filtros persistentes -->
-<script src="js/filtros-manager.js"></script>
+<script src="js/filtro-multiple.js?v=1.0"></script>
+<script src="js/filtros-manager.js?v=2.0"></script>
 <script src="js/historial-manager.js?v=5.4"></script>
 
 <!-- Calculadoras específicas (CARGAR ANTES del indice-editor) -->
@@ -29,12 +30,12 @@
 <script src="js/contenedores-manager.js?v=2.0"></script>
 <script src="js/totales-compra.js?v=3.1"></script>
 <script src="js/totales-stock.js?v=2.0"></script>
-<script src="js/excel-exporter.js?v=14.3"></script>
-<script src="js/ventas-manager.js?v=2.0"></script>
-<script src="js/distribucion-manager.js?v=26.0"></script>
+<script src="js/excel-exporter.js?v=14.4"></script>
+<script src="js/ventas-manager.js?v=2.1"></script>
+<script src="js/distribucion-manager.js?v=26.1"></script>
 
 <!-- Script principal (SIEMPRE AL FINAL) -->
-<script src="js/main.js?v=13.2"></script>
+<script src="js/main.js?v=13.3"></script>
 <!-- Ordenar y ocultar columnas: después de los renderers, observa las tablas ya armadas. -->
 <!-- Retomar una versión guardada en las solapas de compra. -->
 <script src="js/retomar-version.js?v=1.0"></script>
