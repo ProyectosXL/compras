@@ -1,0 +1,67 @@
+/* Filtro múltiple de Rubro y Categoría (js/filtro-multiple.js) */
+
+.filtro-multiple {
+    position: relative;
+    min-width: 0;
+}
+
+.filtro-multiple-boton {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .25rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    background: var(--bs-body-bg, #fff);
+}
+
+/* Con algo destildado el botón se distingue: el "(x/y)" solo se lee si se mira. */
+.filtro-multiple-boton.filtro-multiple-parcial {
+    border-color: #ffc107;
+    background: #fff8e1;
+    color: #6d5200;
+}
+
+.filtro-multiple-menu {
+    width: 300px;
+    max-width: calc(100vw - 32px);
+}
+
+.filtro-multiple-lista {
+    max-height: 320px;
+    overflow-y: auto;
+}
+
+.filtro-multiple-item {
+    display: flex;
+    align-items: center;
+    gap: .4rem;
+    padding: .15rem .25rem .15rem 1.75rem;
+    margin: 0;
+    font-size: .82rem;
+    cursor: pointer;
+    border-radius: .25rem;
+}
+
+.filtro-multiple-item:hover {
+    background: rgba(13, 110, 253, .08);
+}
+
+.filtro-multiple-grupo {
+    font-size: .7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: #6c757d;
+    padding: .35rem .25rem .1rem;
+    border-top: 1px solid rgba(0, 0, 0, .06);
+}
+
+.filtro-multiple-grupo:first-child {
+    border-top: 0;
+}
+
+body.dark-mode .filtro-multiple-boton.filtro-multiple-parcial {
+    background: #4a3b00;
+    color: #ffe08a;
+}

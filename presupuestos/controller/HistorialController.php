@@ -33,7 +33,11 @@ class HistorialController {
             $resultado = $this->historial->guardarPresupuesto($datos);
             // Un nombre repetido no es una falla del servidor: es un conflicto con
             // otra versión, y el mensaje le dice al usuario qué cambiar.
-            $codigo = $resultado['success'] ? 200 : (($resultado['codigo'] ?? '') === 'nombre_repetido' ? 409 : 500);
+            // Filas que no dan lo mismo al recalcular (Argentina) tampoco: no se guardó
+            // y la respuesta trae la lista para mostrarla, así que va con 200.
+            $codigo = $resultado['success'] ? 200
+                : ((($resultado['codigo'] ?? '') === 'nombre_repetido') ? 409
+                : ((($resultado['codigo'] ?? '') === 'filas_difieren') ? 200 : 500));
             $this->jsonResponse($resultado, $codigo);
         } catch (Exception $e) {
             $this->jsonResponse(['success' => false, 'message' => 'Error del servidor: ' . $e->getMessage()], 500);

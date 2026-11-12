@@ -155,6 +155,10 @@ const RetomarVersion = {
             version.filas.forEach(f => { notas[`${f.rubro}|${f.categoria_padre}`] = f.nota || null; });
             RetomarVersion.cargarSolapa(solapa, calculo, notas);
 
+            // El índice de cobertura es uno solo por categoría: el de la versión se
+            // aplica también en la otra solapa de compra (y de ahí en Stock).
+            await RetomarVersion.aplicarCoberturaEnOtraSolapa(solapa, version.filas);
+
             const teHoy = (calculo.data || []).some(d => d.TE_DISPONIBLE);
             RetomarVersion._activa[solapa] = {
                 id: version.version.id,
@@ -199,12 +203,68 @@ const RetomarVersion = {
 
             RetomarVersion.cargarSolapa(solapa, calculo, {});
             RetomarVersion.olvidar(solapa);
+            // La cobertura vuelve a la de hoy también en la otra solapa: es una sola por categoría.
+            await RetomarVersion.aplicarCoberturaEnOtraSolapa(solapa, (calculo.data || []).map(r => ({
+                rubro: r.RUBRO, categoria_padre: r.CATEGORIA_PADRE, indice_cobertura: r.INDICE_COBERTURA
+            })));
             UIUtils.mostrarAlerta('Se volvió a los índices originales.', 'info');
         } catch (error) {
             UIUtils.mostrarAlerta(`Error: ${error.message}`, 'error');
         } finally {
             UIUtils.mostrarLoading(false);
         }
+    },
+
+    /**
+     * Argentina: lleva el índice de cobertura de la versión retomada a la otra solapa
+     * de compra, sin tocar sus propios índices, ventas manuales ni notas.
+     *
+     * Se recalcula la otra solapa entera con compra-con-indices y su estado actual
+     * (mismo camino que Retomar) en vez de una llamada por fila: son ~80 filas y cada
+     * una cambiaría la cobertura, el stock proyectado y la compra.
+     */
+    async aplicarCoberturaEnOtraSolapa(solapa, filasVersion) {
+        const otra = solapa === 'verano' ? 'invierno' : 'verano';
+        const app = window.presupuestoApp;
+        const datosOtra = app.getDatos(otra) || [];
+        if (!datosOtra.length || !datosOtra[0].CALCULO_AR) return;
+
+        const cobertura = {};
+        filasVersion.forEach(f => {
+            if (f.indice_cobertura !== null && f.indice_cobertura !== undefined) {
+                cobertura[`${f.rubro}|${f.categoria_padre}`] = parseFloat(f.indice_cobertura);
+            }
+        });
+        const cambia = datosOtra.some(r => {
+            const c = cobertura[`${r.RUBRO}|${r.CATEGORIA_PADRE}`];
+            return c !== undefined && Math.abs(c - parseFloat(r.INDICE_COBERTURA)) > 0.0001;
+        });
+        if (!cambia) return;
+
+        const notas = {};
+        const indices = datosOtra.map(r => {
+            const clave = `${r.RUBRO}|${r.CATEGORIA_PADRE}`;
+            notas[clave] = r.NOTA || null;
+            return {
+                rubro: r.RUBRO,
+                categoria_padre: r.CATEGORIA_PADRE,
+                indice_verano: r.INDICE_VARIACION,
+                indice_invierno: r.INDICE_VARIACION_INVIERNO,
+                venta_manual_verano: r.VENTA_MANUAL_VERANO ?? null,
+                venta_manual_invierno: r.VENTA_MANUAL_INVIERNO ?? null,
+                indice_cobertura: cobertura[clave] ?? r.INDICE_COBERTURA
+            };
+        });
+
+        const calculo = await APIClient.llamarAPI('compra-con-indices', {}, 'POST', { solapa: otra, indices });
+        if (!calculo.success) throw new Error(calculo.message || `No se pudo aplicar la cobertura en ${otra}.`);
+
+        // Lo que se había editado en la otra solapa sigue editado: los originales son
+        // los de hoy y cargarSolapa vuelve a marcar las diferencias.
+        const cambiosPrevios = RetomarVersion._cambios[otra];
+        RetomarVersion.cargarSolapa(otra, calculo, notas);
+        RetomarVersion._cambios[otra] = cambiosPrevios;
+        RetomarVersion.marcarCambios(otra);
     },
 
     /**
@@ -220,7 +280,10 @@ const RetomarVersion = {
             ['verano', 'invierno'].forEach(temporada => {
                 const actual = parseFloat(temporada === 'invierno' ? item.INDICE_VARIACION_INVIERNO : item.INDICE_VARIACION);
                 const original = item._indicesOriginales[temporada];
-                if (Math.abs(actual - original) > 0.001) {
+                // Una venta cargada a mano también es una edición, aunque el índice
+                // resultante coincida con el original (o no exista, sin base).
+                const manual = item[`VENTA_MANUAL_${temporada.toUpperCase()}`];
+                if (Math.abs(actual - original) > 0.001 || (manual !== null && manual !== undefined)) {
                     item._indicesEditados = item._indicesEditados || {};
                     item._indicesEditados[temporada] = { valorOriginal: original, valorActual: actual };
                 }
@@ -244,6 +307,7 @@ const RetomarVersion = {
         if (typeof FiltrosManager !== 'undefined') {
             FiltrosManager.aplicarFiltrosASolapa(solapa);
         }
+        if (typeof StockSincronizado !== 'undefined') StockSincronizado.refrescar();
     },
 
     /** Avisos al retomar: versión anterior al índice TE y filas que ya no existen. */

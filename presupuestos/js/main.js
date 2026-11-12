@@ -79,12 +79,6 @@ class PresupuestoApp {
         ['verano', 'invierno', 'stock'].forEach(solapa => {
             const input = document.getElementById(`search-${solapa}`);
             if (input) {
-                input.addEventListener('input', () => {
-                    if (input.value === '') {
-                        this.resetearBusqueda(solapa);
-                    }
-                });
-
                 input.addEventListener('keydown', (e) => {
                     if (e.key === 'Enter') {
                         e.preventDefault();
@@ -144,17 +138,20 @@ class PresupuestoApp {
         const switchPais = document.getElementById('country-switch');
         
         if (pais === 'uruguay') {
-            if (titulo) titulo.textContent = 'Sistema de Presupuesto de Compras - Uruguay';
+            if (titulo) titulo.textContent = 'Presupuesto de Compras – Uruguay';
             if (label) label.innerHTML = '<i class="fas fa-flag me-1"></i>Uruguay';
             if (switchPais) switchPais.checked = true;
         } else {
-            if (titulo) titulo.textContent = 'Sistema de Presupuesto de Compras - Argentina';
+            if (titulo) titulo.textContent = 'Presupuesto de Compras – Argentina';
             if (label) label.innerHTML = '<i class="fas fa-flag me-1"></i>Argentina';
             if (switchPais) switchPais.checked = false;
         }
         
         // Guardar selección
         StorageUtils.guardar('pais_seleccionado', pais, 30 * 24 * 60 * 60 * 1000); // 30 días
+
+        // Parámetros es solo de Argentina: con Uruguay el botón queda deshabilitado.
+        if (typeof ParametrosManager !== 'undefined') ParametrosManager.actualizarBoton(pais);
     }
 
     /**
@@ -201,12 +198,6 @@ class PresupuestoApp {
                 UIUtils.actualizarHeadersDinamicos(this.temporadaInfo);
 
                 UIUtils.mostrarTabsContainer(true);
-                
-                // CORREGIDO: Verificar que el elemento existe antes de modificarlo
-                const btnExport = document.getElementById('btn-export-completo-header');
-                if (btnExport) {
-                    btnExport.style.display = 'block';
-                }
                 
                 this.estado.ultimaActualizacion = new Date();
                 UIUtils.mostrarAlerta('Datos cargados correctamente', 'success');
@@ -261,7 +252,6 @@ class PresupuestoApp {
                     TemporadaServidor.registrarEtiquetasHistoricas(verano.etiquetas_historicas);
                     this.columnasHistoricas = verano.columnas_venta || [];
                     this.renderizarSolapaSegura('verano', verano.data, verano.etiquetas);
-                    this.cargarFiltrosPresupuesto('verano', verano.data);
                     UIUtils.actualizarContador('count-verano', verano.data.length);
                     
                     // AGREGAR ESTA LÍNEA - Actualizar totales de compra proyectada
@@ -285,7 +275,6 @@ class PresupuestoApp {
                     TemporadaServidor.registrarEtiquetasHistoricas(invierno.etiquetas_historicas);
                     this.columnasHistoricas = invierno.columnas_venta || this.columnasHistoricas;
                     this.renderizarSolapaSegura('invierno', invierno.data, invierno.etiquetas);
-                    this.cargarFiltrosPresupuesto('invierno', invierno.data);
                     UIUtils.actualizarContador('count-invierno', invierno.data.length);
                     
                     // AGREGAR ESTA LÍNEA - Actualizar totales de compra proyectada
@@ -306,7 +295,6 @@ class PresupuestoApp {
             if (stock.success) {
                 this.datos.stock = stock.data;
                 this.renderizarSolapaSegura('stock', stock.data);
-                this.cargarFiltrosPresupuesto('stock', stock.data);
                 UIUtils.actualizarContador('count-stock', stock.data.length);
                 
                 // AGREGAR ESTA LÍNEA - Actualizar totales de stock
@@ -322,6 +310,18 @@ class PresupuestoApp {
             console.error('Error cargando stock:', error);
             throw new Error('Error en stock proyectado: ' + error.message);
         }
+
+        // Opciones de Rubro/Categoría con las tres solapas juntas, y se vuelve a
+        // filtrar: lo que el usuario había destildado sigue destildado sobre los
+        // datos nuevos, y lo nuevo entra tildado.
+        if (typeof FiltrosManager !== 'undefined') {
+            FiltrosManager.cargarOpciones([this.datos.verano, this.datos.invierno, this.datos.stock]);
+            FiltrosManager.propagarFiltros();
+        }
+
+        // Argentina: la solapa Stock muestra la cobertura de la solapa elegida (Verano
+        // por defecto). En Uruguay solo esconde la columna y el selector.
+        if (typeof StockSincronizado !== 'undefined') StockSincronizado.refrescar();
 
     } catch (error) {
         console.error('Error cargando solapas:', error);
@@ -346,6 +346,13 @@ class PresupuestoApp {
             item._indiceOriginal = original;
             if (!item._indicesOriginales) {
                 item._indicesOriginales = { verano: original, invierno: original };
+            }
+
+            // Argentina: el índice de cobertura "original" es el que corresponde a la fila
+            // según Parámetros (no 1,50 fijo), y la cobertura la recalcula el servidor.
+            if (item.CALCULO_AR) {
+                item._factorCoberturaOriginal = parseFloat(item.INDICE_COBERTURA_DEFECTO ?? 0);
+                return;
             }
 
             // Cobertura de stock y factor
@@ -743,14 +750,9 @@ class PresupuestoApp {
         // ELIMINADO: No restaurar la última solapa al recargar para evitar lentitud y concurrencia.
         // Siempre inicia en la primera solapa por defecto (Compra Proyectada Verano).
 
-        if (Date.now() - preferencias.timestamp < 60 * 60 * 1000) {
-            Object.keys(preferencias.busquedas || {}).forEach(solapa => {
-                const input = document.getElementById(`search-${solapa}`);
-                if (input && preferencias.busquedas[solapa]) {
-                    input.value = preferencias.busquedas[solapa];
-                }
-            });
-        }
+        // Tampoco se restaura el texto de los buscadores: cada carga de página arranca
+        // sin filtros (ver filtros-manager.js), y un buscador relleno a escondidas
+        // recortaba la tabla igual que el filtro persistente que se sacó.
     }
 
     /**
@@ -807,86 +809,6 @@ class PresupuestoApp {
         return info;
     }
 
-    /**
-     * Cargar filtros para solapas de presupuesto - CORREGIDO CON REINTENTOS
-     */
-    cargarFiltrosPresupuesto(solapa, datos) {
-        // Función interna para intentar cargar
-        const intentarCargar = (intento = 1) => {
-            try {
-                if (!datos || datos.length === 0) {
-                    console.warn(`No hay datos para filtros en ${solapa}`);
-                    return;
-                }
-                
-                console.log(`🔄 Intento ${intento}: Cargando filtros para ${solapa} con ${datos.length} registros`);
-                
-                // Verificar que el tab pane existe
-                const tabPane = document.getElementById(solapa);
-                if (!tabPane) {
-                    console.error(`❌ Tab pane ${solapa} no encontrado`);
-                    if (intento < 3) {
-                        setTimeout(() => intentarCargar(intento + 1), 1000);
-                    }
-                    return;
-                }
-                
-                // Cargar rubros únicos
-                const rubros = [...new Set(
-                    datos.map(item => item.RUBRO).filter(r => r && r.trim() !== '')
-                )].sort();
-                
-                const selectRubro = document.getElementById(`filtro-rubro-${solapa}`);
-                if (selectRubro) {
-                    selectRubro.innerHTML = '<option value="">Todos los rubros</option>';
-                    rubros.forEach(rubro => {
-                        const option = document.createElement('option');
-                        option.value = rubro;
-                        option.textContent = rubro;
-                        selectRubro.appendChild(option);
-                    });
-                    console.log(`✅ Cargados ${rubros.length} rubros para ${solapa}`);
-                } else {
-                    console.error(`❌ Select de rubros no encontrado: filtro-rubro-${solapa}`);
-                    if (intento < 3) {
-                        setTimeout(() => intentarCargar(intento + 1), 1000);
-                        return;
-                    }
-                }
-                
-                // Cargar categorías únicas
-                const categorias = [...new Set(
-                    datos.map(item => item.CATEGORIA_PADRE || item.CATEGORIA).filter(c => c && c.trim() !== '')
-                )].sort();
-                
-                const selectCategoria = document.getElementById(`filtro-categoria-${solapa}`);
-                if (selectCategoria) {
-                    selectCategoria.innerHTML = '<option value="">Todas las categorías</option>';
-                    categorias.forEach(categoria => {
-                        const option = document.createElement('option');
-                        option.value = categoria;
-                        option.textContent = categoria;
-                        selectCategoria.appendChild(option);
-                    });
-                    console.log(`✅ Cargadas ${categorias.length} categorías para ${solapa}`);
-                } else {
-                    console.error(`❌ Select de categorías no encontrado: filtro-categoria-${solapa}`);
-                    if (intento < 3) {
-                        setTimeout(() => intentarCargar(intento + 1), 1000);
-                    }
-                }
-                
-            } catch (error) {
-                console.error(`Error cargando filtros para ${solapa} (intento ${intento}):`, error);
-                if (intento < 3) {
-                    setTimeout(() => intentarCargar(intento + 1), 1000);
-                }
-            }
-        };
-        
-        // Iniciar con delay inicial
-        setTimeout(() => intentarCargar(1), 500);
-    }
 }
 
 // Crear instancia global
@@ -969,91 +891,11 @@ function actualizarHora() {
 }
 
 /**
- * Filtrar por rubro usando el nuevo sistema persistente
- */
-async function filtrarPorRubroPresupuesto(solapa) {
-    const select = document.getElementById(`filtro-rubro-${solapa}`);
-    if (!select) return;
-    
-    const rubro = select.value;
-    
-    // Usar el nuevo sistema de filtros persistentes
-    if (typeof FiltrosManager !== 'undefined') {
-        await FiltrosManager.aplicarFiltroRubro(rubro, solapa);
-    } else {
-        // Fallback al sistema anterior
-        if (!rubro) {
-            window.presupuestoApp.resetearBusqueda(solapa);
-            return;
-        }
-        
-        try {
-            const response = await APIClient.filtrarPorRubro(rubro, solapa);
-            if (response.success) {
-                window.presupuestoApp.renderizarSolapaSegura(solapa, response.data);
-                UIUtils.actualizarContador(`count-${solapa}`, response.data.length);
-                window.presupuestoApp.notificarCambioFiltros(solapa, response.data);
-                UIUtils.mostrarAlerta(`Filtrado por rubro: ${rubro}`, 'info', 2000);
-            }
-        } catch (error) {
-            console.error('Error filtrando por rubro:', error);
-            UIUtils.mostrarAlerta('Error al filtrar por rubro', 'error');
-        }
-    }
-}
-
-/**
- * Filtrar por categoría usando el nuevo sistema persistente
- */
-async function filtrarPorCategoriaPresupuesto(solapa) {
-    const select = document.getElementById(`filtro-categoria-${solapa}`);
-    if (!select) return;
-    
-    const categoria = select.value;
-    
-    // Usar el nuevo sistema de filtros persistentes
-    if (typeof FiltrosManager !== 'undefined') {
-        await FiltrosManager.aplicarFiltroCategoria(categoria, solapa);
-    } else {
-        // Fallback al sistema anterior
-        if (!categoria) {
-            window.presupuestoApp.resetearBusqueda(solapa);
-            return;
-        }
-        
-        try {
-            const datos = window.presupuestoApp.getDatos(solapa);
-            const datosFiltrados = datos.filter(item => 
-                item.CATEGORIA_PADRE === categoria || item.CATEGORIA === categoria
-            );
-            
-            window.presupuestoApp.renderizarSolapaSegura(solapa, datosFiltrados);
-            UIUtils.actualizarContador(`count-${solapa}`, datosFiltrados.length);
-            window.presupuestoApp.notificarCambioFiltros(solapa, datosFiltrados);
-            UIUtils.mostrarAlerta(`Filtrado por categoría: ${categoria}`, 'info', 2000);
-        } catch (error) {
-            console.error('Error filtrando por categoría:', error);
-            UIUtils.mostrarAlerta('Error al filtrar por categoría', 'error');
-        }
-    }
-}
-
-/**
- * Limpiar filtros usando el nuevo sistema persistente
+ * Limpiar filtros: todo tildado y buscador vacío en Verano, Invierno y Stock
+ * (los filtros son compartidos entre las tres).
  */
 function limpiarFiltrosPresupuesto(solapa) {
-    // Usar el nuevo sistema de filtros persistentes
-    if (typeof FiltrosManager !== 'undefined') {
-        FiltrosManager.limpiarFiltros();
-    } else {
-        // Fallback al sistema anterior
-        document.getElementById(`search-${solapa}`).value = '';
-        document.getElementById(`filtro-rubro-${solapa}`).value = '';
-        document.getElementById(`filtro-categoria-${solapa}`).value = '';
-        
-        window.presupuestoApp.resetearBusqueda(solapa);
-        UIUtils.mostrarAlerta('Filtros limpiados', 'info', 2000);
-    }
+    FiltrosManager.limpiarFiltros();
 }
 
 // Inicializar cuando el DOM esté listo
@@ -1238,35 +1080,14 @@ function mostrarEstadoFiltros() {
     }
 }
 
-function agregarBotonLimpiarFiltrosPersistentes() {
-    const exportButtons = document.querySelector('.export-buttons');
-    if (exportButtons && !document.getElementById('btn-limpiar-filtros-persistentes')) {
-        const btnLimpiar = document.createElement('button');
-        btnLimpiar.id = 'btn-limpiar-filtros-persistentes';
-        btnLimpiar.className = 'btn btn-outline-warning btn-sm';
-        btnLimpiar.innerHTML = '<i class="fas fa-filter me-1"></i> Limpiar Filtros';
-        btnLimpiar.onclick = () => {
-            if (typeof FiltrosManager !== 'undefined') {
-                FiltrosManager.limpiarFiltros();
-            }
-        };
-        btnLimpiar.title = 'Limpiar todos los filtros persistentes';
-        
-        exportButtons.insertBefore(btnLimpiar, exportButtons.lastElementChild);
-        console.log('✅ Botón de limpiar filtros persistentes agregado');
-    }
-}
-
 // Hacer funciones disponibles globalmente
 window.mostrarEstadoFiltros = mostrarEstadoFiltros;
-window.agregarBotonLimpiarFiltrosPersistentes = agregarBotonLimpiarFiltrosPersistentes;
 
 // Configurar cuando se carga la página
 document.addEventListener('DOMContentLoaded', function() {
     configurarFixAgresivo();
-    setTimeout(() => {
-    agregarBotonLimpiarFiltrosPersistentes();
-    }, 2000);
+    // "Limpiar filtros" ya no se inyecta en el encabezado: está en el menú
+    // "Más acciones" de cada solapa (components/barra-solapa.php).
         
     // Aplicar fix cuando se active la solapa
     const ventasTab = document.getElementById('ventas-6-meses-tab');

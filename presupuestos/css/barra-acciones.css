@@ -1,0 +1,73 @@
+/* Encabezado y barras de acciones de las solapas (Bloque F) */
+
+/* ---------- Encabezado ---------- */
+.header-compacto .header-titulo h1 {
+    margin: 0;
+    white-space: nowrap;
+}
+
+.header-compacto .header-acciones .btn-icono {
+    width: 2.1rem;
+    padding-left: 0;
+    padding-right: 0;
+}
+
+/* Franja de temporada en una sola línea. */
+.temporada-linea {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .15rem .5rem;
+    padding: .3rem .75rem;
+    margin-bottom: .5rem;
+    font-size: .85rem;
+    background: var(--bs-light, #f8f9fa);
+    border: 1px solid rgba(0, 0, 0, .08);
+    border-radius: .375rem;
+}
+
+.temporada-linea .separador {
+    color: #adb5bd;
+}
+
+/* ---------- Barra de cada solapa ---------- */
+/* Una sola línea desde 1366 px; más angosto, los grupos bajan ordenados (wrap) en
+   vez de encimarse. Los anchos son mínimos, no fijos. */
+.barra-acciones {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .4rem;
+}
+
+.barra-acciones .barra-buscar {
+    flex: 0 1 230px;
+    min-width: 160px;
+}
+
+.barra-acciones .barra-filtro {
+    flex: 0 1 190px;
+    min-width: 150px;
+}
+
+.barra-acciones .barra-contador {
+    font-size: .8rem;
+    white-space: nowrap;
+}
+
+.barra-acciones .barra-derecha {
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+    margin-left: auto;
+}
+
+@media (max-width: 767.98px) {
+    .barra-acciones .barra-buscar,
+    .barra-acciones .barra-filtro {
+        flex: 1 1 100%;
+    }
+    .barra-acciones .barra-derecha {
+        margin-left: 0;
+    }
+}

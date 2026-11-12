@@ -18,8 +18,10 @@ date_default_timezone_set('America/Argentina/Buenos_Aires');
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <link href="css/obtener-presupuesto.css?v=1.3" rel="stylesheet">
-    <link href="css/tabla-optimizada.css?v=1.7" rel="stylesheet">
+    <link href="css/tabla-optimizada.css?v=1.8" rel="stylesheet">
     <link href="css/filtros-persistentes.css?v=1.2" rel="stylesheet">
+    <link href="css/filtro-multiple.css?v=1.0" rel="stylesheet">
+    <link href="css/barra-acciones.css?v=1.0" rel="stylesheet">
     <link href="css/proceso-presupuesto.css?v=1.2" rel="stylesheet">
     
     <!-- Estilos específicos -->
@@ -50,6 +52,7 @@ date_default_timezone_set('America/Argentina/Buenos_Aires');
     <!-- Contenedores de componentes -->
     <?php include 'components/alert-container.php'; ?>
     <?php include 'components/modals.php'; ?>
+    <?php include 'components/modal-parametros.php'; ?>
 
     <!-- Scripts -->
     <?php include 'components/scripts.php'; ?>

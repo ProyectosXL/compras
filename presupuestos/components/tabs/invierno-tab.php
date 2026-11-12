@@ -1,52 +1,7 @@
 
 <div class="tab-pane fade" id="invierno" role="tabpanel">
-    <div class="search-container">
-        <div class="row align-items-center mb-2">
-            <div class="col-md-3 col-lg-2">
-                <div class="input-group">
-                    <span class="input-group-text">
-                        <i class="fas fa-search"></i>
-                    </span>
-                    <input type="text" class="form-control search-input-fast" id="search-invierno" 
-                        placeholder="Búsqueda instantánea por rubro o categoría..." 
-                        onkeyup="buscarDatos('invierno')">
-                </div>
-            </div>
-            <div class="col-md-2 col-lg-1">
-                <span class="badge bg-info fs-6 contador-animado" id="count-invierno">0 registros</span>
-            </div>
-            <div class="col-md-2">
-                <select class="form-select form-select-sm" id="filtro-rubro-invierno" onchange="filtrarPorRubroPresupuesto('invierno')">
-                    <option value="">Todos los rubros</option>
-                </select>
-            </div>
-            <div class="col-md-2">
-                <select class="form-select form-select-sm" id="filtro-categoria-invierno" onchange="filtrarPorCategoriaPresupuesto('invierno')">
-                    <option value="">Todas las categorías</option>
-                </select>
-            </div>
-            <div class="col-md-3 col-lg-5 export-buttons d-flex flex-wrap gap-1 justify-content-end">
-                <button class="btn btn-primary btn-sm" id="btn-guardar-invierno" data-temporada="invierno">
-                    <i class="fas fa-save me-1"></i> Guardar
-                </button>
-                <button class="btn btn-outline-primary btn-sm" id="btn-retomar-invierno"
-                        title="Aplicar los índices y notas de una versión guardada sobre los datos de hoy">
-                    <i class="fas fa-code-branch me-1"></i> Retomar versión
-                </button>
-                <button class="btn btn-outline-success btn-sm" id="btn-vista-oc-invierno" data-solapa="invierno"
-                        title="Ver las OC pendientes en una sola columna o abiertas por temporada">
-                    <i class="fas fa-truck me-1"></i> OC
-                </button>
-                <button class="btn btn-success btn-sm" onclick="exportarExcel('invierno')">
-                    <i class="fas fa-file-excel me-1"></i> Excel
-                </button>
-                <button class="btn btn-outline-secondary btn-sm" onclick="limpiarFiltrosPresupuesto('invierno')">
-                    <i class="fas fa-eraser me-1"></i> Limpiar
-                </button>
-            </div>
-        </div>
-    </div>
-    
+    <?php $barra = ['solapa' => 'invierno', 'guardar' => true, 'retomar' => true, 'oc' => true]; include __DIR__ . '/../barra-solapa.php'; ?>
+
     <div class="table-responsive">
         <table class="table table-striped table-hover mb-0" id="tabla-invierno">
             <thead class="table-dark sticky-header">

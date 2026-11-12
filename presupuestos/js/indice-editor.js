@@ -114,6 +114,12 @@ class IndiceEditor {
         if (registro.INDICE_ORIGINAL === undefined) registro.INDICE_ORIGINAL = valorOriginal;
         if (registro._indiceOriginal === undefined) registro._indiceOriginal = valorOriginal;
 
+        // Argentina: la fila entera la recalcula el servidor (cobertura incluida).
+        // Editar el índice descarta la venta cargada a mano de esa temporada.
+        if (RecalculoFila.aplica(registro)) {
+            return IndiceEditor.aplicarCambioAr(solapa, registro, temporada, nuevoIndice);
+        }
+
         // 3. Calcular nuevos valores
         const registroActualizado = IndiceEditor.actualizarDatosMemoria(nuevoIndice, registro, temporada, solapa);
         
@@ -176,6 +182,197 @@ class IndiceEditor {
         // del flujo, que sigue siendo síncrono, para que la edición no se quede esperando
         // el viaje: las celdas de tramo se marcan mientras tanto y se completan al volver.
         IndiceEditor.refrescarTramos(solapa, indiceReal, registroActualizado, filaVisual);
+    }
+
+    // ==========================================
+    // ARGENTINA: índice, venta y cobertura recalculados en el servidor
+    // ==========================================
+
+    static datoDe(solapa, rubro, categoria) {
+        return (window.presupuestoApp.getDatos(solapa) || [])
+            .find(r => r.RUBRO === rubro && (r.CATEGORIA_PADRE === categoria || r.CATEGORIA === categoria)) || null;
+    }
+
+    /** Parámetros de edición que vinieron con la carga (límites de los índices). */
+    static limites() {
+        const p = (TemporadaServidor.info() || {}).parametros || {};
+        return {
+            variacionMin: p.variacion_min ?? 0, variacionMax: p.variacion_max ?? 10,
+            coberturaMin: p.cobertura_min ?? 0, coberturaMax: p.cobertura_max ?? 12
+        };
+    }
+
+    static async aplicarCambioAr(solapa, registro, temporada, nuevoIndice) {
+        const ok = await RecalculoFila.aplicar(solapa, registro,
+            { [`indice_${temporada}`]: nuevoIndice, [`venta_manual_${temporada}`]: null }, `indice_${temporada}`);
+        if (ok) IndiceEditor.actualizarMarcaIndice(solapa, registro, temporada);
+        return ok;
+    }
+
+    /**
+     * Venta proyectada cargada a mano. El servidor despeja el índice (exacto, 6
+     * decimales) o, sin venta anterior, reparte la venta por días y deja el índice en "—".
+     */
+    static async aplicarVentaAr(solapa, registro, temporada, venta) {
+        if (!registro._indicesOriginales) {
+            const original = parseFloat(registro.INDICE_VAR_ORIGINAL ?? 1);
+            registro._indicesOriginales = { verano: original, invierno: original };
+        }
+        const ok = await RecalculoFila.aplicar(solapa, registro,
+            { [`venta_manual_${temporada}`]: venta }, `venta_${temporada}`);
+        if (ok) IndiceEditor.actualizarMarcaIndice(solapa, registro, temporada);
+        return ok;
+    }
+
+    /**
+     * Marca de "editado" de una temporada: el índice difiere del original o hay una
+     * venta cargada a mano. Vive en el registro (sobrevive a filtrar y redibujar).
+     */
+    static actualizarMarcaIndice(solapa, registro, temporada) {
+        const original = parseFloat(registro._indicesOriginales?.[temporada] ?? registro.INDICE_VAR_ORIGINAL ?? 1);
+        const actual = parseFloat(temporada === 'invierno' ? registro.INDICE_VARIACION_INVIERNO : registro.INDICE_VARIACION);
+        const manual = registro[`VENTA_MANUAL_${temporada.toUpperCase()}`];
+        const editado = Math.abs(actual - original) > 0.001 || (manual !== null && manual !== undefined);
+
+        if (editado) {
+            registro._indicesEditados = registro._indicesEditados || {};
+            registro._indicesEditados[temporada] = { valorOriginal: original, valorActual: actual };
+        } else if (registro._indicesEditados) {
+            delete registro._indicesEditados[temporada];
+        }
+
+        const fila = TablaRendererUtils.filaDeRegistro(solapa, registro.RUBRO, registro.CATEGORIA_PADRE);
+        if (!fila) return;
+        if (editado) IndiceEditor.aplicarMarcasVisualesEnFila(fila, temporada, actual);
+        else IndiceEditor.limpiarMarcasVisuales(fila, temporada, original);
+        TablaRendererUtils.pintarMarcasVentaAr(fila, registro);
+    }
+
+    /**
+     * Índice de cobertura de Argentina: uno solo por categoría, compartido por las tres
+     * solapas. Cada solapa de compra lo recalcula con SUS índices de variación.
+     */
+    static async aplicarCambioCoberturaAr(rubro, categoria, nuevoIndice) {
+        let algunoOk = false;
+        for (const tab of ['verano', 'invierno']) {
+            const reg = IndiceEditor.datoDe(tab, rubro, categoria);
+            if (!reg) continue;
+            const ok = await RecalculoFila.aplicar(tab, reg, { indice_cobertura: nuevoIndice }, 'indice_cobertura');
+            if (!ok) continue;
+            algunoOk = true;
+            const esDiferente = Math.abs(nuevoIndice - parseFloat(reg._factorCoberturaOriginal ?? reg.INDICE_COBERTURA_DEFECTO ?? 0)) > 0.001;
+            if (esDiferente) reg._coberturaEditada = { valorOriginal: reg._factorCoberturaOriginal, valorActual: nuevoIndice };
+            else delete reg._coberturaEditada;
+        }
+        if (typeof StockSincronizado !== 'undefined') StockSincronizado.refrescar();
+        return algunoOk;
+    }
+
+    /** Edición de la venta proyectada de una columna (solo Argentina). */
+    static editarVenta(rubro, categoria, solapa, temporada) {
+        const registro = IndiceEditor.datoDe(solapa, rubro, categoria);
+        if (!registro) return;
+        const T = temporada.toUpperCase();
+        const ventaActual = parseFloat(registro[`VENTA_PROY_${T}`] || 0);
+        const base = TemporadaServidor.ventaAnteriorDe(registro, T);
+
+        IndiceEditor.indiceEditando = { rubro, categoria, indiceActual: ventaActual, solapa, temporada, tipo: 'venta' };
+
+        document.getElementById('modal-rubro').textContent = rubro;
+        document.getElementById('modal-categoria').textContent = categoria;
+        const modalEl = document.getElementById('modalEditarIndice');
+        modalEl.querySelector('.modal-title').textContent =
+            `Editar Venta Proyectada - ${temporada.charAt(0).toUpperCase() + temporada.slice(1)}`;
+        const label = modalEl.querySelector('label[for="modal-nuevo-indice"]');
+        if (label) label.textContent = 'Venta proyectada (unidades):';
+        const formText = modalEl.querySelector('.form-text');
+        if (formText) {
+            formText.innerHTML = base > 0
+                ? 'Se recalcula el índice de la temporada para que la venta dé exactamente este número '
+                  + '(el mismo índice para todos los tramos de la columna).'
+                : '<strong>Sin venta anterior:</strong> no hay índice que calcular. La venta queda como '
+                  + '"venta manual" y se reparte entre los tramos según sus días.';
+        }
+        const notaGroup = document.getElementById('modal-nota-indice')?.closest('.mb-3');
+        if (notaGroup) notaGroup.classList.remove('d-none');
+        const notaInput = document.getElementById('modal-nota-indice');
+        if (notaInput) notaInput.value = registro.NOTA || '';
+
+        const input = document.getElementById('modal-nuevo-indice');
+        input.value = Math.round(ventaActual);
+        input.step = '1';
+        input.min = '0';
+        input.removeAttribute('max');
+
+        const btnRestaurar = document.getElementById('btn-modal-restaurar-indice');
+        const manual = registro[`VENTA_MANUAL_${T}`];
+        if (btnRestaurar) {
+            const original = parseFloat(registro._indicesOriginales?.[temporada] ?? registro.INDICE_VAR_ORIGINAL ?? 1);
+            btnRestaurar.classList.toggle('d-none', manual === null || manual === undefined);
+            btnRestaurar.innerHTML = `<i class="fas fa-undo me-1"></i>Restaurar índice original (${original.toFixed(2)})`;
+        }
+
+        IndiceEditor.mostrarPreviewCalculo(ventaActual);
+        IndiceEditor.modalInstancia.show();
+        setTimeout(() => input.select(), 500);
+    }
+
+    /**
+     * Aviso de índice no redondo: índice exacto y los dos redondos más cercanos con
+     * la venta que daría cada uno. [Usar] aplica ese índice (y con él esa venta).
+     */
+    static mostrarSugerencias(td, solapa, rubro, categoria, temporada) {
+        const registro = IndiceEditor.datoDe(solapa, rubro, categoria);
+        const s = registro && registro[`SUGERENCIAS_${temporada.toUpperCase()}`];
+        if (!s) {
+            IndiceEditor.editarIndice(rubro, categoria, registro ? registro.INDICE_VARIACION : 1, solapa, null, temporada);
+            return;
+        }
+
+        const fmt = (n, d) => Number(n).toLocaleString('es-AR', { minimumFractionDigits: d, maximumFractionDigits: d });
+        const cont = document.createElement('div');
+        cont.className = 'small';
+        cont.innerHTML = `
+            <div class="mb-1">Índice exacto <strong>${fmt(s.indice_exacto, 4)}</strong>.</div>
+            <div class="mb-2">Para un índice redondo:</div>
+            <div class="d-flex align-items-center justify-content-between mb-1 gap-2">
+                <span>${fmt(s.abajo.indice, 2)} → ${FormatoUtils.formatearNumero(s.abajo.venta)} unidades</span>
+                <button type="button" class="btn btn-sm btn-outline-primary py-0" data-usar="${s.abajo.indice}">Usar</button>
+            </div>
+            <div class="d-flex align-items-center justify-content-between mb-2 gap-2">
+                <span>${fmt(s.arriba.indice, 2)} → ${FormatoUtils.formatearNumero(s.arriba.venta)} unidades</span>
+                <button type="button" class="btn btn-sm btn-outline-primary py-0" data-usar="${s.arriba.indice}">Usar</button>
+            </div>
+            <div class="d-flex gap-2 border-top pt-2">
+                <button type="button" class="btn btn-sm btn-link p-0" data-accion="indice">Editar índice</button>
+                <button type="button" class="btn btn-sm btn-link p-0" data-accion="venta">Editar venta</button>
+            </div>`;
+
+        const anterior = bootstrap.Popover.getInstance(td);
+        if (anterior) anterior.dispose();
+        const pop = new bootstrap.Popover(td, {
+            html: true, sanitize: false, trigger: 'manual', placement: 'top', container: 'body',
+            title: 'Índice no redondo', content: cont
+        });
+        const cerrar = () => { pop.dispose(); document.removeEventListener('mousedown', fuera, true); };
+        const fuera = (e) => { if (!cont.contains(e.target) && !td.contains(e.target)) cerrar(); };
+
+        cont.querySelectorAll('[data-usar]').forEach(b => b.addEventListener('click', () => {
+            cerrar();
+            IndiceEditor.aplicarCambio(rubro, categoria, solapa, temporada, parseFloat(b.dataset.usar));
+        }));
+        cont.querySelector('[data-accion="indice"]').addEventListener('click', () => {
+            cerrar();
+            const actual = parseFloat(temporada === 'invierno' ? registro.INDICE_VARIACION_INVIERNO : registro.INDICE_VARIACION);
+            IndiceEditor.editarIndice(rubro, categoria, actual, solapa, null, temporada);
+        });
+        cont.querySelector('[data-accion="venta"]').addEventListener('click', () => {
+            cerrar();
+            IndiceEditor.editarVenta(rubro, categoria, solapa, temporada);
+        });
+
+        pop.show();
+        setTimeout(() => document.addEventListener('mousedown', fuera, true), 0);
     }
 
     /**
@@ -352,8 +549,8 @@ class IndiceEditor {
         const input = document.getElementById('modal-nuevo-indice');
         input.value = parseFloat(indiceActual).toFixed(2);
         input.step = '0.01';
-        input.min = '0';
-        input.max = '10';
+        input.min = String(IndiceEditor.limites().variacionMin);
+        input.max = String(IndiceEditor.limites().variacionMax);
 
         // La nota que ya tenga la fila, para corregirla en vez de reescribirla.
         const notaInput = document.getElementById('modal-nota-indice');
@@ -416,8 +613,8 @@ class IndiceEditor {
         const input = document.getElementById('modal-nuevo-indice');
         input.value = parseFloat(indiceActual).toFixed(2);
         input.step = '0.1';
-        input.min = '0';
-        input.max = '12';
+        input.min = String(IndiceEditor.limites().coberturaMin);
+        input.max = String(IndiceEditor.limites().coberturaMax);
 
         // Botón restaurar en modal si difiere del original
         const reg = (window.presupuestoApp.getDatos(solapa) || [])
@@ -442,13 +639,21 @@ class IndiceEditor {
 
     static async guardarNuevoIndice() {
         if (!IndiceEditor.indiceEditando) return;
-        
+
         const nuevoIndice = parseFloat(document.getElementById('modal-nuevo-indice').value);
-        if (isNaN(nuevoIndice) || nuevoIndice < 0 || nuevoIndice > 10) {
-            UIUtils.mostrarAlerta('Ingrese un índice válido (0-10)', 'warning');
+        const tipoEdicion = IndiceEditor.indiceEditando.tipo;
+        const lim = IndiceEditor.limites();
+        // Límites de Parámetros (0-10 y 0-12 por defecto, que eran los fijos de antes).
+        const rango = tipoEdicion === 'venta' ? [0, Infinity]
+            : tipoEdicion === 'cobertura' ? [lim.coberturaMin, lim.coberturaMax]
+            : [lim.variacionMin, lim.variacionMax];
+        if (isNaN(nuevoIndice) || nuevoIndice < rango[0] || nuevoIndice > rango[1]) {
+            UIUtils.mostrarAlerta(tipoEdicion === 'venta'
+                ? 'Ingresá una venta mayor o igual a 0.'
+                : `Ingresá un valor válido (${rango[0]}-${rango[1]})`, 'warning');
             return;
         }
-        
+
         const editando = { ...IndiceEditor.indiceEditando };
         const btnGuardar = document.querySelector('#modalEditarIndice .btn-primary');
         const textoOriginal = btnGuardar.innerHTML;
@@ -456,15 +661,29 @@ class IndiceEditor {
 
         try {
             await new Promise(r => setTimeout(r, 300)); // Pequeña pausa UX
-            
+
             const { rubro, categoria, solapa, temporada, tipo } = IndiceEditor.indiceEditando;
-            
-            if (tipo === 'cobertura') {
-                IndiceEditor.aplicarCambioCobertura(rubro, categoria, solapa, nuevoIndice);
+            const registroEditado = IndiceEditor.datoDe(solapa, rubro, categoria);
+
+            if (tipo === 'venta') {
+                // Si el servidor rechaza la venta (índice fuera de rango) el modal queda
+                // abierto con el aviso, para corregir el número sin volver a empezar.
+                const ok = await IndiceEditor.aplicarVentaAr(solapa, registroEditado, temporada, Math.round(nuevoIndice));
+                if (!ok) return;
+                const notaInput = document.getElementById('modal-nota-indice');
+                if (notaInput) IndiceEditor.asignarNota(solapa, rubro, categoria, notaInput.value);
+                UIUtils.mostrarAlerta('Venta proyectada actualizada', 'success');
+            } else if (tipo === 'cobertura') {
+                if (RecalculoFila.aplica(registroEditado)) {
+                    await IndiceEditor.aplicarCambioCoberturaAr(rubro, categoria, nuevoIndice);
+                } else {
+                    IndiceEditor.aplicarCambioCobertura(rubro, categoria, solapa, nuevoIndice);
+                }
                 UIUtils.mostrarAlerta(`Índice de cobertura actualizado a ${nuevoIndice.toFixed(2)} meses`, 'success');
             } else {
                 // USAR LA FUNCIÓN CENTRALIZADA
-                IndiceEditor.aplicarCambio(rubro, categoria, solapa, temporada, nuevoIndice);
+                const ok = await IndiceEditor.aplicarCambio(rubro, categoria, solapa, temporada, nuevoIndice);
+                if (ok === false) return;
 
                 // La nota viaja con la fila, como el índice editado, hasta que se guarda la versión.
                 const notaInput = document.getElementById('modal-nota-indice');
@@ -616,7 +835,11 @@ class IndiceEditor {
             ? reg._factorCoberturaOriginal
             : (parseFloat(reg._stockCoberturaOriginal || reg.STOCK_COBERTURA || 0) > 0 ? 1.5 : 0.0);
 
-        IndiceEditor.aplicarCambioCobertura(rubro, categoria, solapaActiva, factorOriginal);
+        if (RecalculoFila.aplica(reg) || reg.CALCULO_AR) {
+            IndiceEditor.aplicarCambioCoberturaAr(rubro, categoria, factorOriginal);
+        } else {
+            IndiceEditor.aplicarCambioCobertura(rubro, categoria, solapaActiva, factorOriginal);
+        }
         UIUtils.mostrarAlerta(`Índice de cobertura restaurado a ${factorOriginal.toFixed(2)} meses`, 'info');
     }
 
@@ -755,8 +978,9 @@ class IndiceEditor {
             } else {
                 const reg = (window.presupuestoApp.getDatos(solapa) || [])
                     .find(r => r.RUBRO === rubro && (r.CATEGORIA_PADRE === categoria || r.CATEGORIA === categoria));
-                const factorOrig = reg ? (reg._factorCoberturaOriginal || 1.5) : 1.5;
-                IndiceEditor.aplicarCambioCobertura(rubro, categoria, solapa, factorOrig);
+                const factorOrig = reg ? (reg._factorCoberturaOriginal ?? 1.5) : 1.5;
+                if (reg && reg.CALCULO_AR) IndiceEditor.aplicarCambioCoberturaAr(rubro, categoria, factorOrig);
+                else IndiceEditor.aplicarCambioCobertura(rubro, categoria, solapa, factorOrig);
             }
         } else {
             if (filaVisual) {
@@ -788,6 +1012,20 @@ class IndiceEditor {
             div.id = 'preview-calculo';
             div.className = 'alert alert-light mt-2 mb-0 py-2 small';
             document.querySelector('#modalEditarIndice .modal-body').appendChild(div);
+        }
+
+        // Argentina: la vista previa sale del servidor (la cobertura ya no se puede
+        // estimar acá con una regla de tres: depende de la venta proyectada).
+        {
+            const ed = IndiceEditor.indiceEditando;
+            const solapaCalculo = ed.solapa === 'stock'
+                ? (typeof StockSincronizado !== 'undefined' ? StockSincronizado.solapaElegida() : 'verano')
+                : ed.solapa;
+            const regCalculo = IndiceEditor.datoDe(solapaCalculo, ed.rubro, ed.categoria);
+            if (RecalculoFila.aplica(regCalculo)) {
+                IndiceEditor.previewServidor(div, solapaCalculo, regCalculo, ed, nuevoIndice);
+                return;
+            }
         }
 
         if (IndiceEditor.indiceEditando.tipo === 'cobertura') {
@@ -861,6 +1099,64 @@ class IndiceEditor {
         `;
     }
     
+    /**
+     * Vista previa de Argentina: simula la edición en recalcular-fila (sin aplicarla)
+     * y muestra cuánto cambian venta, cobertura, stock proyectado y compra.
+     */
+    static previewServidor(div, solapa, registro, ed, valor) {
+        clearTimeout(IndiceEditor._timerPreview);
+        const token = (IndiceEditor._tokenPreview = (IndiceEditor._tokenPreview || 0) + 1);
+        div.innerHTML = '<span class="text-muted"><i class="fas fa-spinner fa-spin me-1"></i>Calculando...</span>';
+
+        IndiceEditor._timerPreview = setTimeout(async () => {
+            const t = ed.temporada;
+            const cambios = ed.tipo === 'venta' ? { [`venta_manual_${t}`]: Math.round(valor) }
+                : ed.tipo === 'cobertura' ? { indice_cobertura: valor }
+                : { [`indice_${t}`]: valor, [`venta_manual_${t}`]: null };
+            const editado = ed.tipo === 'venta' ? `venta_${t}` : ed.tipo === 'cobertura' ? 'indice_cobertura' : `indice_${t}`;
+
+            const r = await RecalculoFila.simular(solapa, registro, cambios, editado);
+            if (token !== IndiceEditor._tokenPreview) return;   // llegó una respuesta vieja
+            if (!r.ok) {
+                div.innerHTML = `<span class="text-danger"><i class="fas fa-exclamation-triangle me-1"></i>${FiltroMultiple.escapar(r.mensaje)}</span>`;
+                return;
+            }
+
+            const f = r.fila;
+            const n = FormatoUtils.formatearNumero;
+            const bloque = (titulo, nuevo, actual, clase = '') => {
+                const d = Math.round(nuevo) - Math.round(actual);
+                return `<div class="col border-end">
+                    <span class="d-block text-muted" style="font-size:0.75rem;">${titulo}</span>
+                    <strong class="${clase}">${n(nuevo)}</strong>
+                    <span class="d-block small ${d > 0 ? 'text-success' : d < 0 ? 'text-danger' : 'text-muted'}">${d >= 0 ? '+' : ''}${n(d)}</span>
+                </div>`;
+            };
+
+            let extra = '';
+            if (ed.tipo === 'venta') {
+                const T = t.toUpperCase();
+                const s = f[`SUGERENCIAS_${T}`];
+                const indice = f[t === 'invierno' ? 'INDICE_VARIACION_INVIERNO' : 'INDICE_VARIACION'];
+                const fmt = (x, d) => Number(x).toLocaleString('es-AR', { minimumFractionDigits: d, maximumFractionDigits: d });
+                extra = s
+                    ? `<div class="mt-2">Índice resultante: <strong>${s.aproximado ? '≈' : ''}${fmt(s.indice_exacto, s.aproximado ? 4 : 2)}</strong>`
+                      + (s.aproximado ? `<span class="text-muted"> · redondos: ${fmt(s.abajo.indice, 2)} → ${n(s.abajo.venta)}, ${fmt(s.arriba.indice, 2)} → ${n(s.arriba.venta)}</span>` : '')
+                      + '</div>'
+                    : `<div class="mt-2 text-muted">Sin venta anterior: el índice queda en "—" (venta manual).${indice !== undefined ? '' : ''}</div>`;
+            }
+
+            const ventaCol = t === 'invierno' ? 'VENTA_PROY_INVIERNO' : 'VENTA_PROY_VERANO';
+            div.innerHTML = `
+                <div class="row g-1 text-center py-1">
+                    ${ed.tipo !== 'cobertura' ? bloque('Venta Proy.', f[ventaCol], registro[ventaCol]) : ''}
+                    ${bloque('Stock Cobertura', f.STOCK_COBERTURA, registro.STOCK_COBERTURA)}
+                    ${bloque('Stock Proyectado', f.STOCK_PROYECTADO, registro.STOCK_PROYECTADO, 'text-info')}
+                    ${bloque('Compra Proyectada', f.COMPRA_PROYECTADA, registro.COMPRA_PROYECTADA, f.COMPRA_PROYECTADA < 0 ? 'text-danger' : 'text-success')}
+                </div>${extra}`;
+        }, 350);
+    }
+
     // Funciones legacy/soporte para no romper llamadas externas
     static cargarHistorial() {}
     static diagnosticarTemporadas() { return {}; }

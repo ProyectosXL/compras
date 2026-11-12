@@ -44,6 +44,34 @@
                             <td><span class="badge bg-success">Sí</span></td>
                         </tr>
                         <tr>
+                            <td><strong>Venta Proyectada</strong></td>
+                            <td>Venta de cada columna (Verano / Invierno). En Argentina se puede cargar a mano:
+                                el índice de esa temporada se recalcula para que la venta dé exactamente el número cargado
+                                (si el índice no queda redondo se marca con ≈ y se ofrecen los redondos más cercanos).
+                                Sin venta anterior no hay índice: queda como "venta manual" y se reparte entre los tramos
+                                según sus días.</td>
+                            <td>Índice × venta anterior, o carga manual</td>
+                            <td><span class="badge bg-success">Sí (Argentina)</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Índice de Cobertura</strong></td>
+                            <td>Meses de venta que cubre el stock de cobertura. Uno solo por categoría, compartido
+                                por Verano, Invierno y Stock. Su valor por defecto sale de Parámetros.</td>
+                            <td>Parámetros (Argentina) / 1,50 (Uruguay)</td>
+                            <td><span class="badge bg-success">Sí</span></td>
+                        </tr>
+                        <tr>
+                            <td><strong>Parámetros (⚙)</strong></td>
+                            <td>Solo Argentina. <em>Generales</em>: índice de cobertura por defecto, días por mes, días
+                                mínimos para usar lo vendido, rubros sin cobertura, ventana y límites de los índices.
+                                <em>Cobertura por rubro / categoría</em>: índices propios (prioridad categoría &gt; rubro &gt;
+                                sin cobertura &gt; general). Estos se aplican al volver a cargar los datos.
+                                <em>Exclusiones</em>: rubros, categorías, artículos y canales del proceso de datos; se
+                                aplican la próxima vez que corre ese proceso. Cada cambio queda con usuario y fecha.</td>
+                            <td>Pantalla de Parámetros</td>
+                            <td><span class="badge bg-success">Sí</span></td>
+                        </tr>
+                        <tr>
                             <td><strong>Stock Proyectado</strong></td>
                             <td>Resultado del cálculo de stock futuro</td>
                             <td>Cálculo automático</td>

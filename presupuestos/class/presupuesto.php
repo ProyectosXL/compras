@@ -15,17 +15,21 @@ class Presupuesto {
     }
 
     /**
-     * Determinar qué base de datos usar según el país seleccionado
+     * País de la solicitud en curso: ?pais, POST pais o el de la sesión, en ese orden.
+     *
+     * Es la ÚNICA regla que decide si una solicitud es de Argentina o de Uruguay, y
+     * de ella depende todo lo que es solo de Argentina (parámetros, cobertura nueva,
+     * venta editable). Antes vivía solo dentro de determinarBaseDatos() y el resto
+     * del código no tenía cómo preguntarla.
+     *
+     * @return string 'argentina' o 'uruguay'
      */
-    private function determinarBaseDatos() {
-        // Iniciar sesión si no está iniciada
+    public static function paisDeLaSolicitud() {
         if (session_status() === PHP_SESSION_NONE) {
             session_start();
         }
-        
+
         $pais = 'argentina'; // Por defecto
-        
-        // Verificar en orden de prioridad
         if (isset($_GET['pais'])) {
             $pais = strtolower($_GET['pais']);
         } elseif (isset($_POST['pais'])) {
@@ -33,20 +37,15 @@ class Presupuesto {
         } elseif (isset($_SESSION['pais_seleccionado'])) {
             $pais = strtolower($_SESSION['pais_seleccionado']);
         }
-        
-        // Log para debug
-        error_log("País determinado: $pais");
-        
-        // Determinar el nombre del servidor
-        switch ($pais) {
-            case 'uruguay':
-            case 'uy':
-                return 'apps_power_uy';
-            case 'argentina':
-            case 'ar':
-            default:
-                return 'apps_power';
-        }
+
+        return in_array($pais, ['uruguay', 'uy'], true) ? 'uruguay' : 'argentina';
+    }
+
+    /**
+     * Determinar qué base de datos usar según el país seleccionado
+     */
+    private function determinarBaseDatos() {
+        return self::paisDeLaSolicitud() === 'uruguay' ? 'apps_power_uy' : 'apps_power';
     }
 
     /**
@@ -79,7 +78,7 @@ class Presupuesto {
      * Obtener país actual
      */
     public function obtenerPaisActual() {
-        return $this->nameServer === 'apps_uy' ? 'uruguay' : 'argentina';
+        return $this->nameServer === 'apps_power_uy' ? 'uruguay' : 'argentina';
     }
 
     /**
@@ -165,6 +164,31 @@ class Presupuesto {
                 'servidor' => $this->nameServer
             ];
         }
+    }
+
+    /**
+     * Fecha de la última corrida del SP y si la tabla trae lo vendido de la
+     * temporada en curso. Es lo único de la tabla que necesita recalcular una fila
+     * (los días transcurridos de la cobertura salen de acá).
+     *
+     * @return array ['ult' => DateTime|null, 'hay_vendido' => bool]
+     */
+    public function obtenerUltActualizacion() {
+        $vacio = ['ult' => null, 'hay_vendido' => false];
+        if (!$this->cid_apps) {
+            return $vacio;
+        }
+        $stmt = sqlsrv_query($this->cid_apps,
+            "SELECT MAX(ULT_ACTUALIZACION) AS ult,
+                    CASE WHEN COL_LENGTH('dbo.RO_PC_T_VENTAS_PRESUPUESTO_COMPRAS', 'VTA_TEMPORADA_EN_CURSO') IS NULL
+                         THEN 0 ELSE 1 END AS hay_vendido
+             FROM RO_PC_T_VENTAS_PRESUPUESTO_COMPRAS");
+        if ($stmt === false) {
+            return $vacio;
+        }
+        $fila = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC);
+        sqlsrv_free_stmt($stmt);
+        return ['ult' => $fila['ult'] ?? null, 'hay_vendido' => (bool)($fila['hay_vendido'] ?? 0)];
     }
 
     /**

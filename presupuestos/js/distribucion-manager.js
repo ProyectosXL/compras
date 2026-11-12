@@ -10,6 +10,7 @@ class DistribucionManager {
     
     // Propiedades para Paso 2 (Costos)
     static pasoActivo = 1;
+    static _seleccion = null; // FiltroMultiple de rubros/categorías (ver seleccion())
     static datosCostos = [];
     static mesesCostos = [];
     static mesesCostosClaves = [];
@@ -1030,44 +1031,45 @@ class DistribucionManager {
         }
     }
 
+    /**
+     * Rubros y categorías de selección múltiple, con estado propio de esta solapa
+     * (no se comparte con Verano/Invierno/Stock). Sirve a los pasos 1 y 2.
+     */
+    static seleccion() {
+        if (!DistribucionManager._seleccion) {
+            DistribucionManager._seleccion = new FiltroMultiple({ onCambio: () => DistribucionManager.filtrarDatos() });
+            DistribucionManager._seleccion.montar(
+                document.getElementById('filtro-rubro-distribucion'),
+                document.getElementById('filtro-categoria-distribucion')
+            );
+        }
+        return DistribucionManager._seleccion;
+    }
+
     static cargarFiltros() {
-        const rubroSel = document.getElementById('filtro-rubro-distribucion');
-        const catSel = document.getElementById('filtro-categoria-distribucion');
         const canalSel = document.getElementById('filtro-canal-distribucion');
+        if (!canalSel) return;
 
-        if (!rubroSel || !catSel || !canalSel) return;
-
-        // Limpiar
-        rubroSel.innerHTML = '<option value="">Todos los rubros</option>';
-        catSel.innerHTML = '<option value="">Todas las categorías</option>';
         canalSel.innerHTML = '<option value="">Todos los canales</option>';
 
-        const rubros = new Set();
-        const categorias = new Set();
-
-        const fuenteDatos = DistribucionManager.datos.length > 0 
-            ? DistribucionManager.datos 
+        const fuenteDatos = DistribucionManager.datos.length > 0
+            ? DistribucionManager.datos
             : DistribucionManager.datosCostos;
 
-        fuenteDatos.forEach(item => {
-            if (item.RUBRO) rubros.add(item.RUBRO);
-            if (item.CATEGORIA_PADRE) categorias.add(item.CATEGORIA_PADRE);
-        });
-
-        // Rubros
-        Array.from(rubros).sort().forEach(r => {
-            rubroSel.innerHTML += `<option value="${r}">${r}</option>`;
-        });
-
-        // Categorías
-        Array.from(categorias).sort().forEach(c => {
-            catSel.innerHTML += `<option value="${c}">${c}</option>`;
-        });
+        // Lo nuevo entra tildado; lo que el usuario destildó sigue destildado.
+        const sel = DistribucionManager.seleccion();
+        sel.iniciarCarga();
+        sel.agregarDatos(fuenteDatos);
+        sel.finalizarCarga();
 
         // Canales
         DistribucionManager.canales.sort().forEach(c => {
             canalSel.innerHTML += `<option value="${c}">${c}</option>`;
         });
+
+        // Si quedó algo destildado de antes, se aplica sobre los datos recién cargados:
+        // si no, la tabla mostraría todo con el desplegable diciendo otra cosa.
+        if (sel.hayDestildados()) DistribucionManager.filtrarDatos();
     }
 
     static filtrarDatos() {
@@ -1078,19 +1080,16 @@ class DistribucionManager {
         }
 
         const query = document.getElementById('search-distribucion').value.toLowerCase().trim();
-        const rubro = document.getElementById('filtro-rubro-distribucion').value;
-        const categoria = document.getElementById('filtro-categoria-distribucion').value;
+        const sel = DistribucionManager.seleccion();
         const canal = document.getElementById('filtro-canal-distribucion').value;
 
         DistribucionManager.datosFiltrados = DistribucionManager.datos.filter(item => {
             const rubroStr = (item.RUBRO || '').toLowerCase();
             const catStr = (item.CATEGORIA_PADRE || '').toLowerCase();
             const matchesQuery = !query || rubroStr.includes(query) || catStr.includes(query);
-            const matchesRubro = !rubro || (item.RUBRO || '') === rubro;
-            const matchesCat = !categoria || (item.CATEGORIA_PADRE || '') === categoria;
             const matchesCanal = !canal || (item.CANAL || '') === canal;
 
-            return matchesQuery && matchesRubro && matchesCat && matchesCanal;
+            return matchesQuery && sel.pasa(item) && matchesCanal;
         });
 
         DistribucionManager.renderizarTabla();
@@ -1103,16 +1102,13 @@ class DistribucionManager {
      */
     static filtrarDatosCostos() {
         const query = document.getElementById('search-distribucion').value.toLowerCase().trim();
-        const rubro = document.getElementById('filtro-rubro-distribucion').value;
-        const categoria = document.getElementById('filtro-categoria-distribucion').value;
+        const sel = DistribucionManager.seleccion();
 
         const filtrados = DistribucionManager.datosCostos.filter(item => {
             const rubroStr = (item.RUBRO || '').toLowerCase();
             const catStr = (item.CATEGORIA_PADRE || '').toLowerCase();
             const matchesQuery = !query || rubroStr.includes(query) || catStr.includes(query);
-            const matchesRubro = !rubro || (item.RUBRO || '') === rubro;
-            const matchesCat = !categoria || (item.CATEGORIA_PADRE || '') === categoria;
-            return matchesQuery && matchesRubro && matchesCat;
+            return matchesQuery && sel.pasa(item);
         });
 
         const countEl = document.getElementById('count-distribucion');
@@ -1123,8 +1119,7 @@ class DistribucionManager {
 
     static limpiarFiltros() {
         document.getElementById('search-distribucion').value = '';
-        document.getElementById('filtro-rubro-distribucion').value = '';
-        document.getElementById('filtro-categoria-distribucion').value = '';
+        DistribucionManager.seleccion().tildarTodo({ notificar: false });
         document.getElementById('filtro-canal-distribucion').value = '';
         
         if (DistribucionManager.pasoActivo === 2) {
@@ -1300,7 +1295,8 @@ class DistribucionManager {
 
         const btnParametros = document.getElementById('btn-costos-parametros');
         if (btnParametros) {
-            btnParametros.style.display = (paso === 2) ? 'inline-block' : 'none';
+            // Vive en el menú "Más acciones": como ítem de lista va en bloque.
+            btnParametros.style.display = (paso === 2) ? 'block' : 'none';
         }
 
         // Mostrar botón Guardar en el paso 1 y 2 (el paso 3 es solo lectura/análisis de desvíos)

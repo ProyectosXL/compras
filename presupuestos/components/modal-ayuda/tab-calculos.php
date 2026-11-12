@@ -199,34 +199,53 @@
             <h2 class="accordion-header">
                 <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseReserva">
                     <i class="fas fa-shield-alt me-2"></i>
-                    Stock Reserva
+                    Stock de Cobertura (reserva)
                 </button>
             </h2>
             <div id="collapseReserva" class="accordion-collapse collapse" data-bs-parent="#calculosAccordion">
                 <div class="accordion-body">
+                    <p><strong>Para qué sirve:</strong> es el stock de seguridad que queda guardado para no
+                       quedarse sin mercadería mientras llega la próxima compra. Se descuenta del stock proyectado.</p>
+
+                    <h6 class="text-primary">Argentina</h6>
                     <div class="alert alert-info">
-                        <strong>Fórmula:</strong>
-                        <code>Promedio venta últimos 12 meses × 1.5</code>
+                        <strong>Fórmula:</strong><br>
+                        <code>Ritmo de venta diario × Índice de cobertura (meses) × Días por mes</code><br>
+                        <code>Ritmo de venta diario = (Vendido en la temporada + Venta proyectada del resto de la temporada
+                              + Venta proyectada de la próxima temporada del otro tipo) / (los días de esos tres períodos)</code>
                     </div>
-                    <p><strong>Descripción:</strong> Calcula el stock de seguridad necesario para cubrir mes y medio de ventas.</p>
-                    <div class="row">
-                        <div class="col-lg-6 mb-2">
-                            <h6 class="text-primary">Propósito:</h6>
-                            <ul class="small">
-                                <li>Evitar agotamiento de stock</li>
-                                <li>Cubrir variaciones de demanda</li>
-                                <li>Garantizar disponibilidad</li>
-                            </ul>
-                        </div>
-                        <div class="col-lg-6">
-                            <h6 class="text-warning">Factor 1.5:</h6>
-                            <p class="small">Representa 1.5 meses de cobertura basado en el promedio mensual de ventas del último año.</p>
-                        </div>
+                    <ul class="small">
+                        <li><strong>Vendido en la temporada:</strong> lo vendido desde el inicio de la temporada en curso
+                            hasta la última actualización de datos. Solo se cuenta si ya pasaron los
+                            <em>días mínimos</em> de la temporada (30 por defecto): con pocas semanas, el arranque no es
+                            representativo y se usa solo la proyección.</li>
+                        <li><strong>Resto de la temporada:</strong> la venta proyectada desde hoy hasta el fin de la temporada
+                            en curso, con el índice de esa temporada.</li>
+                        <li><strong>Próxima temporada del otro tipo:</strong> si se está en verano, el próximo invierno
+                            completo; si se está en invierno, el próximo verano. Con su índice.</li>
+                        <li><strong>Índice de cobertura:</strong> meses de venta que se quieren cubrir (1,50 = 45 días con
+                            30 días por mes). Uno solo por categoría, el mismo en Verano, Invierno y Stock. Se toma, en este
+                            orden: el editado en pantalla, el de la categoría en Parámetros, el del rubro en Parámetros,
+                            0 si el rubro está en "Rubros sin cobertura" (CALZADOS y CAMPERAS por defecto), y el general.</li>
+                        <li>Si la venta proyectada se cargó a mano, se usa esa venta.</li>
+                        <li>Sin venta vendida ni proyectada, la cobertura es 0.</li>
+                    </ul>
+                    <p class="small"><strong>Consecuencia:</strong> la cobertura sigue a la venta que se está proyectando.
+                       Editar un índice de variación o una venta proyectada recalcula la cobertura y, con ella, el stock
+                       proyectado, la compra y los tramos. Como los índices de variación son propios de cada solapa, la
+                       cobertura se calcula con los de cada una; mientras nadie edite, da igual en Verano e Invierno.
+                       En la solapa Stock se elige con los índices de qué solapa se muestra.</p>
+                    <p class="small text-muted">Pasando el mouse sobre el índice de cobertura de una fila se ve la cuenta.</p>
+
+                    <h6 class="text-secondary mt-3">Uruguay</h6>
+                    <div class="alert alert-light border">
+                        <code>Promedio de venta de los últimos 12 meses × 1,5 meses</code> (lo calcula el proceso de datos).
+                        Editar el índice de cobertura lo escala en proporción.
                     </div>
                 </div>
             </div>
         </div>
-        
+
         <!-- Ventas Proyectadas -->
         <div class="accordion-item">
             <h2 class="accordion-header">
