@@ -167,6 +167,31 @@ class Presupuesto {
     }
 
     /**
+     * Fecha de la última corrida del SP y si la tabla trae lo vendido de la
+     * temporada en curso. Es lo único de la tabla que necesita recalcular una fila
+     * (los días transcurridos de la cobertura salen de acá).
+     *
+     * @return array ['ult' => DateTime|null, 'hay_vendido' => bool]
+     */
+    public function obtenerUltActualizacion() {
+        $vacio = ['ult' => null, 'hay_vendido' => false];
+        if (!$this->cid_apps) {
+            return $vacio;
+        }
+        $stmt = sqlsrv_query($this->cid_apps,
+            "SELECT MAX(ULT_ACTUALIZACION) AS ult,
+                    CASE WHEN COL_LENGTH('dbo.RO_PC_T_VENTAS_PRESUPUESTO_COMPRAS', 'VTA_TEMPORADA_EN_CURSO') IS NULL
+                         THEN 0 ELSE 1 END AS hay_vendido
+             FROM RO_PC_T_VENTAS_PRESUPUESTO_COMPRAS");
+        if ($stmt === false) {
+            return $vacio;
+        }
+        $fila = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC);
+        sqlsrv_free_stmt($stmt);
+        return ['ult' => $fila['ult'] ?? null, 'hay_vendido' => (bool)($fila['hay_vendido'] ?? 0)];
+    }
+
+    /**
      * Función de prueba para verificar la conexión
      * @return array Resultado de la prueba de conexión
      */

@@ -2,6 +2,7 @@
 require_once __DIR__.'/../../class/conexion.php';
 require_once __DIR__.'/presupuestoCalculos.php';
 require_once __DIR__.'/CostoProyeccion.php';
+require_once __DIR__.'/parametros.php';
 
 /**
  * Historial de presupuestos de compra proyectada.
@@ -128,6 +129,25 @@ class Historial {
         // la version deja de ser reproducible en cuanto alguien cambie un costo.
         $costos = $this->obtenerCostos();
 
+        // Argentina: cada fila se recalcula con la MISMA función que la pantalla
+        // (PresupuestoCalculos::calcularFila) y se compara con lo que se veía. Si algo
+        // difiere no se guarda en silencio: se devuelve qué filas y en qué, para que la
+        // persona recargue los datos o revise antes de guardar.
+        $calculosAr = null;
+        if ($this->calculoArgentina()) {
+            list($calculosAr, $diferencias) = $this->recalcularFilasArgentina(
+                $filas, $solapa, $fechaCalculo, $datos['parametros_calculo'] ?? null);
+            if ($diferencias) {
+                return [
+                    'success' => false,
+                    'codigo' => 'filas_difieren',
+                    'message' => count($diferencias) . ' fila(s) dan distinto al recalcularlas. No se guardó nada.',
+                    'diferencias' => array_slice($diferencias, 0, 100),
+                    'total_diferencias' => count($diferencias)
+                ];
+            }
+        }
+
         $tramosGuardados = 0;
 
         // Comentario general y versión de origen (script 07). Vacío es NULL: "no hay
@@ -212,7 +232,7 @@ class Historial {
             $registrosGuardados = $this->insertarDetalle(
                 $idCabecera, $nombrePresupuesto, $solapa, $pais,
                 $ahora->format('Y-m-d H:i'), $filas, $costos,
-                $fechaCalculo, $tramosGuardados
+                $fechaCalculo, $tramosGuardados, $calculosAr
             );
 
             // El reparto se calculó con los días de ESTE guardado, así que la versión
@@ -259,7 +279,7 @@ class Historial {
      * en la que todavia no se migro.
      */
     private function insertarDetalle($idCabecera, $nombre, $solapa, $pais, $fecha, $filas, $costos,
-                                     $fechaCalculo = null, &$tramosGuardados = 0) {
+                                     $fechaCalculo = null, &$tramosGuardados = 0, $calculosAr = null) {
         $ampliado = $this->detalleAmpliado();
         $conTramos = $this->hayTramos();
 
@@ -271,6 +291,10 @@ class Historial {
         }
         if ($ampliado && $this->tieneColumna('RO_T_HISTORIAL_COMPRAS_PROYECTADAS_PRESUPUESTO', 'nota')) {
             $extras[] = 'nota';
+        }
+        // Script 09 (solo Argentina): venta cargada a mano e índice de cobertura.
+        if ($ampliado && $this->tieneColumna('RO_T_HISTORIAL_COMPRAS_PROYECTADAS_PRESUPUESTO', 'venta_manual_verano')) {
+            $extras = array_merge($extras, ['venta_manual_verano', 'venta_manual_invierno', 'indice_cobertura']);
         }
 
         if ($ampliado) {
@@ -300,7 +324,7 @@ class Historial {
 
         $registrosGuardados = 0;
 
-        foreach ($filas as $fila) {
+        foreach ($filas as $indiceFila => $fila) {
             $rubro = $fila['rubro'] ?? null;
             $categoria = $fila['categoria_padre'] ?? null;
 
@@ -314,9 +338,10 @@ class Historial {
             // justo en la tabla que lee el cashflow. Numéricamente da lo mismo (las dos
             // implementaciones usan la misma fórmula y los mismos días del servidor);
             // lo que cambia es que ahora no puede NO dar lo mismo.
-            $calculo = $conTramos
-                ? $this->totalesDesdeTramos($fila, $solapa, $fechaCalculo)
-                : null;
+            // En Argentina el cálculo ya se hizo (y se verificó) antes de la transacción.
+            $calculo = $calculosAr !== null
+                ? $calculosAr[$indiceFila]
+                : ($conTramos ? $this->totalesDesdeTramos($fila, $solapa, $fechaCalculo) : null);
 
             $params = [
                 $nombre,
@@ -328,7 +353,9 @@ class Historial {
                 // round() y no (int): el cast trunca, y el reparto redondea. Hoy los
                 // componentes vienen enteros, pero si alguno trajera decimales el
                 // stock guardado y el del reparto se separarían por una unidad.
-                (int)round((float)($fila['stock_proyectado'] ?? 0)),
+                isset($calculo['stock_proyectado'])
+                    ? $calculo['stock_proyectado']
+                    : (int)round((float)($fila['stock_proyectado'] ?? 0)),
                 (float)($fila['indice_variacion_original'] ?? 0),
                 (float)($fila['indice_verano_variacion'] ?? 0),
                 (int)($fila['venta_verano_anterior'] ?? 0),
@@ -350,7 +377,8 @@ class Historial {
                     $this->intONull($fila, 'cant_pend_oc_verano'),
                     $this->intONull($fila, 'cant_pend_oc_invierno'),
                     $this->intONull($fila, 'cant_pend_oc_atemporal'),
-                    $this->intONull($fila, 'stock_cobertura'),
+                    // La cobertura CALCULADA: en Argentina sale del recálculo de la fila.
+                    isset($calculo['stock_cobertura']) ? $calculo['stock_cobertura'] : $this->intONull($fila, 'stock_cobertura'),
                     // NULL y no 0 cuando no hay costo cargado: 0 se leeria como
                     // "cuesta cero" y falsearia cualquier valorizacion.
                     $costo ? (float)$costo['costo_prom'] : null,
@@ -389,6 +417,86 @@ class Historial {
         }
 
         return $registrosGuardados;
+    }
+
+    /** Si este guardado usa el cálculo de Argentina (cobertura nueva y venta editable). */
+    private function calculoArgentina() {
+        require_once __DIR__ . '/parametros.php';
+        return $this->paisActual() === 'argentina' && Parametros::actual()->esArgentina();
+    }
+
+    /**
+     * Recalcula cada fila del payload con PresupuestoCalculos::calcularFila() y la
+     * compara contra lo que mostraba la pantalla.
+     *
+     * De la fila se toman solo las ENTRADAS (stock, OC, bases, índices, ventas
+     * manuales, índice de cobertura, lo vendido); los resultados que mandó el
+     * navegador se usan únicamente para comparar. Si coinciden, se guardan los
+     * recalculados (que son iguales); si no, no se guarda nada y se informa.
+     *
+     * @return array [cálculos por índice de fila, diferencias]
+     */
+    private function recalcularFilasArgentina($filas, $solapa, $fechaCalculo, $generales) {
+        $ult = $this->primeraFila(
+            "SELECT MAX(ULT_ACTUALIZACION) AS ult,
+                    CASE WHEN COL_LENGTH('dbo.RO_PC_T_VENTAS_PRESUPUESTO_COMPRAS', 'VTA_TEMPORADA_EN_CURSO') IS NULL
+                         THEN 0 ELSE 1 END AS hay_vendido
+             FROM RO_PC_T_VENTAS_PRESUPUESTO_COMPRAS", []);
+        $ctx = PresupuestoCalculos::contextoCalculo(
+            $solapa, $fechaCalculo, $ult['ult'] ?? null, (bool)($ult['hay_vendido'] ?? 0),
+            Parametros::actual(), is_array($generales) ? $generales : null);
+
+        $calculos = [];
+        $diferencias = [];
+        $manual = function ($v) { return ($v === null || $v === '') ? null : (int)round((float)$v); };
+
+        foreach ($filas as $i => $f) {
+            $e = [
+                'cant_stock' => (float)($f['cant_stock'] ?? 0),
+                'cant_stock_guardar' => (float)($f['cant_stock_guardar'] ?? 0),
+                'cant_pend_oc_verano' => (float)($f['cant_pend_oc_verano'] ?? 0),
+                'cant_pend_oc_invierno' => (float)($f['cant_pend_oc_invierno'] ?? 0),
+                'cant_pend_oc_atemporal' => (float)($f['cant_pend_oc_atemporal'] ?? 0),
+                'venta_verano_anterior' => (float)($f['venta_verano_anterior'] ?? 0),
+                'venta_invierno_anterior' => (float)($f['venta_invierno_anterior'] ?? 0),
+                'indice_verano' => (float)($f['indice_verano_variacion'] ?? 1.0),
+                'indice_invierno' => (float)($f['indice_invierno_variacion'] ?? $f['indice_verano_variacion'] ?? 1.0),
+                'venta_manual_verano' => $manual($f['venta_manual_verano'] ?? null),
+                'venta_manual_invierno' => $manual($f['venta_manual_invierno'] ?? null),
+                'indice_cobertura' => (float)($f['indice_cobertura'] ?? 0),
+                'vta_temporada_en_curso' => isset($f['vta_temporada_en_curso']) && $f['vta_temporada_en_curso'] !== null
+                    ? (float)$f['vta_temporada_en_curso'] : null
+            ];
+            $r = PresupuestoCalculos::calcularFila($e, $ctx);
+
+            $comparar = [
+                'venta_proyectada_verano' => $r['venta_proy_verano'],
+                'venta_proyectada_invierno' => $r['venta_proy_invierno'],
+                'stock_cobertura' => $r['stock_cobertura'],
+                'compra_proyectada' => $r['compra_proyectada']
+            ];
+            $distintos = [];
+            foreach ($comparar as $campo => $calculado) {
+                $enPantalla = (int)round((float)($f[$campo] ?? 0));
+                if ($enPantalla !== (int)$calculado) {
+                    $distintos[] = ['campo' => $campo, 'pantalla' => $enPantalla, 'recalculado' => (int)$calculado];
+                }
+            }
+            if ($distintos) {
+                $diferencias[] = ['rubro' => $f['rubro'] ?? '', 'categoria_padre' => $f['categoria_padre'] ?? '', 'campos' => $distintos];
+            }
+
+            $calculos[$i] = [
+                'tramos' => $r['tramos'],
+                'venta_proy_verano' => $r['venta_proy_verano'],
+                'venta_proy_invierno' => $r['venta_proy_invierno'],
+                'compra_proyectada' => $r['compra_proyectada'],
+                'stock_proyectado' => (int)round($r['stock_proyectado']),
+                'stock_cobertura' => $r['stock_cobertura']
+            ];
+        }
+
+        return [$calculos, $diferencias];
     }
 
     /**
@@ -534,6 +642,11 @@ class Historial {
         $conTe = $this->tieneColumna('RO_T_HISTORIAL_COMPRAS_PROYECTADAS_PRESUPUESTO', 'indice_total_empresa_original');
         if ($conNota) $detCols .= ", d.nota";
         if ($conTe) $detCols .= ", d.indice_total_empresa_original";
+        // Script 09: venta cargada a mano e índice de cobertura. Una versión anterior
+        // no los tiene y al retomarla rigen los valores de hoy.
+        if ($this->tieneColumna('RO_T_HISTORIAL_COMPRAS_PROYECTADAS_PRESUPUESTO', 'venta_manual_verano')) {
+            $detCols .= ", d.venta_manual_verano, d.venta_manual_invierno, d.indice_cobertura";
+        }
 
         if ($idCabecera && $conCabecera) {
             $version = $this->primeraFila(
@@ -601,6 +714,9 @@ class Historial {
                     'categoria_padre' => $f['categoria_padre'],
                     'indice_verano' => $f['indice_verano_variacion'] !== null ? (float)$f['indice_verano_variacion'] : null,
                     'indice_invierno' => $f['indice_invierno_variacion'] !== null ? (float)$f['indice_invierno_variacion'] : null,
+                    'venta_manual_verano' => isset($f['venta_manual_verano']) ? (int)$f['venta_manual_verano'] : null,
+                    'venta_manual_invierno' => isset($f['venta_manual_invierno']) ? (int)$f['venta_manual_invierno'] : null,
+                    'indice_cobertura' => isset($f['indice_cobertura']) ? (float)$f['indice_cobertura'] : null,
                     'nota' => $f['nota'] ?? null
                 ];
             }, $filas)
@@ -694,7 +810,14 @@ class Historial {
             return null;
         }
         // Los índices son números; la nota es texto y se recorta al largo de la columna.
-        return $columna === 'nota' ? mb_substr(trim((string)$valor), 0, 500) : (float)$valor;
+        if ($columna === 'nota') {
+            return mb_substr(trim((string)$valor), 0, 500);
+        }
+        // Venta cargada a mano: unidades enteras. NULL (no 0) cuando no se cargó.
+        if (strpos($columna, 'venta_manual_') === 0) {
+            return (int)round((float)$valor);
+        }
+        return (float)$valor;
     }
 
     /** Entero del payload, o NULL si el campo no vino (no 0: 0 es un valor real). */

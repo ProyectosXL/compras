@@ -612,7 +612,15 @@ class HistorialManager {
 
                 // Nota de la fila: por qué se tocó el índice. Una por rubro/categoría
                 // y solapa, la última que se escribió.
-                nota: item.NOTA || null
+                nota: item.NOTA || null,
+
+                // Argentina (script 09): venta cargada a mano, índice de cobertura y lo
+                // vendido de la temporada. El servidor recalcula la fila con esto y la
+                // compara con lo que se ve antes de guardar.
+                venta_manual_verano: item.VENTA_MANUAL_VERANO ?? null,
+                venta_manual_invierno: item.VENTA_MANUAL_INVIERNO ?? null,
+                indice_cobertura: item.INDICE_COBERTURA ?? null,
+                vta_temporada_en_curso: item.VTA_TEMPORADA_EN_CURSO ?? null
             }));
 
             // La fecha y el país los pone el servidor: la fecha del navegador es
@@ -624,10 +632,21 @@ class HistorialManager {
                 filas: filasParaGuardar,
                 filas_totales: datosOriginales.length,
                 comentario: datosVersion.comentario || null,
-                id_version_origen: origen && origen.id ? origen.id : null
+                id_version_origen: origen && origen.id ? origen.id : null,
+                // Los mismos días por mes / días mínimos con los que se calculó la pantalla.
+                parametros_calculo: (() => {
+                    const p = (TemporadaServidor.info() || {}).parametros || {};
+                    return { dias_por_mes: p.dias_por_mes, dias_minimos: p.dias_minimos };
+                })()
             };
 
             const respuesta = await APIClient.llamarAPI('guardar-presupuesto', {}, 'POST', payload);
+
+            if (!respuesta.success && respuesta.codigo === 'filas_difieren') {
+                UIUtils.mostrarLoading(false);
+                await HistorialManager.informarDiferencias(respuesta);
+                return;
+            }
 
             if (respuesta.success) {
                 UIUtils.mostrarAlerta(respuesta.message, 'success');
@@ -643,6 +662,35 @@ class HistorialManager {
         } finally {
             UIUtils.mostrarLoading(false);
         }
+    }
+
+    /**
+     * El servidor recalculó las filas y alguna no da lo mismo que la pantalla: no se
+     * guardó nada. Se muestra qué filas y en qué, para que la persona decida (lo
+     * habitual es que los datos se hayan cargado otro día: alcanza con recargar).
+     */
+    static async informarDiferencias(respuesta) {
+        const esc = HistorialManager.escaparHtml;
+        const n = FormatoUtils.formatearNumero;
+        const nombres = {
+            venta_proyectada_verano: 'Venta proy. verano', venta_proyectada_invierno: 'Venta proy. invierno',
+            stock_cobertura: 'Stock cobertura', compra_proyectada: 'Compra proyectada'
+        };
+        const filas = (respuesta.diferencias || []).map(d => `<tr>
+            <td class="small">${esc(d.rubro)}</td><td class="small">${esc(d.categoria_padre)}</td>
+            <td class="small">${d.campos.map(c => `${nombres[c.campo] || c.campo}: ${n(c.pantalla)} → ${n(c.recalculado)}`).join('<br>')}</td>
+        </tr>`).join('');
+        const mas = respuesta.total_diferencias > (respuesta.diferencias || []).length
+            ? `<p class="small text-muted mb-0">y ${respuesta.total_diferencias - respuesta.diferencias.length} más.</p>` : '';
+
+        await UIUtils.informar('No se guardó la versión', `
+            <p>Al recalcular las filas en el servidor, <strong>${respuesta.total_diferencias}</strong> dan distinto
+               de lo que se ve en pantalla. Para no guardar números que no se pueden reproducir, no se guardó nada.</p>
+            <p class="small">Suele pasar cuando los datos se cargaron otro día o cambiaron los Parámetros:
+               volvé a <strong>Cargar datos</strong> y guardá de nuevo.</p>
+            <div class="table-responsive" style="max-height:300px">
+              <table class="table table-sm"><thead><tr><th>Rubro</th><th>Categoría</th><th>Pantalla → recalculado</th></tr></thead>
+              <tbody>${filas}</tbody></table></div>${mas}`, 'warning');
     }
 
     /**

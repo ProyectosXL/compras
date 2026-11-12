@@ -529,7 +529,8 @@ class PresupuestoCalculos {
      * @return array una fila por tramo, en orden cronológico
      */
     public static function repartirCompraPorTramo($stockProyectado, $tramos, $bases,
-                                                  $diasRestantes, $diasTotales, $objetivo = null) {
+                                                  $diasRestantes, $diasTotales, $objetivo = null,
+                                                  $ventasPorTramo = null) {
         // El pozo va en unidades enteras: compra_proyectada también se redondea, y sin
         // esto el invariante fallaba por una unidad en las filas con stock fraccionario.
         $pozo = (float)round((float)$stockProyectado);
@@ -554,7 +555,13 @@ class PresupuestoCalculos {
                 $base = 0.0;
             }
 
-            $venta = self::ventaProyectadaDeTramo($tramo, $base, $indice, $diasRestantes, $diasTotales);
+            // Con $ventasPorTramo la venta de cada tramo ya viene resuelta (venta cargada
+            // a mano, ver ventasDeColumna): se usa tal cual para que el reparto sume
+            // exactamente lo que se ve en la columna.
+            $clave = self::claveTramo($tramo);
+            $venta = ($ventasPorTramo !== null && array_key_exists($clave, $ventasPorTramo))
+                ? (float)$ventasPorTramo[$clave]
+                : self::ventaProyectadaDeTramo($tramo, $base, $indice, $diasRestantes, $diasTotales);
 
             $aplicado = min($restante, $venta);
             $compra   = $venta - $aplicado;
@@ -597,6 +604,298 @@ class PresupuestoCalculos {
         }
 
         return $filas;
+    }
+
+    // ==================================================================
+    // VENTA PROYECTADA EDITABLE Y COBERTURA (solo Argentina)
+    // ==================================================================
+
+    /** Identifica un tramo dentro de una fila: el resto y la temporada completa del mismo código son distintos. */
+    public static function claveTramo($tramo) {
+        return $tramo['codigo'] . (empty($tramo['resto']) ? '' : '|resto');
+    }
+
+    /** Proporción de la base que proyecta un tramo: 1 si es completo, días restantes / totales si es resto. */
+    public static function factorTramo($tramo, $diasRestantes, $diasTotales) {
+        if (empty($tramo['resto'])) {
+            return 1.0;
+        }
+        return (int)$diasTotales > 0 ? $diasRestantes / $diasTotales : 0.0;
+    }
+
+    /** Días de venta de un tramo: los restantes si es resto, los de la temporada si es completo. */
+    public static function diasDeTramo($tramo, $diasRestantes) {
+        return empty($tramo['resto']) ? (int)$tramo['dias'] : (int)$diasRestantes;
+    }
+
+    /**
+     * Venta de cada tramo de UNA columna proyectada, con o sin venta cargada a mano.
+     *
+     * Sin venta manual es la fórmula de siempre (ventaProyectadaDeTramo por tramo) y el
+     * índice manda. Con venta manual V manda la venta:
+     *
+     *   - Con base > 0 se despeja el índice: V = base × índice × Σ factores, o sea
+     *     índice = V / (base × Σ factores), el MISMO para todos los tramos de la columna.
+     *     Se guarda con 6 decimales: con 2, una venta cargada de 1.000 podía volver como
+     *     996 al recalcular. Los tramos se calculan con ese índice y la fórmula de
+     *     siempre; como cada tramo redondea por su lado, la suma puede quedar a una
+     *     unidad de V, y esa diferencia se carga en el ÚLTIMO tramo de la columna.
+     *   - Con base 0 no hay índice que despejar ("venta manual"): V se reparte entre los
+     *     tramos en proporción a sus días y el último se lleva el resto del redondeo.
+     *
+     * En los dos casos la suma de los tramos es exactamente V, y como cada tramo es un
+     * entero, el invariante del reparto SUM(compra) == MAX(0, -compra_proyectada) sigue
+     * valiendo: compra_proyectada se arma restando estas mismas ventas.
+     *
+     * @param array      $tramos      tramos de la columna (obtenerPeriodosProyeccion()[col]['tramos'])
+     * @param float      $base        venta anterior de la fila
+     * @param float      $indice      índice de la temporada (se ignora si hay venta manual)
+     * @param int|null   $ventaManual venta cargada a mano, o null
+     * @return array ['ventas' => [claveTramo => int], 'total' => int, 'indice' => float|null, 'manual' => bool]
+     */
+    public static function ventasDeColumna($tramos, $base, $indice, $ventaManual, $diasRestantes, $diasTotales) {
+        $base = (float)$base;
+        $ventas = [];
+
+        if ($ventaManual === null || $ventaManual === '') {
+            // Mismos cortes que sumarColumnaProyectada(): sin base no se proyecta y un
+            // índice 0 (el SP lo da cuando no hubo venta el año anterior) vale 1,00.
+            $indiceEfectivo = (float)$indice > 0 ? (float)$indice : 1.0;
+            foreach ($tramos as $t) {
+                $ventas[self::claveTramo($t)] = $base > 0
+                    ? (int)self::ventaProyectadaDeTramo($t, $base, $indiceEfectivo, $diasRestantes, $diasTotales)
+                    : 0;
+            }
+            return ['ventas' => $ventas, 'total' => array_sum($ventas), 'indice' => (float)$indice, 'manual' => false];
+        }
+
+        $objetivo = max(0, (int)round((float)$ventaManual));
+        $sumaFactores = 0.0;
+        foreach ($tramos as $t) {
+            $sumaFactores += self::factorTramo($t, $diasRestantes, $diasTotales);
+        }
+
+        if ($base > 0 && $sumaFactores > 0) {
+            $indiceExacto = round($objetivo / ($base * $sumaFactores), 6);
+            foreach ($tramos as $t) {
+                $ventas[self::claveTramo($t)] = (int)self::ventaProyectadaDeTramo($t, $base, $indiceExacto, $diasRestantes, $diasTotales);
+            }
+        } else {
+            $indiceExacto = null;
+            $sumaDias = 0;
+            foreach ($tramos as $t) {
+                $sumaDias += self::diasDeTramo($t, $diasRestantes);
+            }
+            foreach ($tramos as $t) {
+                $ventas[self::claveTramo($t)] = $sumaDias > 0
+                    ? (int)round($objetivo * self::diasDeTramo($t, $diasRestantes) / $sumaDias)
+                    : 0;
+            }
+        }
+
+        // Ajuste del redondeo: del último tramo hacia atrás, sin dejar ninguno negativo.
+        $diferencia = $objetivo - array_sum($ventas);
+        $claves = array_keys($ventas);
+        for ($i = count($claves) - 1; $i >= 0 && $diferencia !== 0; $i--) {
+            $nuevo = max(0, $ventas[$claves[$i]] + $diferencia);
+            $diferencia -= ($nuevo - $ventas[$claves[$i]]);
+            $ventas[$claves[$i]] = $nuevo;
+        }
+
+        return ['ventas' => $ventas, 'total' => array_sum($ventas), 'indice' => $indiceExacto, 'manual' => true];
+    }
+
+    /**
+     * Índices redondos (2 decimales) más cercanos a un índice despejado de una venta
+     * cargada, con la venta que daría cada uno. Es lo que ofrece la pantalla con
+     * "Para un índice redondo: 1,23 → 996 · 1,24 → 1.004".
+     *
+     * @return array|null null si no hay base; 'aproximado' false si el índice ya es redondo
+     */
+    public static function sugerenciasIndiceRedondo($tramos, $base, $indiceExacto, $diasRestantes, $diasTotales) {
+        if ((float)$base <= 0 || $indiceExacto === null) {
+            return null;
+        }
+        $abajo = floor(round($indiceExacto * 100, 6)) / 100;
+        $arriba = ceil(round($indiceExacto * 100, 6)) / 100;
+
+        $venta = function ($indice) use ($tramos, $base, $diasRestantes, $diasTotales) {
+            return self::ventasDeColumna($tramos, $base, $indice, null, $diasRestantes, $diasTotales)['total'];
+        };
+
+        return [
+            'aproximado' => $abajo !== $arriba,
+            'indice_exacto' => $indiceExacto,
+            'abajo' => ['indice' => $abajo, 'venta' => $venta($abajo)],
+            'arriba' => ['indice' => $arriba, 'venta' => $venta($arriba)]
+        ];
+    }
+
+    /**
+     * Stock de cobertura a partir del ritmo de venta diario.
+     *
+     *   ritmo_diario    = (vendido + venta proy. resto + venta proy. próxima)
+     *                   / (días transcurridos + días restantes + días de la próxima)
+     *   stock_cobertura = round(ritmo_diario × índice_cobertura × días_por_mes)
+     *
+     * "Próxima" es la próxima temporada completa del OTRO tipo (en verano, el próximo
+     * invierno). Lo vendido y sus días entran solo si ya pasaron los días mínimos de
+     * temporada: con una o dos semanas de venta real el ritmo lo decidiría el arranque,
+     * que no es representativo.
+     *
+     * Reemplaza a la cobertura del SP (venta de 360 días / 360 × 45), que no se movía
+     * al editar índices: ahora la cobertura sigue a la venta que se está proyectando.
+     *
+     * FUNCIÓN PURA: todo entra por parámetro.
+     *
+     * @param array $a vendido (float|null), dias_transcurridos, vp_resto, dias_restantes,
+     *                 vp_proxima, dias_proxima, indice_cobertura, dias_por_mes, dias_minimos
+     */
+    public static function calcularCobertura(array $a) {
+        $usaVendido = $a['vendido'] !== null
+            && (int)$a['dias_transcurridos'] > 0
+            && (int)$a['dias_transcurridos'] >= (int)$a['dias_minimos'];
+
+        $ventas = (float)$a['vp_resto'] + (float)$a['vp_proxima'] + ($usaVendido ? (float)$a['vendido'] : 0.0);
+        $dias = (int)$a['dias_restantes'] + (int)$a['dias_proxima'] + ($usaVendido ? (int)$a['dias_transcurridos'] : 0);
+        $indice = (float)$a['indice_cobertura'];
+
+        $ritmo = ($ventas > 0 && $dias > 0) ? $ventas / $dias : 0.0;
+        $stock = ($ritmo > 0 && $indice > 0) ? (int)round($ritmo * $indice * (float)$a['dias_por_mes']) : 0;
+
+        return [
+            'stock_cobertura' => $stock,
+            'ritmo_diario'    => round($ritmo, 4),
+            'usa_vendido'     => $usaVendido,
+            'ventas'          => $ventas,
+            'dias'            => $dias,
+            'indice'          => $indice,
+            'dias_por_mes'    => (float)$a['dias_por_mes']
+        ];
+    }
+
+    /**
+     * Contexto común a todas las filas de un cálculo de Argentina: días de la
+     * temporada, qué cubre lo vendido y los parámetros de cobertura. Se arma una vez
+     * por request; calcularFila() no lee reloj, base ni parámetros por su cuenta.
+     *
+     * @param Parametros $parametros
+     * @param array|null $generales  días por mes / días mínimos que vinieron con la carga
+     *                               (para que una edición use los mismos que la carga)
+     */
+    public static function contextoCalculo($solapa, $fecha, $ultActualizacion, $hayColumnaVendido, $parametros, $generales = null) {
+        $fecha = self::normalizarFecha($fecha);
+        $venta = self::infoVentaTemporadaEnCurso($ultActualizacion, $hayColumnaVendido, $fecha);
+
+        return [
+            'solapa'             => $solapa === 'invierno' ? 'invierno' : 'verano',
+            'fecha'              => $fecha->format('Y-m-d'),
+            'dias_restantes'     => self::calcularDiasRestantesTemporada($fecha),
+            'dias_totales'       => self::obtenerTemporadaActual($fecha)['dias'],
+            'vendido_vigente'    => $venta['disponible'] && $venta['vigente'],
+            'dias_transcurridos' => $venta['dias_transcurridos'],
+            'dias_por_mes'       => (float)($generales['dias_por_mes'] ?? $parametros->numero('COBERTURA_DIAS_POR_MES')),
+            'dias_minimos'       => (int)($generales['dias_minimos'] ?? $parametros->numero('COBERTURA_DIAS_MINIMOS_VENDIDO'))
+        ];
+    }
+
+    /**
+     * Todo el cálculo de UNA fila de una solapa de compra de Argentina: ventas
+     * proyectadas (con venta manual), índices efectivos, cobertura, stock proyectado,
+     * compra y reparto por tramo.
+     *
+     * Es la única implementación: la usan la carga de las solapas, recalcular-fila
+     * (cada edición en pantalla), el guardado de versiones y "Retomar". Uruguay no
+     * pasa por acá y sigue con procesarRegistroCompraProyectada().
+     *
+     * @param array $e  cant_stock, cant_stock_guardar, cant_pend_oc_verano/_invierno/_atemporal,
+     *                  venta_verano_anterior, venta_invierno_anterior, indice_verano,
+     *                  indice_invierno, venta_manual_verano, venta_manual_invierno (int|null),
+     *                  indice_cobertura, vta_temporada_en_curso (float|null)
+     * @param array $ctx de contextoCalculo()
+     */
+    public static function calcularFila(array $e, array $ctx) {
+        $fecha = $ctx['fecha'];
+        $dr = (int)$ctx['dias_restantes'];
+        $dt = (int)$ctx['dias_totales'];
+        $periodos = self::obtenerPeriodosProyeccion($fecha, $ctx['solapa']);
+        $actual = self::obtenerTemporadaActual($fecha);
+
+        $columnas = [];
+        $ventasPorTramo = [];
+        foreach (['verano' => 'VERANO', 'invierno' => 'INVIERNO'] as $col => $tipo) {
+            $manual = $e["venta_manual_$col"] ?? null;
+            $manual = ($manual === null || $manual === '') ? null : (int)$manual;
+            $columnas[$col] = self::ventasDeColumna(
+                $periodos[$col]['tramos'], $e["venta_{$col}_anterior"] ?? 0, $e["indice_$col"] ?? 1.0, $manual, $dr, $dt);
+            $columnas[$col]['sugerencias'] = $manual === null ? null
+                : self::sugerenciasIndiceRedondo($periodos[$col]['tramos'], $e["venta_{$col}_anterior"] ?? 0,
+                                                 $columnas[$col]['indice'], $dr, $dt);
+            $ventasPorTramo += $columnas[$col]['ventas'];
+        }
+
+        // Tramos de la cobertura: el resto de la temporada en curso y la próxima completa
+        // del otro tipo. Los dos están en las dos solapas (obtenerPeriodosProyeccion).
+        $otroTipo = $actual['temporada'] === 'VERANO' ? 'INVIERNO' : 'VERANO';
+        $proxima = self::proximaTemporadaDeTipo($actual, $otroTipo);
+        $vpResto = 0;
+        $vpProxima = 0;
+        foreach (self::tramosCronologicos($periodos) as $t) {
+            if (!empty($t['resto'])) {
+                $vpResto = $ventasPorTramo[self::claveTramo($t)] ?? 0;
+            } elseif ($t['codigo'] === $proxima['codigo']) {
+                $vpProxima = $ventasPorTramo[self::claveTramo($t)] ?? 0;
+            }
+        }
+
+        $vendido = $e['vta_temporada_en_curso'] ?? null;
+        $cobertura = self::calcularCobertura([
+            'vendido'            => ($ctx['vendido_vigente'] && $vendido !== null) ? (float)$vendido : null,
+            'dias_transcurridos' => $ctx['dias_transcurridos'],
+            'vp_resto'           => $vpResto,
+            'dias_restantes'     => $dr,
+            'vp_proxima'         => $vpProxima,
+            'dias_proxima'       => $proxima['dias'],
+            'indice_cobertura'   => $e['indice_cobertura'] ?? 0,
+            'dias_por_mes'       => $ctx['dias_por_mes'],
+            'dias_minimos'       => $ctx['dias_minimos']
+        ]);
+
+        $stockProyectado = self::calcularStockProyectado(
+            (float)($e['cant_stock'] ?? 0), (float)($e['cant_stock_guardar'] ?? 0),
+            (float)($e['cant_pend_oc_verano'] ?? 0), (float)($e['cant_pend_oc_invierno'] ?? 0),
+            (float)($e['cant_pend_oc_atemporal'] ?? 0), $cobertura['stock_cobertura']);
+
+        $tramos = self::repartirCompraPorTramo(
+            $stockProyectado,
+            self::tramosCronologicos($periodos),
+            [
+                'VERANO'   => ['valor' => $e['venta_verano_anterior'] ?? 0,   'indice' => $e['indice_verano'] ?? 1.0],
+                'INVIERNO' => ['valor' => $e['venta_invierno_anterior'] ?? 0, 'indice' => $e['indice_invierno'] ?? 1.0]
+            ],
+            $dr, $dt, $periodos['objetivo'], $ventasPorTramo);
+
+        $vpv = $columnas['verano']['total'];
+        $vpi = $columnas['invierno']['total'];
+
+        return [
+            'venta_proy_verano'     => $vpv,
+            'venta_proy_invierno'   => $vpi,
+            // Con venta manual el índice es el despejado (null si no hay base); sin ella,
+            // el que se cargó, sin tocar.
+            'indice_verano'         => $columnas['verano']['indice'],
+            'indice_invierno'       => $columnas['invierno']['indice'],
+            'venta_manual_verano'   => $columnas['verano']['manual'] ? $vpv : null,
+            'venta_manual_invierno' => $columnas['invierno']['manual'] ? $vpi : null,
+            'sugerencias_verano'    => $columnas['verano']['sugerencias'],
+            'sugerencias_invierno'  => $columnas['invierno']['sugerencias'],
+            'indice_cobertura'      => (float)($e['indice_cobertura'] ?? 0),
+            'stock_cobertura'       => $cobertura['stock_cobertura'],
+            'cobertura'             => $cobertura,
+            'stock_proyectado'      => $stockProyectado,
+            'compra_proyectada'     => (int)(round($stockProyectado) - $vpv - $vpi),
+            'tramos'                => $tramos
+        ];
     }
 
     /**
@@ -726,8 +1025,10 @@ class PresupuestoCalculos {
         // Límites razonables para el índice de variación
         if ($indice < 0) return 0;
         if ($indice > 10) return 10; // Máximo 1000% de variación
-        
-        return round($indice, 4);
+
+        // 6 decimales y no 4: un índice despejado de una venta cargada a mano necesita
+        // esa precisión para que, al recalcularlo (Retomar), vuelva la misma venta.
+        return round($indice, 6);
     }
 
     /**
@@ -782,6 +1083,9 @@ class PresupuestoCalculos {
             'desde'      => $temporada['desde'],
             'fecha_corte' => null,
             'dias_sin_contar' => 0,
+            // Días que cubre lo vendido: del primer día de la temporada al corte
+            // (inclusive). Es el D_transcurridos del ritmo de la cobertura.
+            'dias_transcurridos' => 0,
             'vigente'    => false
         ];
 
@@ -797,6 +1101,10 @@ class PresupuestoCalculos {
         $info['vigente'] = self::obtenerTemporadaActual($corrida)['codigo'] === $temporada['codigo'];
         // Días entre el corte y ayer que no suma nadie: el resto proyectado empieza hoy.
         $info['dias_sin_contar'] = $corrida < $hoy ? (int)$corrida->diff($hoy)->days : 0;
+        // corte - desde + 1 = corrida - desde. Con el SP corrido el 12/11 en VER 26-27
+        // son los 103 días del 01/08 al 11/11.
+        $desde = new DateTime($temporada['desde']);
+        $info['dias_transcurridos'] = ($info['vigente'] && $corrida > $desde) ? (int)$desde->diff($corrida)->days : 0;
 
         return $info;
     }

@@ -277,8 +277,21 @@ const TablaRendererUtils = {
 
             // El valor se lee al hacer clic y no al armar la fila: después de una
             // edición la celda muestra otro número que el que tenía al renderizarse.
-            td.addEventListener('click', () => {
-                const actual = parseFloat(td.querySelector('.indice-input')?.value) || 0;
+            td.addEventListener('click', (e) => {
+                if (e.target.closest('.btn-restaurar-original')) return;
+                // La fila se busca en memoria al hacer clic: después de un recálculo de
+                // Argentina el objeto es el mismo pero sus campos cambiaron.
+                const actualReg = IndiceEditor.datoDe(solapa, item.RUBRO, item.CATEGORIA_PADRE) || item;
+                const T = temporada.toUpperCase();
+                const sug = actualReg[`SUGERENCIAS_${T}`];
+                const manual = actualReg[`VENTA_MANUAL_${T}`];
+                if (actualReg.CALCULO_AR && manual !== null && manual !== undefined && sug && sug.aproximado) {
+                    IndiceEditor.mostrarSugerencias(td, solapa, item.RUBRO, item.CATEGORIA_PADRE, temporada);
+                    return;
+                }
+                const actual = parseFloat(temporada === 'invierno'
+                    ? (actualReg.INDICE_VARIACION_INVIERNO ?? actualReg.INDICE_VARIACION)
+                    : actualReg.INDICE_VARIACION) || 0;
                 IndiceEditor.editarIndice(item.RUBRO, item.CATEGORIA_PADRE, actual, solapa, null, temporada);
             });
             return td;
@@ -600,6 +613,101 @@ const TablaRendererUtils = {
             TablaRendererUtils.escribirNumero(compra, valor);
             compra.className = `text-end bg-success-subtle text-success-emphasis fw-bold ${FormatoUtils.obtenerClaseValor(valor)}`;
         }
+
+        if (item.CALCULO_AR) {
+            TablaRendererUtils.pintarMarcasVentaAr(fila, item);
+            if (tdCob) tdCob.title = TablaRendererUtils.ayudaCobertura(item);
+        }
+    },
+
+    /**
+     * Tooltip de la cobertura de Argentina: de dónde sale el número (ritmo diario ×
+     * meses × días por mes), para que no sea una caja negra.
+     */
+    ayudaCobertura(item) {
+        const d = item.COBERTURA_DETALLE;
+        const n = FormatoUtils.formatearNumero;
+        const base = 'Índice de cobertura en meses de venta. Clic para editarlo (es uno solo por categoría: '
+                   + 'cambia en Verano, Invierno y Stock).';
+        if (!d) return base;
+        const defecto = parseFloat(item.INDICE_COBERTURA_DEFECTO ?? 0).toFixed(2);
+        const origen = { categoria: 'Parámetros, por categoría', rubro: 'Parámetros, por rubro',
+                         sin_cobertura: 'rubro sin cobertura', general: 'Parámetros, general' }[item.INDICE_COBERTURA_ORIGEN] || '';
+        return `${base}\n\nStock cobertura = ritmo diario × índice × días por mes\n`
+             + `= ${String(d.ritmo_diario).replace('.', ',')} × ${parseFloat(d.indice).toFixed(2)} × ${d.dias_por_mes} = ${n(item.STOCK_COBERTURA || 0)}\n`
+             + `Ritmo diario = ${n(d.ventas)} u. / ${n(d.dias)} días`
+             + (d.usa_vendido ? ' (incluye lo vendido de la temporada en curso)' : ' (solo proyección: todavía no pasaron los días mínimos)')
+             + `\nPor defecto: ${defecto}${origen ? ' (' + origen + ')' : ''}`;
+    },
+
+    /**
+     * Marcas de la venta proyectada de Argentina en una fila:
+     *   - venta cargada a mano: celda de venta marcada como editada, con restaurar;
+     *   - índice no redondo: "≈" delante del índice y el detalle en el tooltip;
+     *   - sin venta anterior: el índice muestra "—" y la marca "venta manual".
+     */
+    pintarMarcasVentaAr(fila, item) {
+        if (!fila || !item || !item.CALCULO_AR) return;
+        const fmt = (x, d) => Number(x).toLocaleString('es-AR', { minimumFractionDigits: d, maximumFractionDigits: d });
+
+        ['verano', 'invierno'].forEach(temporada => {
+            const T = temporada.toUpperCase();
+            const tdIdx = fila.querySelector(`td[data-indice-editable="${temporada}"]`);
+            const tdVenta = TablaRendererUtils.celdaDeColumna(fila, temporada === 'invierno' ? 'venta-proy-inv' : 'venta-proy-ver');
+            const manual = item[`VENTA_MANUAL_${T}`];
+            const hayManual = manual !== null && manual !== undefined;
+            const sinBase = TemporadaServidor.ventaAnteriorDe(item, T) <= 0;
+            const sug = item[`SUGERENCIAS_${T}`];
+
+            if (tdIdx) {
+                tdIdx.querySelectorAll('.marca-aprox, .marca-manual').forEach(el => el.remove());
+                const input = tdIdx.querySelector('.indice-input');
+                if (input) input.classList.remove('d-none');
+                tdIdx.classList.remove('indice-aproximado');
+
+                if (hayManual && sinBase) {
+                    if (input) input.classList.add('d-none');
+                    const span = document.createElement('span');
+                    span.className = 'marca-manual';
+                    span.innerHTML = '— <span class="badge bg-info-subtle text-info-emphasis">venta manual</span>';
+                    tdIdx.insertBefore(span, tdIdx.firstChild);
+                    tdIdx.title = 'Sin venta anterior: no hay índice. La venta proyectada se cargó a mano y se '
+                                + 'reparte entre los tramos según sus días.';
+                } else if (hayManual && sug && sug.aproximado) {
+                    const span = document.createElement('span');
+                    span.className = 'marca-aprox';
+                    span.textContent = '≈';
+                    tdIdx.insertBefore(span, tdIdx.firstChild);
+                    tdIdx.classList.add('indice-aproximado');
+                    tdIdx.title = `Índice exacto ${fmt(sug.indice_exacto, 4)}. Para un índice redondo: `
+                                + `${fmt(sug.abajo.indice, 2)} → ${FormatoUtils.formatearNumero(sug.abajo.venta)} unidades · `
+                                + `${fmt(sug.arriba.indice, 2)} → ${FormatoUtils.formatearNumero(sug.arriba.venta)} unidades. `
+                                + 'Clic para elegir.';
+                }
+            }
+
+            if (!tdVenta) return;
+            tdVenta.classList.toggle('indice-editado', hayManual);
+            tdVenta.title = hayManual
+                ? 'Venta proyectada cargada a mano. Clic para cambiarla; × vuelve al índice original.'
+                : 'Venta proyectada. Clic para cargarla a mano (se recalcula el índice).';
+            const btn = tdVenta.querySelector('.btn-restaurar-original');
+            if (hayManual && !btn) {
+                const b = document.createElement('button');
+                b.className = 'btn-restaurar-original';
+                b.innerHTML = '×';
+                b.title = 'Descartar la venta cargada y volver al índice original';
+                b.onclick = (e) => {
+                    e.stopPropagation();
+                    if (confirm('¿Descartar la venta cargada y volver al índice original?')) {
+                        IndiceEditor.restaurarIndiceOriginalDesdeDatos(fila, temporada);
+                    }
+                };
+                tdVenta.appendChild(b);
+            } else if (!hayManual && btn) {
+                btn.remove();
+            }
+        });
     },
 
     // NUEVO: Obtener índice original del registro
@@ -896,6 +1004,18 @@ class TablaRenderer {
         tr.appendChild(celda('venta-proy-inv', 'text-end bg-primary-subtle text-primary-emphasis fw-bold', null, 'Venta proyectada invierno'));
 
         tr.appendChild(celda('compra-proyectada', '', null, 'Compra proyectada'));
+
+        // Argentina: la venta proyectada se puede cargar a mano (el índice se despeja).
+        if (item.CALCULO_AR) {
+            [['venta-proy-ver', 'verano'], ['venta-proy-inv', 'invierno']].forEach(([col, temporada]) => {
+                const td = TablaRendererUtils.celdaDeColumna(tr, col);
+                td.classList.add('editable-cell', 'venta-editable');
+                td.addEventListener('click', (e) => {
+                    if (e.target.closest('.btn-restaurar-original')) return;
+                    IndiceEditor.editarVenta(item.RUBRO, item.CATEGORIA_PADRE, solapa, temporada);
+                });
+            });
+        }
 
         // Vendido / Resto / Total de la temporada en curso, al lado de su Venta Proy.
         TablaRendererUtils.agregarCeldasTemporadaEnCurso(tr, item);

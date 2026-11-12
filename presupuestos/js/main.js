@@ -350,6 +350,13 @@ class PresupuestoApp {
                 item._indicesOriginales = { verano: original, invierno: original };
             }
 
+            // Argentina: el índice de cobertura "original" es el que corresponde a la fila
+            // según Parámetros (no 1,50 fijo), y la cobertura la recalcula el servidor.
+            if (item.CALCULO_AR) {
+                item._factorCoberturaOriginal = parseFloat(item.INDICE_COBERTURA_DEFECTO ?? 0);
+                return;
+            }
+
             // Cobertura de stock y factor
             const stockCob = parseFloat(item.STOCK_COBERTURA || 0);
             if (item._stockCoberturaOriginal === undefined) {

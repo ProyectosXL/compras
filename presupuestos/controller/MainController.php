@@ -42,6 +42,11 @@ class MainController {
                     !empty($datos) && array_key_exists('VTA_TEMPORADA_EN_CURSO', $datos[0])
                 );
 
+                // Límites de edición y días de la cobertura (Parámetros). Viajan con la
+                // carga para que cada edición use los mismos valores que la carga.
+                require_once __DIR__ . '/../class/parametros.php';
+                $infoTemporada['parametros'] = Parametros::actual()->paraCliente();
+
                 // Extraer ULT_ACTUALIZACION del primer registro de la tabla
                 if (!empty($datos) && isset($datos[0]['ULT_ACTUALIZACION'])) {
                     $ultAct = $datos[0]['ULT_ACTUALIZACION'];
@@ -134,6 +139,16 @@ class MainController {
                     }
                     if (isset($indices[$clave]['indice_invierno'])) {
                         $registro['_INDICE_EDITADO_INVIERNO'] = PresupuestoCalculos::validarIndiceVariacion($indices[$clave]['indice_invierno']);
+                    }
+                    // Venta cargada a mano e índice de cobertura de la versión. Solo los
+                    // usa el cálculo de Argentina; en Uruguay no vienen y no se leen.
+                    foreach (['venta_manual_verano' => '_VENTA_MANUAL_VERANO', 'venta_manual_invierno' => '_VENTA_MANUAL_INVIERNO'] as $origen => $destino) {
+                        if (isset($indices[$clave][$origen]) && $indices[$clave][$origen] !== '') {
+                            $registro[$destino] = max(0, (int)$indices[$clave][$origen]);
+                        }
+                    }
+                    if (isset($indices[$clave]['indice_cobertura']) && $indices[$clave]['indice_cobertura'] !== '') {
+                        $registro['_INDICE_COBERTURA_EDITADO'] = max(0.0, (float)$indices[$clave]['indice_cobertura']);
                     }
                 }
                 unset($registro);
@@ -331,6 +346,90 @@ class MainController {
     }
 
     /**
+     * Recalcula UNA fila de Argentina con PresupuestoCalculos::calcularFila(), la
+     * misma función que la carga de las solapas.
+     *
+     * Reemplaza a recalcular-tramos en Argentina: desde que la cobertura depende de
+     * la venta proyectada, editar un índice mueve también la cobertura, el stock
+     * proyectado y la compra, y nada de eso se recalcula en el navegador.
+     *
+     * Body: { solapa, editado, entrada: {cant_*, venta_*_anterior, indice_*,
+     *         venta_manual_*, indice_cobertura, vta_temporada_en_curso},
+     *         dias_por_mes, dias_minimos }
+     * "editado" (indice_verano, venta_verano, ...) dice qué valor tocó el usuario,
+     * para validar solo ese contra el rango del índice de variación.
+     */
+    public function recalcularFila() {
+        try {
+            require_once __DIR__ . '/../class/parametros.php';
+            $parametros = Parametros::actual();
+            if (!$parametros->esArgentina()) {
+                $this->jsonResponse(['success' => false, 'message' => 'recalcular-fila es solo de Argentina.'], 400);
+            }
+
+            $entrada = json_decode(file_get_contents('php://input'), true) ?: [];
+            $solapa = (strtolower($entrada['solapa'] ?? '') === 'invierno') ? 'invierno' : 'verano';
+            $e = $entrada['entrada'] ?? [];
+
+            $numericos = ['cant_stock', 'cant_stock_guardar', 'cant_pend_oc_verano', 'cant_pend_oc_invierno',
+                          'cant_pend_oc_atemporal', 'venta_verano_anterior', 'venta_invierno_anterior',
+                          'indice_verano', 'indice_invierno', 'indice_cobertura'];
+            foreach ($numericos as $campo) {
+                $e[$campo] = (float)($e[$campo] ?? 0);
+            }
+            foreach (['venta_manual_verano', 'venta_manual_invierno'] as $campo) {
+                $v = $e[$campo] ?? null;
+                if ($v !== null && $v !== '' && (!is_numeric($v) || $v < 0)) {
+                    $this->jsonResponse(['success' => false, 'message' => 'La venta tiene que ser un número mayor o igual a 0.'], 400);
+                }
+                $e[$campo] = ($v === null || $v === '') ? null : (int)round((float)$v);
+            }
+            $e['vta_temporada_en_curso'] = isset($e['vta_temporada_en_curso']) && $e['vta_temporada_en_curso'] !== null
+                ? (float)$e['vta_temporada_en_curso'] : null;
+
+            $ult = $this->presupuesto->obtenerUltActualizacion();
+            $generales = [];
+            if (isset($entrada['dias_por_mes']) && is_numeric($entrada['dias_por_mes'])) {
+                $generales['dias_por_mes'] = (float)$entrada['dias_por_mes'];
+            }
+            if (isset($entrada['dias_minimos']) && is_numeric($entrada['dias_minimos'])) {
+                $generales['dias_minimos'] = (int)$entrada['dias_minimos'];
+            }
+            $ctx = PresupuestoCalculos::contextoCalculo($solapa, null, $ult['ult'], $ult['hay_vendido'], $parametros, $generales);
+
+            $r = PresupuestoCalculos::calcularFila($e, $ctx);
+
+            // Rango del índice de variación (Parámetros) para el valor que se tocó. Una
+            // venta cargada se valida por el índice que implica; sin base no hay índice
+            // y se acepta cualquier venta >= 0.
+            $editado = (string)($entrada['editado'] ?? '');
+            $min = $parametros->numero('VARIACION_INDICE_MIN');
+            $max = $parametros->numero('VARIACION_INDICE_MAX');
+            foreach (['verano', 'invierno'] as $col) {
+                $indice = null;
+                if ($editado === "venta_$col" && $r["venta_manual_$col"] !== null) $indice = $r["indice_$col"];
+                if ($editado === "indice_$col") $indice = $e["indice_$col"];
+                if ($indice !== null && ($indice < $min - 1e-9 || $indice > $max + 1e-9)) {
+                    $this->jsonResponse([
+                        'success' => false,
+                        'codigo' => 'fuera_de_rango',
+                        'message' => sprintf('Ese valor implica un índice de %s, fuera del rango permitido (%s a %s). No se aplicó.',
+                            number_format($indice, 4, ',', '.'), number_format($min, 2, ',', '.'), number_format($max, 2, ',', '.'))
+                    ]);   // 200: es una validación de negocio, no un error del servidor
+                }
+            }
+
+            $this->jsonResponse([
+                'success' => true,
+                'fila' => ProcesadorDatos::camposCalculoArgentina($r, $e)
+            ]);
+
+        } catch (Exception $ex) {
+            $this->jsonResponse(['success' => false, 'message' => 'Error al recalcular la fila: ' . $ex->getMessage()], 500);
+        }
+    }
+
+    /**
      * Procesar solicitudes HTTP y rutear a controladores específicos
      */
     public function procesarSolicitud() {
@@ -483,6 +582,11 @@ class MainController {
             // la última vez. Es una fila por edición, así que el viaje no pesa.
             case 'recalcular-tramos':
                 $this->recalcularTramos();
+                break;
+            // Argentina: toda la fila (venta, índices, cobertura, stock, compra y
+            // tramos) después de editar un índice, una venta o la cobertura.
+            case 'recalcular-fila':
+                $this->recalcularFila();
                 break;
             case 'guardar-parametro':
             case 'guardar-cobertura-parametro':

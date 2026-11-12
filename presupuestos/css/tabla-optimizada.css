@@ -733,3 +733,34 @@ th.th-ordenable:hover {
     max-height: 50vh;
     overflow-y: auto;
 }
+
+/* =====================================================================
+   Venta proyectada editable (Argentina)
+   ===================================================================== */
+td.venta-editable {
+    cursor: pointer;
+    position: relative;
+}
+
+td.venta-editable:hover {
+    outline: 1px dashed rgba(13, 110, 253, .5);
+    outline-offset: -2px;
+}
+
+/* "≈": el índice que se ve (2 decimales) no es el exacto que despejó la venta. */
+td .marca-aprox {
+    font-weight: 700;
+    color: #b35c00;
+    margin-right: 1px;
+}
+
+td.indice-aproximado .indice-input {
+    display: inline-block;
+    width: calc(100% - 1.1em);
+}
+
+/* Sin venta anterior: no hay índice, la venta se cargó a mano. */
+td .marca-manual {
+    white-space: nowrap;
+    font-size: .8rem;
+}

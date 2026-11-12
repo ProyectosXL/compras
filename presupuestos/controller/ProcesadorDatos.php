@@ -64,11 +64,109 @@ class ProcesadorDatos {
             'INDICE_TE' => $teDisponible ? round($indiceTe, 2) : null,
             'INDICE_VAR_ORIGINAL' => round($original, 2),
             'INDICE_ORIGINAL' => round($original, 2),
-            'INDICE_VARIACION' => round($editableVerano, 2),
-            'INDICE_VARIACION_INVIERNO' => round($editableInvierno, 2)
+            // 6 decimales: un índice despejado de una venta cargada a mano (Retomar)
+            // tiene que llegar entero a la pantalla, que lo muestra con 2.
+            'INDICE_VARIACION' => round($editableVerano, 6),
+            'INDICE_VARIACION_INVIERNO' => round($editableInvierno, 6)
         ];
 
         return [$paraCalculo, $campos];
+    }
+
+    // ------------------------------------------------------------------
+    // Cálculo de Argentina (cobertura nueva y venta editable)
+    // ------------------------------------------------------------------
+
+    /**
+     * Si la solicitud usa el cálculo nuevo. Solo Argentina: Uruguay sigue con la
+     * cobertura del SP y sin venta editable, exactamente como antes.
+     */
+    public static function calculoArgentina() {
+        require_once __DIR__ . '/../class/parametros.php';
+        return Parametros::actual()->esArgentina();
+    }
+
+    /** Contexto de cálculo de una solapa a partir de los datos crudos del SP. */
+    public static function contextoDesdeDatos($datos, $solapa) {
+        require_once __DIR__ . '/../class/parametros.php';
+        $primera = $datos[0] ?? [];
+        return PresupuestoCalculos::contextoCalculo(
+            $solapa, null,
+            $primera['ULT_ACTUALIZACION'] ?? null,
+            array_key_exists('VTA_TEMPORADA_EN_CURSO', $primera),
+            Parametros::actual()
+        );
+    }
+
+    /**
+     * Entrada de PresupuestoCalculos::calcularFila() a partir de un registro del SP.
+     *
+     * Las ediciones que llegan "impuestas" (Retomar versión) vienen en campos con
+     * guión bajo, igual que _INDICE_EDITADO_*: venta manual e índice de cobertura.
+     *
+     * @return array [entrada, bases, índice de cobertura por defecto]
+     */
+    private function entradaArgentina($registro, $registroCalculo) {
+        $baseVerano = PresupuestoCalculos::extraerColumnaVentaAnterior($registro, 'VERANO');
+        $baseInvierno = PresupuestoCalculos::extraerColumnaVentaAnterior($registro, 'INVIERNO');
+        $defecto = Parametros::actual()->indiceCoberturaDefecto($registro['RUBRO'] ?? '', $registro['CATEGORIA_PADRE'] ?? '');
+
+        $entrada = [
+            'cant_stock' => (float)($registro['CANT_STOCK'] ?? 0),
+            'cant_stock_guardar' => (float)($registro['CANT_STOCK_GUARDAR'] ?? 0),
+            'cant_pend_oc_verano' => (float)($registro['CANT_PEND_OC_VERANO'] ?? 0),
+            'cant_pend_oc_invierno' => (float)($registro['CANT_PEND_OC_INVIERNO'] ?? 0),
+            'cant_pend_oc_atemporal' => (float)($registro['CANT_PEND_OC_ATEMPORAL'] ?? 0),
+            'venta_verano_anterior' => $baseVerano ? $baseVerano['valor'] : 0,
+            'venta_invierno_anterior' => $baseInvierno ? $baseInvierno['valor'] : 0,
+            'indice_verano' => (float)$registroCalculo['INDICE_VARIACION'],
+            'indice_invierno' => (float)$registroCalculo['INDICE_VARIACION_INVIERNO'],
+            'venta_manual_verano' => $registro['_VENTA_MANUAL_VERANO'] ?? null,
+            'venta_manual_invierno' => $registro['_VENTA_MANUAL_INVIERNO'] ?? null,
+            'indice_cobertura' => isset($registro['_INDICE_COBERTURA_EDITADO'])
+                ? (float)$registro['_INDICE_COBERTURA_EDITADO']
+                : $defecto['indice'],
+            'vta_temporada_en_curso' => array_key_exists('VTA_TEMPORADA_EN_CURSO', $registro)
+                ? (float)($registro['VTA_TEMPORADA_EN_CURSO'] ?? 0) : null
+        ];
+
+        return [$entrada, [$baseVerano, $baseInvierno], $defecto];
+    }
+
+    /**
+     * Campos de una fila procesada a partir del resultado de calcularFila(). Los usan
+     * la carga de las solapas y recalcular-fila, así una edición devuelve exactamente
+     * los mismos campos que la carga.
+     *
+     * @param array $r       resultado de PresupuestoCalculos::calcularFila()
+     * @param array $entrada la entrada con la que se calculó
+     */
+    public static function camposCalculoArgentina(array $r, array $entrada) {
+        $campos = [
+            'CALCULO_AR' => true,
+            'STOCK_PROYECTADO' => round($r['stock_proyectado'], 2),
+            'STOCK_COBERTURA' => $r['stock_cobertura'],
+            'INDICE_COBERTURA' => round($r['indice_cobertura'], 4),
+            'COBERTURA_DETALLE' => $r['cobertura'],
+            'VENTA_PROY_VERANO' => $r['venta_proy_verano'],
+            'VENTA_PROY_INVIERNO' => $r['venta_proy_invierno'],
+            'COMPRA_PROYECTADA' => $r['compra_proyectada'],
+            'TRAMOS' => $r['tramos'],
+            'VENTA_MANUAL_VERANO' => $r['venta_manual_verano'],
+            'VENTA_MANUAL_INVIERNO' => $r['venta_manual_invierno'],
+            'SUGERENCIAS_VERANO' => $r['sugerencias_verano'],
+            'SUGERENCIAS_INVIERNO' => $r['sugerencias_invierno']
+        ];
+        // El índice despejado de una venta manual reemplaza al editable. Con base 0 no
+        // hay índice (la pantalla muestra "—") y el editable queda como estaba, para
+        // que restaurar o editar el índice después partan de un número.
+        if ($r['venta_manual_verano'] !== null && $r['indice_verano'] !== null) {
+            $campos['INDICE_VARIACION'] = round($r['indice_verano'], 6);
+        }
+        if ($r['venta_manual_invierno'] !== null && $r['indice_invierno'] !== null) {
+            $campos['INDICE_VARIACION_INVIERNO'] = round($r['indice_invierno'], 6);
+        }
+        return $campos;
     }
 
     /**
@@ -126,11 +224,19 @@ class ProcesadorDatos {
         // Asegurar que no hay duplicados en los datos fuente
         $datosUnicos = $this->eliminarDuplicados($datos);
 
+        $argentina = self::calculoArgentina();
+        $ctx = $argentina ? self::contextoDesdeDatos($datosUnicos, $contexto) : null;
+
         foreach ($datosUnicos as $index => $registro) {
             try {
-                $stockProyectado = $this->calcularStockProyectadoRegistro($registro);
                 list($registroCalculo, $camposIndices) = $this->prepararIndices($registro);
 
+                if ($argentina) {
+                    $resultado[] = $this->procesarFilaArgentina($registro, $registroCalculo, $camposIndices, $ctx);
+                    continue;
+                }
+
+                $stockProyectado = $this->calcularStockProyectadoRegistro($registro);
                 $calculosCompra = PresupuestoCalculos::procesarRegistroCompraProyectada(
                     $registroCalculo,
                     $stockProyectado,
@@ -188,6 +294,44 @@ class ProcesadorDatos {
     }
 
     /**
+     * Una fila de compra de Argentina: misma forma que la de Uruguay (los mismos
+     * campos, para que la pantalla, el Excel y el guardado no tengan dos versiones)
+     * más los del cálculo nuevo: cobertura con su detalle, ventas manuales y las
+     * sugerencias de índice redondo.
+     */
+    private function procesarFilaArgentina($registro, $registroCalculo, $camposIndices, $ctx) {
+        list($entrada, $bases, $defecto) = $this->entradaArgentina($registro, $registroCalculo);
+        $r = PresupuestoCalculos::calcularFila($entrada, $ctx);
+
+        $fila = [
+            'RUBRO' => $this->limpiarTexto($registro['RUBRO'] ?? ''),
+            'CATEGORIA_PADRE' => $this->limpiarTexto($registro['CATEGORIA_PADRE'] ?? ''),
+            'STOCK_PROYECTADO' => 0
+        ] + $camposIndices + [
+            'CANT_STOCK' => (int)($registro['CANT_STOCK'] ?? 0),
+            'CANT_STOCK_GUARDAR' => (int)($registro['CANT_STOCK_GUARDAR'] ?? 0),
+            'CANT_PEND_OC_VERANO' => (int)($registro['CANT_PEND_OC_VERANO'] ?? 0),
+            'CANT_PEND_OC_INVIERNO' => (int)($registro['CANT_PEND_OC_INVIERNO'] ?? 0),
+            'CANT_PEND_OC_ATEMPORAL' => (int)($registro['CANT_PEND_OC_ATEMPORAL'] ?? 0),
+            // Índice de cobertura que corresponde a la fila sin editar (Parámetros): es
+            // contra el que se marca "editado" y al que vuelve Restaurar.
+            'INDICE_COBERTURA_DEFECTO' => round($defecto['indice'], 4),
+            'INDICE_COBERTURA_ORIGEN' => $defecto['origen'],
+            'VENTA_VERANO_ANTERIOR' => round($entrada['venta_verano_anterior'], 0),
+            'TEMPORADA_BASE_VERANO' => $bases[0] ? $bases[0]['codigo'] : null,
+            'TEMPORADA_BASE_INVIERNO' => $bases[1] ? $bases[1]['codigo'] : null,
+            'VENTA_INVIERNO_ANTERIOR' => round($entrada['venta_invierno_anterior'], 0)
+        ] + $this->ventasParaIndiceGeneral($registro);
+
+        $fila = array_merge($fila, self::camposCalculoArgentina($r, $entrada));
+
+        foreach ($this->obtenerColumnasVentasSeguras($registro) as $columna) {
+            $fila[$columna] = round((float)($registro[$columna] ?? 0), 0);
+        }
+        return $fila;
+    }
+
+    /**
      * Procesar datos para la solapa de stock proyectado
      */
     public function procesarDatosStockProyectado($datos) {
@@ -199,7 +343,35 @@ class ProcesadorDatos {
         
         // Asegurar que no hay duplicados en los datos fuente
         $datosUnicos = $this->eliminarDuplicados($datos);
-        
+
+        // Argentina: la cobertura sale del mismo cálculo que las solapas de compra, con
+        // los índices de Verano (el selector de la solapa arranca en Verano; si alguien
+        // edita, la pantalla toma los números de la solapa elegida).
+        if (self::calculoArgentina()) {
+            $ctx = self::contextoDesdeDatos($datosUnicos, 'verano');
+            foreach ($datosUnicos as $registro) {
+                list($registroCalculo) = $this->prepararIndices($registro);
+                list($entrada, , $defecto) = $this->entradaArgentina($registro, $registroCalculo);
+                $r = PresupuestoCalculos::calcularFila($entrada, $ctx);
+                $resultado[] = [
+                    'RUBRO' => $this->limpiarTexto($registro['RUBRO'] ?? ''),
+                    'CATEGORIA_PADRE' => $this->limpiarTexto($registro['CATEGORIA_PADRE'] ?? ''),
+                    'STOCK' => round((float)($registro['CANT_STOCK'] ?? 0), 2),
+                    'STOCK_GUARDAR' => round((float)($registro['CANT_STOCK_GUARDAR'] ?? 0), 2),
+                    'COMPRAS_VERANO' => round((float)($registro['CANT_PEND_OC_VERANO'] ?? 0), 2),
+                    'COMPRAS_INVIERNO' => round((float)($registro['CANT_PEND_OC_INVIERNO'] ?? 0), 2),
+                    'COMPRAS_ATEMPORAL' => round((float)($registro['CANT_PEND_OC_ATEMPORAL'] ?? 0), 2),
+                    'INDICE_COBERTURA' => round($r['indice_cobertura'], 4),
+                    'INDICE_COBERTURA_DEFECTO' => round($defecto['indice'], 4),
+                    'STOCK_COBERTURA' => $r['stock_cobertura'],
+                    'COBERTURA_DETALLE' => $r['cobertura'],
+                    'STOCK_PROYECTADO' => round($r['stock_proyectado'], 2),
+                    'CALCULO_AR' => true
+                ];
+            }
+            return $resultado;
+        }
+
         foreach ($datosUnicos as $registro) {
             try {
                 $stock = round((float)($registro['CANT_STOCK'] ?? 0), 2);
