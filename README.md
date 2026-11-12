@@ -62,7 +62,11 @@ compra/
 │   │   ├── 02_migracion_versiones.php     # Migración de las versiones existentes
 │   │   ├── 03 a 05                        # Tramos y baja lógica (ver abajo)
 │   │   ├── 06_sp_presupuesto_compras.sql  # SP con índice Total Empresa (solo Argentina)
-│   │   └── 07_notas_e_indices_versiones.sql # Notas, comentario e índices LP/TE (solo Argentina)
+│   │   ├── 07_notas_e_indices_versiones.sql # Notas, comentario e índices LP/TE (solo Argentina)
+│   │   ├── 08_parametros.sql                # Tablas de Parámetros (solo Argentina)
+│   │   ├── 09_versiones_indices_venta_manual.sql # Índice exacto, venta manual, cobertura
+│   │   └── 10_sp_presupuesto_compras.sql    # SP con Parámetros y sin cobertura de 360 días
+│   ├── tests/                     # Tests de cálculo (php, sin base de datos)
 │   ├── api.php                    # API REST endpoints
 │   ├── index.php                  # Interfaz principal
 │   └── test_web.php               # Test de conexión y despliegue
@@ -142,9 +146,29 @@ son **solo de Argentina** y se niegan a correr en otra base.
                               SOLO ARGENTINA. indice_lp, indice_total_empresa_original
                               y nota en el detalle; comentario e id_version_origen
                               en la cabecera. Los 3 bloques vienen en @CONFIRMAR_* = 0.
+
+08_parametros.sql             SOLO ARGENTINA. Tablas de la pantalla Parámetros
+                              (RO_T_PC_PARAMETROS, _COBERTURA, _EXCLUSIONES, _HIST)
+                              con los valores de hoy. 2 bloques en @CONFIRMAR_* = 0.
+
+09_versiones_indices_venta_manual.sql
+                              SOLO ARGENTINA. Índices del detalle a DECIMAL(18,6),
+                              venta_manual_verano/invierno e indice_cobertura.
+                              2 bloques en @CONFIRMAR_* = 0.
+
+10_sp_presupuesto_compras.sql SOLO ARGENTINA. SP nuevo: exclusiones, canales y ventana
+                              del índice desde Parámetros; deja de calcular
+                              STOCK_COBERTURA (la calcula la aplicación). El 06 queda
+                              como historial. El encabezado explica los pasos para
+                              comparar contra una copia de la tabla anterior.
 ```
 
-Los siete son **reejecutables** y ninguno borra datos. La aplicación funciona con o sin
+Orden para los nuevos (Argentina): `08` → `09` → `10` (siguiendo los pasos de su
+encabezado). Sin el `08` la aplicación usa los valores de siempre y la pantalla de
+Parámetros se ve de solo lectura; sin el `09` se guarda igual pero sin venta manual ni
+índice de cobertura (y con índices de 2 decimales).
+
+Los diez son **reejecutables** y ninguno borra datos. La aplicación funciona con o sin
 ellos aplicados: mientras falten, el panel de versiones avisa que hay que correrlos y
 el resto sigue andando igual (sin el 03, se guarda y se muestra todo salvo el reparto
 por tramo; sin el 05, eliminar una versión sigue borrándola físicamente).
@@ -478,7 +502,8 @@ lee esa tabla, no ejecuta el SP.
 
 * `RUBRO`, `CATEGORIA_PADRE`, `CANT_STOCK`, `CANT_STOCK_GUARDAR`, `INDICE_VARIACION`
 * Pendientes de ingreso: `CANT_PEND_OC_VERANO`, `...INVIERNO`, `...ATEMPORAL`
-* Cobertura: `STOCK_COBERTURA` (45 días de venta; 0 para `CALZADOS` y `CAMPERAS`)
+* Cobertura: `STOCK_COBERTURA` (45 días de venta; 0 para `CALZADOS` y `CAMPERAS`). **Solo
+  Uruguay** desde el `10`: en Argentina la calcula la aplicación (ver abajo).
 * Desde el `06`, **solo Argentina** y al final de la tabla: `VTA_60D_LP`, `VTA_60D_ANT_LP`,
   `VTA_60D_TE`, `VTA_60D_ANT_TE`, `INDICE_VARIACION_TOTAL_EMPRESA` (misma regla que
   `INDICE_VARIACION` cuando el año anterior es 0) y `VTA_TEMPORADA_EN_CURSO`. Las sumas TE usan
@@ -490,6 +515,28 @@ lee esa tabla, no ejecuta el SP.
 > Los nombres de columna del SP numeran el verano por el año en que **termina**
 > (`VTA_VERANO_26` = 01/08/2025 al 31/01/2026). La aplicación no los toca: los traduce
 > a la convención de pantalla (ver abajo). Renombrarlos rompería a cualquier consumidor.
+
+## 🛡️ Stock de cobertura, venta editable y Parámetros (Argentina)
+
+* **Cobertura:** `ritmo diario × índice de cobertura × días por mes`, con
+  `ritmo diario = (vendido en la temporada + venta proy. del resto + venta proy. de la
+  próxima temporada del otro tipo) / (días de esos tres períodos)`. Lo vendido entra solo
+  si ya pasaron los días mínimos (30). Una sola implementación:
+  `PresupuestoCalculos::calcularFila()` / `calcularCobertura()`, que usan la carga, la
+  acción `recalcular-fila` (cada edición), el guardado y Retomar.
+* **Índice de cobertura:** uno por categoría, compartido por Verano, Invierno y Stock.
+  Prioridad: pantalla > Parámetros por categoría > por rubro > rubro sin cobertura (0) > general.
+* **Venta editable:** cargar la venta despeja el índice (6 decimales, el mismo para todos
+  los tramos de la columna) y la venta queda exacta; sin venta anterior queda como "venta
+  manual" repartida por días. Guardar recalcula cada fila y, si algo no coincide con la
+  pantalla, no guarda y muestra qué filas difieren.
+* **Stock Proyectado** muestra la cobertura de la solapa elegida en "Calcular con índices de".
+* **Parámetros (⚙):** `class/parametros.php`. Generales y cobertura se aplican al recargar
+  los datos; exclusiones y canales, en la próxima corrida del SP.
+* **Tests:** `php presupuestos/tests/test_cobertura.php` y `php presupuestos/tests/test_venta_indice.php`
+  (no usan base de datos).
+
+Uruguay no cambia: sigue con la cobertura del SP y sin venta editable ni Parámetros.
 
 ## 🗓️ Convención de temporadas
 
