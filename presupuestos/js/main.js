@@ -149,6 +149,9 @@ class PresupuestoApp {
         
         // Guardar selección
         StorageUtils.guardar('pais_seleccionado', pais, 30 * 24 * 60 * 60 * 1000); // 30 días
+
+        // Parámetros es solo de Argentina: con Uruguay el botón queda deshabilitado.
+        if (typeof ParametrosManager !== 'undefined') ParametrosManager.actualizarBoton(pais);
     }
 
     /**

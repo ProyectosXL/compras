@@ -15,17 +15,21 @@ class Presupuesto {
     }
 
     /**
-     * Determinar qué base de datos usar según el país seleccionado
+     * País de la solicitud en curso: ?pais, POST pais o el de la sesión, en ese orden.
+     *
+     * Es la ÚNICA regla que decide si una solicitud es de Argentina o de Uruguay, y
+     * de ella depende todo lo que es solo de Argentina (parámetros, cobertura nueva,
+     * venta editable). Antes vivía solo dentro de determinarBaseDatos() y el resto
+     * del código no tenía cómo preguntarla.
+     *
+     * @return string 'argentina' o 'uruguay'
      */
-    private function determinarBaseDatos() {
-        // Iniciar sesión si no está iniciada
+    public static function paisDeLaSolicitud() {
         if (session_status() === PHP_SESSION_NONE) {
             session_start();
         }
-        
+
         $pais = 'argentina'; // Por defecto
-        
-        // Verificar en orden de prioridad
         if (isset($_GET['pais'])) {
             $pais = strtolower($_GET['pais']);
         } elseif (isset($_POST['pais'])) {
@@ -33,20 +37,15 @@ class Presupuesto {
         } elseif (isset($_SESSION['pais_seleccionado'])) {
             $pais = strtolower($_SESSION['pais_seleccionado']);
         }
-        
-        // Log para debug
-        error_log("País determinado: $pais");
-        
-        // Determinar el nombre del servidor
-        switch ($pais) {
-            case 'uruguay':
-            case 'uy':
-                return 'apps_power_uy';
-            case 'argentina':
-            case 'ar':
-            default:
-                return 'apps_power';
-        }
+
+        return in_array($pais, ['uruguay', 'uy'], true) ? 'uruguay' : 'argentina';
+    }
+
+    /**
+     * Determinar qué base de datos usar según el país seleccionado
+     */
+    private function determinarBaseDatos() {
+        return self::paisDeLaSolicitud() === 'uruguay' ? 'apps_power_uy' : 'apps_power';
     }
 
     /**
@@ -79,7 +78,7 @@ class Presupuesto {
      * Obtener país actual
      */
     public function obtenerPaisActual() {
-        return $this->nameServer === 'apps_uy' ? 'uruguay' : 'argentina';
+        return $this->nameServer === 'apps_power_uy' ? 'uruguay' : 'argentina';
     }
 
     /**

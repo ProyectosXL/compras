@@ -35,10 +35,11 @@
 <script src="js/distribucion-manager.js?v=26.1"></script>
 
 <!-- Script principal (SIEMPRE AL FINAL) -->
-<script src="js/main.js?v=13.3"></script>
+<script src="js/main.js?v=13.4"></script>
 <!-- Ordenar y ocultar columnas: después de los renderers, observa las tablas ya armadas. -->
 <!-- Retomar una versión guardada en las solapas de compra. -->
 <script src="js/retomar-version.js?v=1.0"></script>
+<script src="js/parametros-manager.js?v=1.0"></script>
 <script src="js/tabla-columnas.js?v=1.0"></script>
 
 <script>

@@ -385,6 +385,11 @@ class MainController {
                 $this->obtenerInfoTemporadas();
                 break;
 
+            // Pantalla de Parámetros (solo Argentina)
+            case 'parametros':
+                $this->delegarParametros($accion);
+                break;
+
             // Versiones del presupuesto (cabecera) y trazabilidad de la oficial
             case 'versiones-presupuesto':
             case 'historial-oficial':
@@ -479,6 +484,13 @@ class MainController {
             case 'recalcular-tramos':
                 $this->recalcularTramos();
                 break;
+            case 'guardar-parametro':
+            case 'guardar-cobertura-parametro':
+            case 'borrar-cobertura-parametro':
+            case 'agregar-lista-parametro':
+            case 'quitar-lista-parametro':
+                $this->delegarParametros($accion);
+                break;
             // Solapa de compra con los índices de una versión guardada ("Retomar").
             case 'compra-con-indices':
                 $this->obtenerCompraConIndices();
@@ -511,6 +523,14 @@ class MainController {
         }
     }
     
+    /**
+     * Pantalla de Parámetros: lectura y cambios con auditoría (ver ParametrosController).
+     */
+    private function delegarParametros($accion) {
+        require_once __DIR__ . '/ParametrosController.php';
+        (new ParametrosController())->procesar($accion);
+    }
+
     /**
      * Delegar funcionalidades de compras - NUEVO
      */

@@ -51,6 +51,7 @@ date_default_timezone_set('America/Argentina/Buenos_Aires');
     <!-- Contenedores de componentes -->
     <?php include 'components/alert-container.php'; ?>
     <?php include 'components/modals.php'; ?>
+    <?php include 'components/modal-parametros.php'; ?>
 
     <!-- Scripts -->
     <?php include 'components/scripts.php'; ?>
