@@ -20,7 +20,17 @@
         border: 1px solid #dee2e6; 
         border-top: none;
         border-radius: 0 0 0.5rem 0.5rem;
-        min-height: 400px;
+    }
+    #tabs-container > .col-12 {
+        height: 100%;
+    }
+    #presupuestoTabContent {
+        flex: 1 1 auto;
+    }
+    .flex-content,
+    #presupuestoTabContent,
+    #presupuestoTabContent > .tab-pane:not(#distribucion) {
+        overflow: visible !important;
     }
     .search-container {
         background: #f8f9fa;
@@ -182,6 +192,11 @@
     .card:hover {
         transform: translateY(-2px);
         box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+    }
+
+    /* El contenedor principal de pestañas no debe desplazarse ni crear un bloque transform */
+    #tabs-container > .col-12 > .card:hover {
+        transform: none;
     }
 
     .contador-animado.actualizado {

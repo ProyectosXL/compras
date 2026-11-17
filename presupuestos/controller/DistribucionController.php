@@ -59,6 +59,7 @@ class DistribucionController {
 
             // Determinar origen de datos de venta proyectada: desde el historial oficial guardado
             $comprasProcesadas = [];
+            $clavesHistorial = [];
             $filtrosHistorial = ['solo_oficiales' => 1];
             if (!empty($idCabeceraOficial)) {
                 $filtrosHistorial['id_cabecera'] = (int)$idCabeceraOficial;
@@ -85,6 +86,10 @@ class DistribucionController {
                 }
 
                 foreach ($filasHistorial as $fh) {
+                    $rubroH = trim($fh['rubro'] ?? '');
+                    $catH = trim($fh['categoria_padre'] ?? '');
+                    $claveH = strtoupper($rubroH . '|' . $catH);
+                    $clavesHistorial[$claveH] = true;
                     $comprasProcesadas[] = [
                         'RUBRO' => $fh['rubro'],
                         'CATEGORIA_PADRE' => $fh['categoria_padre'],
@@ -94,17 +99,38 @@ class DistribucionController {
                 }
             }
 
-            // Fallback de contingencia si no hubiera ninguna versión guardada aún
-            if (empty($comprasProcesadas)) {
-                $datosBase = $this->presupuesto->obtenerPresupuestoCompras();
-                if (isset($datosBase['error'])) {
+            // Complementar con rubros/categorías activos del SP (ej. SINTETICOS OUTLET u otros agregados
+            // después de guardar la versión oficial) para que no falten en Proceso para Presupuesto
+            $datosBase = $this->presupuesto->obtenerPresupuestoCompras();
+            if (isset($datosBase['error'])) {
+                if (empty($comprasProcesadas)) {
                     $this->jsonResponse(['success' => false, 'message' => $datosBase['mensaje']], 500);
                     return;
                 }
-                if (strtoupper($temporadaFiltro) === 'VERANO') {
-                    $comprasProcesadas = $this->procesador->procesarDatosCompraVerano($datosBase);
+            } elseif (is_array($datosBase) && !empty($datosBase)) {
+                $comprasVivas = (strtoupper($temporadaFiltro) === 'VERANO')
+                    ? $this->procesador->procesarDatosCompraVerano($datosBase)
+                    : $this->procesador->procesarDatosCompraInvierno($datosBase);
+
+                if (empty($comprasProcesadas)) {
+                    $comprasProcesadas = $comprasVivas;
                 } else {
-                    $comprasProcesadas = $this->procesador->procesarDatosCompraInvierno($datosBase);
+                    foreach ($comprasVivas as $cv) {
+                        $claveV = strtoupper(trim($cv['RUBRO'] ?? '') . '|' . trim($cv['CATEGORIA_PADRE'] ?? ''));
+                        if (!isset($clavesHistorial[$claveV])) {
+                            $clavesHistorial[$claveV] = true;
+                            $comprasProcesadas[] = [
+                                'RUBRO' => $cv['RUBRO'],
+                                'CATEGORIA_PADRE' => $cv['CATEGORIA_PADRE'],
+                                'VENTA_PROY_VERANO' => (float)($cv['VENTA_PROY_VERANO'] ?? 0),
+                                'VENTA_PROY_INVIERNO' => (float)($cv['VENTA_PROY_INVIERNO'] ?? 0)
+                            ];
+                        }
+                    }
+                    usort($comprasProcesadas, function($a, $b) {
+                        $cmp = strcmp(trim($a['RUBRO'] ?? ''), trim($b['RUBRO'] ?? ''));
+                        return $cmp !== 0 ? $cmp : strcmp(trim($a['CATEGORIA_PADRE'] ?? ''), trim($b['CATEGORIA_PADRE'] ?? ''));
+                    });
                 }
             }
 
@@ -631,11 +657,61 @@ class DistribucionController {
                 }
             }
 
+            // Precomputar fallback promedio por rubro para categorías nuevas o sin categoría padre ('' o vcosto=0)
+            $fallbackPorRubro = [];
+            foreach ($costosGuardados as $cg) {
+                if (trim($cg['categoria_padre'] ?? '') === '') continue;
+                $rKey = trim($cg['rubro']);
+                if ((float)$cg['vcosto'] <= 0) continue;
+                if (!isset($fallbackPorRubro[$rKey])) {
+                    $fallbackPorRubro[$rKey] = [
+                        'cnt' => 0, 'costo_prom' => 0.0, 'inc_fob' => 0.0, 'vcosto' => 0.0,
+                        'lp' => [], 'fr' => [], 'ma' => [], 'ec' => []
+                    ];
+                }
+                $fallbackPorRubro[$rKey]['cnt']++;
+                $fallbackPorRubro[$rKey]['costo_prom'] += (float)$cg['costo_prom'];
+                $fallbackPorRubro[$rKey]['inc_fob'] += (float)$cg['inc_fob'];
+                $fallbackPorRubro[$rKey]['vcosto'] += (float)$cg['vcosto'];
+                if ((float)$cg['markup_locales_propios'] > 0) $fallbackPorRubro[$rKey]['lp'][] = (float)$cg['markup_locales_propios'];
+                if ((float)$cg['markup_franquicias'] > 0) $fallbackPorRubro[$rKey]['fr'][] = (float)$cg['markup_franquicias'];
+                if ((float)$cg['markup_mayoristas'] > 0) $fallbackPorRubro[$rKey]['ma'][] = (float)$cg['markup_mayoristas'];
+                if ((float)$cg['markup_ecommerce'] > 0) $fallbackPorRubro[$rKey]['ec'][] = (float)$cg['markup_ecommerce'];
+            }
+            foreach ($fallbackPorRubro as $rKey => &$fb) {
+                $n = max(1, $fb['cnt']);
+                $fb['costo_prom'] = round($fb['costo_prom'] / $n, 2);
+                $fb['inc_fob'] = round($fb['inc_fob'] / $n, 2);
+                $fb['vcosto'] = round($fb['vcosto'] / $n, 2);
+                $fb['markup_locales_propios'] = !empty($fb['lp']) ? round(array_sum($fb['lp']) / count($fb['lp']), 2) : 0.0;
+                $fb['markup_franquicias'] = !empty($fb['fr']) ? round(array_sum($fb['fr']) / count($fb['fr']), 2) : 0.0;
+                $fb['markup_mayoristas'] = !empty($fb['ma']) ? round(array_sum($fb['ma']) / count($fb['ma']), 2) : 0.0;
+                $fb['markup_ecommerce'] = !empty($fb['ec']) ? round(array_sum($fb['ec']) / count($fb['ec']), 2) : 0.0;
+            }
+            unset($fb);
+
             // 7. Mezclar y preparar respuesta final
             $resultado = [];
             foreach ($agrupados as $clave => $item) {
                 $paramClave = $item['RUBRO'] . '|' . $item['CATEGORIA_PADRE'];
-                $costoInfo = $costosGuardados[$paramClave] ?? ['costo_prom' => 0.0, 'inc_fob' => 0.0, 'vcosto' => 0.0];
+                $fbRubro = $fallbackPorRubro[$item['RUBRO']] ?? null;
+                $costoInfo = $costosGuardados[$paramClave] ?? [
+                    'costo_prom' => 0.0, 'inc_fob' => 0.0, 'vcosto' => 0.0,
+                    'markup_locales_propios' => 0.0, 'markup_franquicias' => 0.0,
+                    'markup_mayoristas' => 0.0, 'markup_ecommerce' => 0.0
+                ];
+
+                if ((float)$costoInfo['vcosto'] <= 0 && $fbRubro) {
+                    $costoInfo['costo_prom'] = $fbRubro['costo_prom'];
+                    $costoInfo['inc_fob'] = $fbRubro['inc_fob'];
+                    $costoInfo['vcosto'] = $fbRubro['vcosto'];
+                }
+                if ($fbRubro) {
+                    if ((float)($costoInfo['markup_locales_propios'] ?? 0) <= 0) $costoInfo['markup_locales_propios'] = $fbRubro['markup_locales_propios'];
+                    if ((float)($costoInfo['markup_franquicias'] ?? 0) <= 0) $costoInfo['markup_franquicias'] = $fbRubro['markup_franquicias'];
+                    if ((float)($costoInfo['markup_mayoristas'] ?? 0) <= 0) $costoInfo['markup_mayoristas'] = $fbRubro['markup_mayoristas'];
+                    if ((float)($costoInfo['markup_ecommerce'] ?? 0) <= 0) $costoInfo['markup_ecommerce'] = $fbRubro['markup_ecommerce'];
+                }
 
                 $resultado[] = [
                     'RUBRO' => $item['RUBRO'],
@@ -672,11 +748,15 @@ class DistribucionController {
                 return $posA <=> $posB;
             });
 
+            $tasasBcra = $this->obtenerTasasBcraHistoricas();
+            $realAnterior = $this->distribucion->obtenerRealComparativoPorCanal($fechaDesde, $fechaHasta, $tasasBcra);
+
             $this->jsonResponse([
                 'success' => true,
                 'data' => $resultado,
                 'meses' => array_values($mesesPeriodo),
-                'meses_claves' => array_keys($mesesPeriodo)
+                'meses_claves' => array_keys($mesesPeriodo),
+                'real_anterior' => $realAnterior
             ]);
 
         } catch (Exception $e) {
@@ -814,6 +894,43 @@ class DistribucionController {
     }
 
     /**
+     * Obtiene las cotizaciones de cierre mensual del dólar oficial BCRA (clave "Mes-Año").
+     */
+    private function obtenerTasasBcraHistoricas() {
+        $anioActual = (int)date('Y');
+        $anioDesde = $anioActual - 2;
+        $anioHasta = $anioActual + 2;
+
+        $conn = new Conexion();
+        $cid = $conn->conectar('apps');
+
+        $tasasBcra = [];
+        if ($cid) {
+            $sql = "
+                SELECT YEAR(d.Fecha) AS Anio, MONTH(d.Fecha) AS Mes, d.Vendedor AS Valor
+                FROM dbo.dolar_oficial_bcra d
+                INNER JOIN (
+                    SELECT YEAR(Fecha) AS Anio, MONTH(Fecha) AS Mes, MAX(Fecha) AS FechaMax
+                    FROM dbo.dolar_oficial_bcra
+                    WHERE YEAR(Fecha) BETWEEN ? AND ?
+                    GROUP BY YEAR(Fecha), MONTH(Fecha)
+                ) cierre ON YEAR(d.Fecha) = cierre.Anio AND MONTH(d.Fecha) = cierre.Mes AND d.Fecha = cierre.FechaMax
+                ORDER BY Anio, Mes
+            ";
+            $stmt = sqlsrv_query($cid, $sql, [$anioDesde, $anioHasta]);
+            if ($stmt !== false) {
+                while ($row = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC)) {
+                    $clave = (int)$row['Mes'] . '-' . (int)$row['Anio'];
+                    $tasasBcra[$clave] = (float)$row['Valor'];
+                }
+                sqlsrv_free_stmt($stmt);
+            }
+            sqlsrv_close($cid);
+        }
+        return $tasasBcra;
+    }
+
+    /**
      * Obtener tasas de tipo de cambio:
      * 1. Dólar Futuro ROFEX (dbo.FP_DOLAR_FUTURO_ROFEX) para proyecciones.
      * 2. Dólar oficial BCRA histórico como fallback.
@@ -828,38 +945,7 @@ class DistribucionController {
             $tasasFuturo = $rofexService->obtenerCotizacionesGuardadas();
 
             // 2. Cargar histórico del BCRA para meses no cubiertos por futuros
-            $anioActual = (int)date('Y');
-            $anioDesde = $anioActual - 2;
-            $anioHasta = $anioActual + 2;
-            
-            $conn = new Conexion();
-            $cid = $conn->conectar('apps');
-            
-            $tasasBcra = [];
-            if ($cid) {
-                $sql = "
-                    SELECT d.Año, d.Mes, d.Vendedor as Valor
-                    FROM dolar_oficial_bcra d
-                    INNER JOIN (
-                        SELECT Año, Mes, MAX(Fecha) as FechaMax
-                        FROM dolar_oficial_bcra
-                        WHERE Año BETWEEN ? AND ?
-                        GROUP BY Año, Mes
-                    ) cierre ON d.Año = cierre.Año AND d.Mes = cierre.Mes AND d.Fecha = cierre.FechaMax
-                    ORDER BY d.Año, d.Mes
-                ";
-                
-                $params = [$anioDesde, $anioHasta];
-                $stmt = sqlsrv_query($cid, $sql, $params);
-                
-                if ($stmt !== false) {
-                    while ($row = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC)) {
-                        $clave = $row['Mes'] . '-' . $row['Año'];
-                        $tasasBcra[$clave] = (float)$row['Valor'];
-                    }
-                    sqlsrv_free_stmt($stmt);
-                }
-            }
+            $tasasBcra = $this->obtenerTasasBcraHistoricas();
             
             // Mezclar: prioridad Dólar Futuro ROFEX, fallback BCRA histórico
             $tasasCombinadas = array_merge($tasasBcra, $tasasFuturo);

@@ -193,7 +193,8 @@ class FiltroMultiple {
         contenedor.classList.add('dropdown', 'filtro-multiple');
         contenedor.innerHTML = `
             <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle filtro-multiple-boton w-100"
-                    data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
+                    data-bs-toggle="dropdown" data-bs-auto-close="outside"
+                    data-bs-popper-config='{"strategy":"fixed"}' aria-expanded="false">
                 <span class="filtro-multiple-leyenda">${titulo}</span>
             </button>
             <div class="dropdown-menu filtro-multiple-menu p-2">

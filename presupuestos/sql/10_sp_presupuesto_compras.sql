@@ -183,12 +183,12 @@ BEGIN
         DECLARE @FiltroCanalLP NVARCHAR(MAX)   = N'CANAL IN (' + @CanalesLP + N')';
 
         /* Regla de outlets: FIJA, no se parametriza. Se excluyen los rubros con OUTLET
-           salvo SINTETICOS OUTLET, y de ese solo los articulos que empiezan con O y no
-           con OU (los OU son otra linea). En stock, OC y stock a guardar no hay
-           articulo, asi que ahi entra SINTETICOS OUTLET completo. */
+           salvo SINTETICOS OUTLET, y de ese los articulos propios (X% o O%) sin
+           incluir OU% (los OU son otra linea de liquidacion sin categoria). En stock,
+           OC y stock a guardar no hay articulo, asi que ahi entra SINTETICOS OUTLET completo. */
         DECLARE @OutletVentas NVARCHAR(MAX) = N'(RUBRO NOT LIKE ''%OUTLET%''
                    OR (RUBRO = ''SINTETICOS OUTLET''
-                       AND ARTICULO LIKE ''O%''
+                       AND (ARTICULO LIKE ''X%'' OR ARTICULO LIKE ''O%'')
                        AND ARTICULO NOT LIKE ''OU%''))';
         DECLARE @OutletStock NVARCHAR(MAX) = N'(RUBRO NOT LIKE ''%OUTLET%'' OR RUBRO = ''SINTETICOS OUTLET'')';
 

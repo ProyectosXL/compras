@@ -14,7 +14,7 @@
 <script src="js/busqueda-manager.js"></script>
 
 <!-- Gestor de filtros persistentes -->
-<script src="js/filtro-multiple.js?v=1.0"></script>
+<script src="js/filtro-multiple.js?v=1.1"></script>
 <script src="js/filtros-manager.js?v=2.0"></script>
 <script src="js/historial-manager.js?v=5.5"></script>
 
@@ -33,7 +33,7 @@
 <script src="js/totales-stock.js?v=2.1"></script>
 <script src="js/excel-exporter.js?v=14.5"></script>
 <script src="js/ventas-manager.js?v=2.1"></script>
-<script src="js/distribucion-manager.js?v=26.2"></script>
+<script src="js/distribucion-manager.js?v=26.6"></script>
 
 <!-- Script principal (SIEMPRE AL FINAL) -->
 <script src="js/main.js?v=13.7"></script>

@@ -97,7 +97,7 @@ BEGIN
               AND RUBRO NOT IN (''PACKAGING'', ''_KITS'')
               AND (RUBRO NOT LIKE ''%OUTLET%''
                    OR (RUBRO = ''SINTETICOS OUTLET''
-                       AND ARTICULO LIKE ''O%''
+                       AND (ARTICULO LIKE ''X%'' OR ARTICULO LIKE ''O%'')
                        AND ARTICULO NOT LIKE ''OU%''))
               AND CATEGORIA != ''REMERA''
               AND FECHA_VENTA IS NOT NULL
@@ -157,7 +157,7 @@ BEGIN
               AND RUBRO NOT IN (''PACKAGING'', ''_KITS'')
               AND (RUBRO NOT LIKE ''%OUTLET%''
                    OR (RUBRO = ''SINTETICOS OUTLET''
-                       AND ARTICULO LIKE ''O%''
+                       AND (ARTICULO LIKE ''X%'' OR ARTICULO LIKE ''O%'')
                        AND ARTICULO NOT LIKE ''OU%''))
               AND CATEGORIA != ''REMERA''
               AND FECHA_VENTA >= DATEADD(DAY, -60, DATEADD(DAY, -1, CAST(GETDATE() AS DATE)))
@@ -172,7 +172,7 @@ BEGIN
               AND RUBRO NOT IN (''PACKAGING'', ''_KITS'')
               AND (RUBRO NOT LIKE ''%OUTLET%''
                    OR (RUBRO = ''SINTETICOS OUTLET''
-                       AND ARTICULO LIKE ''O%''
+                       AND (ARTICULO LIKE ''X%'' OR ARTICULO LIKE ''O%'')
                        AND ARTICULO NOT LIKE ''OU%''))
               AND CATEGORIA != ''REMERA''
               AND FECHA_VENTA >= DATEADD(YEAR, -1, DATEADD(DAY, -60, DATEADD(DAY, -1, CAST(GETDATE() AS DATE))))
@@ -187,7 +187,7 @@ BEGIN
               AND RUBRO NOT IN (''PACKAGING'', ''_KITS'')
               AND (RUBRO NOT LIKE ''%OUTLET%''
                    OR (RUBRO = ''SINTETICOS OUTLET''
-                       AND ARTICULO LIKE ''O%''
+                       AND (ARTICULO LIKE ''X%'' OR ARTICULO LIKE ''O%'')
                        AND ARTICULO NOT LIKE ''OU%''))
               AND CATEGORIA != ''REMERA''
               AND ARTICULO != ''XV00LV00A0001''
@@ -203,7 +203,7 @@ BEGIN
               AND RUBRO NOT IN (''PACKAGING'', ''_KITS'')
               AND (RUBRO NOT LIKE ''%OUTLET%''
                    OR (RUBRO = ''SINTETICOS OUTLET''
-                       AND ARTICULO LIKE ''O%''
+                       AND (ARTICULO LIKE ''X%'' OR ARTICULO LIKE ''O%'')
                        AND ARTICULO NOT LIKE ''OU%''))
               AND CATEGORIA != ''REMERA''
               AND ARTICULO != ''XV00LV00A0001''
@@ -219,7 +219,7 @@ BEGIN
               AND RUBRO NOT IN (''PACKAGING'', ''_KITS'')
               AND (RUBRO NOT LIKE ''%OUTLET%''
                    OR (RUBRO = ''SINTETICOS OUTLET''
-                       AND ARTICULO LIKE ''O%''
+                       AND (ARTICULO LIKE ''X%'' OR ARTICULO LIKE ''O%'')
                        AND ARTICULO NOT LIKE ''OU%''))
               AND CATEGORIA != ''REMERA''
               AND ARTICULO != ''XV00LV00A0001''
@@ -235,7 +235,7 @@ BEGIN
               AND RUBRO NOT IN (''PACKAGING'', ''_KITS'')
               AND (RUBRO NOT LIKE ''%OUTLET%''
                    OR (RUBRO = ''SINTETICOS OUTLET''
-                       AND ARTICULO LIKE ''O%''
+                       AND (ARTICULO LIKE ''X%'' OR ARTICULO LIKE ''O%'')
                        AND ARTICULO NOT LIKE ''OU%''))
               AND CATEGORIA != ''REMERA''
               AND FECHA_VENTA >= DATEADD(DAY, -360, DATEADD(DAY, -1, CAST(GETDATE() AS DATE)))

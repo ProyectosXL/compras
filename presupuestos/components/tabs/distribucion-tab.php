@@ -179,7 +179,7 @@
     </div>
 
     <div class="step-pane" id="paso-2">
-        <!-- Sub-Navegación de Paso 2: 2A (Gestión) y 2B (Análisis) -->
+        <!-- Sub-Navegación de Paso 2: 2A (Gestión), 2B (Análisis Ppto vs Real) y 2C (Objetivos Proyectados) -->
         <ul class="nav nav-pills nav-fill mb-3 shadow-sm bg-white p-1 rounded-3 border" id="subtabs-paso-2" role="tablist">
             <li class="nav-item" role="presentation">
                 <button class="nav-link active fw-bold py-2 fs-6 d-flex align-items-center justify-content-center" 
@@ -204,7 +204,20 @@
                         aria-controls="pane-2b-analisis" 
                         aria-selected="false"
                         onclick="DistribucionManager.cambiarSubtabPaso2('2B')">
-                    <i class="fas fa-chart-bar me-2 text-success"></i>2B - Análisis (Canales y Clientes/Sucursales)
+                    <i class="fas fa-chart-bar me-2 text-success"></i>2B - Análisis (Ppto vs Real)
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link fw-bold py-2 fs-6 d-flex align-items-center justify-content-center" 
+                        id="tab-2c-btn" 
+                        data-bs-toggle="pill" 
+                        data-bs-target="#pane-2c-objetivos" 
+                        type="button" 
+                        role="tab" 
+                        aria-controls="pane-2c-objetivos" 
+                        aria-selected="false"
+                        onclick="DistribucionManager.cambiarSubtabPaso2('2C')">
+                    <i class="fas fa-bullseye me-2 text-warning"></i>2C - Objetivos Proyectados
                 </button>
             </li>
         </ul>
@@ -303,8 +316,88 @@
                 </div>
             </div>
 
-            <!-- PESTAÑA 2B: ANÁLISIS (Apertura por Canal y Sucursal/Cliente) -->
-            <div class="tab-pane fade" id="pane-2b-analisis" role="tabpanel" aria-labelledby="tab-2b-btn">
+            <!-- PESTAÑA 2B: ANÁLISIS (Comparativo Ppto vs Real: Unidades y Facturación) -->
+            <div class="tab-pane fade" id="pane-2b-analisis" role="tabpanel" aria-labelledby="tab-2b-btn" style="padding-bottom: 120px;">
+                <!-- Card 2B-1: Comparativo Ppto vs Real - Unidades -->
+                <div class="card shadow-sm border-0 mb-3" id="card-2b-comparativo-unidades" style="border-radius: 12px; overflow: hidden; border-left: 5px solid #0d6efd !important;">
+                    <div class="card-header bg-light border-0 py-2 d-flex flex-wrap align-items-center justify-content-between gap-2">
+                        <div class="d-flex align-items-center flex-wrap gap-2">
+                            <h5 class="mb-0 text-primary fw-bold d-flex align-items-center">
+                                <i class="fas fa-boxes me-2"></i>Comparativo Ppto vs Real — Unidades
+                            </h5>
+                            <span id="badge-2b-comp-unidades-resumen" class="d-flex align-items-center flex-wrap gap-2 ms-2"></span>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-primary rounded-pill px-3"
+                            onclick="DistribucionManager.toggleCollapseTabla('tabla-2b-comp-unidades-container', this)"
+                            title="Contraer/Expandir tabla comparativa de unidades">
+                            <i class="fas fa-chevron-up me-1"></i>Colapsar
+                        </button>
+                    </div>
+                    <div class="card-body p-0" id="tabla-2b-comp-unidades-container">
+                        <div class="table-responsive">
+                            <table class="table table-hover mb-0 align-middle" id="tabla-2b-comp-unidades">
+                                <thead class="table-dark sticky-header">
+                                    <tr>
+                                        <th style="width: 210px;">Canal</th>
+                                        <th style="width: 115px;">Concepto</th>
+                                        <th class="text-center" colspan="6">Cargando...</th>
+                                        <th class="text-end bg-warning text-dark fw-bold" style="width: 165px;">Temporada</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td colspan="9" class="text-center py-4 text-muted">
+                                            <i class="fas fa-info-circle mb-2"></i><br>Cargando comparativo...
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Card 2B-2: Comparativo Ppto vs Real - Facturación -->
+                <div class="card shadow-sm border-0 mb-3" id="card-2b-comparativo-venta" style="border-radius: 12px; overflow: hidden; border-left: 5px solid #198754 !important;">
+                    <div class="card-header bg-light border-0 py-2 d-flex flex-wrap align-items-center justify-content-between gap-2">
+                        <div class="d-flex align-items-center flex-wrap gap-2">
+                            <h5 class="mb-0 text-success fw-bold d-flex align-items-center" id="titulo-2b-comp-venta">
+                                <i class="fas fa-dollar-sign me-2"></i>Comparativo Ppto vs Real — Facturación (Pesos s/IVA nominales)
+                            </h5>
+                            <span id="badge-2b-comp-venta-resumen" class="d-flex align-items-center flex-wrap gap-2 ms-2"></span>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-success rounded-pill px-3"
+                            onclick="DistribucionManager.toggleCollapseTabla('tabla-2b-comp-venta-container', this)"
+                            title="Contraer/Expandir tabla comparativa de facturación">
+                            <i class="fas fa-chevron-up me-1"></i>Colapsar
+                        </button>
+                    </div>
+                    <div class="card-body p-0" id="tabla-2b-comp-venta-container">
+                        <div class="table-responsive">
+                            <table class="table table-hover mb-0 align-middle" id="tabla-2b-comp-venta">
+                                <thead class="table-dark sticky-header">
+                                    <tr>
+                                        <th style="width: 210px;">Canal</th>
+                                        <th style="width: 115px;">Concepto</th>
+                                        <th class="text-center" colspan="6">Cargando...</th>
+                                        <th class="text-end bg-warning text-dark fw-bold" style="width: 165px;">Temporada</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td colspan="9" class="text-center py-4 text-muted">
+                                            <i class="fas fa-info-circle mb-2"></i><br>Cargando comparativo...
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="px-3 py-2 bg-light border-top small text-muted" id="nota-2b-comp-fuente"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- PESTAÑA 2C: OBJETIVOS PROYECTADOS (Apertura por Canal y Cliente / Sucursal) -->
+            <div class="tab-pane fade" id="pane-2c-objetivos" role="tabpanel" aria-labelledby="tab-2c-btn" style="padding-bottom: 60px;">
                 <div class="card shadow-sm border-0 mb-4" style="border-radius: 12px; overflow: hidden; border-left: 5px solid #ffc107 !important;">
                     <div class="card-header bg-light border-0 py-3 d-flex flex-wrap align-items-center justify-content-between gap-2">
                         <div class="d-flex align-items-center flex-wrap gap-2">
@@ -521,19 +614,13 @@
                                     <tr class="table-dark">
                                         <th style="min-width:160px;">Rubro</th>
                                         <th style="min-width:180px;">Categoría</th>
-                                        <th class="text-center" style="width:140px;">
+                                        <th class="text-center" style="width:160px;" title="Costo unitario ya nacionalizado (incluye nacionalización del SP)">
                                             <div>Costo Prom (U$D)</div>
                                             <button type="button" class="btn btn-xxs btn-light text-dark fw-bold mt-1 px-2" title="Replicar primer valor en todas las filas" onclick="DistribucionManager.replicarPrimerValorModal('costo_prom')">
                                                 <i class="fas fa-copy me-1"></i>Replicar
                                             </button>
                                         </th>
-                                        <th class="text-center" style="width:130px;">
-                                            <div>Inc FOB %</div>
-                                            <button type="button" class="btn btn-xxs btn-light text-dark fw-bold mt-1 px-2" title="Replicar primer valor en todas las filas" onclick="DistribucionManager.replicarPrimerValorModal('inc_fob')">
-                                                <i class="fas fa-copy me-1"></i>Replicar
-                                            </button>
-                                        </th>
-                                        <th class="text-center text-warning" style="width:130px;">Vcosto (U$D)</th>
+                                        <th class="text-center text-warning" style="width:140px;">Vcosto (U$D)</th>
                                     </tr>
                                 </thead>
                                 <tbody id="tbody-parametros-globales">
@@ -589,7 +676,7 @@
                 <button type="button" class="btn btn-outline-primary btn-sm rounded-pill px-3 me-auto fw-bold" id="btn-calcular-mediana-modal" onclick="DistribucionManager.calcularCostoMedianaModal()" title="Ejecuta RO_SP_COSTO_MEDIANA_RUBRO_CATEGORIA con los últimos 90 días en Tango y convierte a U$D">
                     <i class="fas fa-calculator me-1"></i>Calcular Costos Mediana (Últimos 90 días)
                 </button>
-                <button type="button" class="btn btn-outline-success btn-sm rounded-pill px-3 me-auto fw-bold d-none" id="btn-calcular-markup-modal" onclick="DistribucionManager.abrirModalCalcularMarkup()" title="Calcula el Mark-up real de cada categoría para cada canal desde Rentabilidad por Rubro">
+                <button type="button" class="btn btn-outline-success btn-sm rounded-pill px-3 me-auto fw-bold d-none" id="btn-calcular-markup-modal" onclick="DistribucionManager.abrirModalCalcularMarkup()" title="Calcula el Mark-up real en USD (Precio Real USD / Vcosto USD) de cada categoría para cada canal">
                     <i class="fas fa-chart-line me-1"></i>Calcular Mark-Up Real (Últimos 60 días)
                 </button>
                 <button type="button" class="btn btn-outline-secondary btn-sm rounded-pill px-3" id="btn-cancelar-parametros-modal" data-bs-dismiss="modal">Cancelar</button>
@@ -613,7 +700,7 @@
             </div>
             <div class="modal-body p-4">
                 <p class="text-secondary small mb-3">
-                    Calcula automáticamente el <strong>Mark-up real (Venta / Costo)</strong> de cada Rubro y Categoría para cada uno de los 4 canales (<em>Locales Propios, Franquicias, Mayoristas y Ecommerce</em>) a partir del reporte contable de Rentabilidad por Rubro.
+                    Calcula automáticamente el <strong>Mark-up real en USD (Precio Real USD / Vcosto USD)</strong> de cada Rubro y Categoría para cada uno de los 4 canales (<em>Locales Propios, Franquicias, Mayoristas y Ecommerce</em>) convirtiendo la facturación neta de cada mes al tipo de cambio oficial BCRA del período.
                 </p>
 
                 <div class="p-3 bg-light rounded-3 border mb-3">

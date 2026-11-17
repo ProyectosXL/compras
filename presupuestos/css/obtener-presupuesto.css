@@ -333,9 +333,8 @@
    PERFORMANCE OPTIMIZATIONS
    ======================================== */
 
-/* GPU acceleration para animaciones */
+/* GPU acceleration para animaciones (sin .card para no encerrar dropdowns fixed) */
 .btn,
-.card,
 .nav-link,
 .editable-cell {
     transform: translateZ(0);

@@ -518,6 +518,141 @@ class Distribucion {
         }
     }
 
+    /**
+     * Obtener reales históricos comparativos por canal y mes (Unidades y Facturación s/IVA)
+     * para los cuadros resumen de Análisis 2B.
+     *
+     * Usa BI_SALES_LAKERS en Argentina (misma fuente y criterio que BI Sales Gerencia:
+     * unidades netas sin PACKAGING/_KITS/CONCEPTO e importe neto s/IVA total), con fallback
+     * a RO_VENTAS_COMERCIAL si BI_SALES_LAKERS no existiera (ej. Uruguay).
+     */
+    public function obtenerRealComparativoPorCanal($fechaDesde, $fechaHasta, $tasasBcra = []) {
+        $resultado = [
+            'fuente' => 'BI_SALES_LAKERS',
+            'por_canal' => []
+        ];
+        if (!$this->cid_power || empty($fechaDesde) || empty($fechaHasta)) {
+            return $resultado;
+        }
+
+        // Asegurar tasas BCRA desde la conexión 'apps' ya abierta si vinieron vacías
+        if (empty($tasasBcra) && $this->cid_sistemas) {
+            $anioActual = (int)date('Y');
+            $sqlTc = "
+                SELECT YEAR(d.Fecha) AS Anio, MONTH(d.Fecha) AS Mes, d.Vendedor AS Valor
+                FROM dbo.dolar_oficial_bcra d
+                INNER JOIN (
+                    SELECT YEAR(Fecha) AS Anio, MONTH(Fecha) AS Mes, MAX(Fecha) AS FechaMax
+                    FROM dbo.dolar_oficial_bcra
+                    WHERE YEAR(Fecha) BETWEEN ? AND ?
+                    GROUP BY YEAR(Fecha), MONTH(Fecha)
+                ) cierre ON YEAR(d.Fecha) = cierre.Anio AND MONTH(d.Fecha) = cierre.Mes AND d.Fecha = cierre.FechaMax
+                ORDER BY Anio, Mes
+            ";
+            $stmtTc = sqlsrv_query($this->cid_sistemas, $sqlTc, [$anioActual - 2, $anioActual + 2]);
+            if ($stmtTc !== false) {
+                while ($rTc = sqlsrv_fetch_array($stmtTc, SQLSRV_FETCH_ASSOC)) {
+                    $tasasBcra[(int)$rTc['Mes'] . '-' . (int)$rTc['Anio']] = (float)$rTc['Valor'];
+                }
+                sqlsrv_free_stmt($stmtTc);
+            }
+        }
+
+        try {
+            $stmtChk = sqlsrv_query(
+                $this->cid_power,
+                "SELECT CASE WHEN OBJECT_ID('dbo.BI_SALES_LAKERS', 'U') IS NOT NULL
+                               OR OBJECT_ID('dbo.BI_SALES_LAKERS', 'V') IS NOT NULL
+                             THEN 1 ELSE 0 END AS existe"
+            );
+            $usaBiSales = false;
+            if ($stmtChk !== false && ($rChk = sqlsrv_fetch_array($stmtChk, SQLSRV_FETCH_ASSOC))) {
+                $usaBiSales = (int)$rChk['existe'] === 1;
+                sqlsrv_free_stmt($stmtChk);
+            }
+
+            if ($usaBiSales) {
+                $sql = "
+                    SELECT
+                        UPPER(LTRIM(RTRIM(CANAL))) AS CANAL,
+                        MONTH(FECHA) AS MES,
+                        YEAR(FECHA) AS ANIO,
+                        SUM(CASE WHEN ISNULL(RUBRO, '') NOT IN ('PACKAGING', '_KITS', 'CONCEPTO')
+                                 THEN CAST(CANTIDAD AS FLOAT) ELSE 0 END) AS UNIDADES,
+                        SUM(CAST(IMPORTE AS FLOAT)) AS IMPORTE_ARS
+                    FROM dbo.BI_SALES_LAKERS
+                    WHERE FECHA >= ? AND FECHA <= ?
+                      AND CANAL IN ('LOCALES PROPIOS', 'FRANQUICIAS', 'MAYORISTAS', 'ECOMMERCE')
+                    GROUP BY UPPER(LTRIM(RTRIM(CANAL))), MONTH(FECHA), YEAR(FECHA)
+                ";
+            } else {
+                $resultado['fuente'] = 'RO_VENTAS_COMERCIAL';
+                $sql = "
+                    SELECT
+                        CASE
+                            WHEN CANAL = 'CENTRAL' AND DESC_SUCURSAL = 'MAYORISTAS' THEN 'MAYORISTAS'
+                            WHEN CANAL = 'CENTRAL' AND DESC_SUCURSAL = 'FRANQUICIAS' THEN 'FRANQUICIAS'
+                            WHEN CANAL = 'LOCALES PROPIOS' AND DESC_SUCURSAL = 'ECOMMERCE' THEN 'ECOMMERCE'
+                            WHEN CANAL = 'LOCALES PROPIOS' THEN 'LOCALES PROPIOS'
+                            ELSE UPPER(LTRIM(RTRIM(CANAL)))
+                        END AS CANAL,
+                        MONTH(FECHA_VENTA) AS MES,
+                        YEAR(FECHA_VENTA) AS ANIO,
+                        SUM(CASE WHEN ISNULL(RUBRO, '') NOT IN ('PACKAGING', '_KITS', 'CONCEPTO')
+                                 THEN CAST(CANT_VEND AS FLOAT) ELSE 0 END) AS UNIDADES,
+                        SUM(CAST(CANT_VEND AS FLOAT) * ISNULL(CAST(PRECIO AS FLOAT), 0)) AS IMPORTE_ARS
+                    FROM dbo.RO_VENTAS_COMERCIAL
+                    WHERE FECHA_VENTA >= ? AND FECHA_VENTA <= ?
+                      AND CANAL IN ('CENTRAL', 'LOCALES PROPIOS')
+                    GROUP BY
+                        CASE
+                            WHEN CANAL = 'CENTRAL' AND DESC_SUCURSAL = 'MAYORISTAS' THEN 'MAYORISTAS'
+                            WHEN CANAL = 'CENTRAL' AND DESC_SUCURSAL = 'FRANQUICIAS' THEN 'FRANQUICIAS'
+                            WHEN CANAL = 'LOCALES PROPIOS' AND DESC_SUCURSAL = 'ECOMMERCE' THEN 'ECOMMERCE'
+                            WHEN CANAL = 'LOCALES PROPIOS' THEN 'LOCALES PROPIOS'
+                            ELSE UPPER(LTRIM(RTRIM(CANAL)))
+                        END,
+                        MONTH(FECHA_VENTA), YEAR(FECHA_VENTA)
+                ";
+            }
+
+            $stmt = sqlsrv_query($this->cid_power, $sql, [$fechaDesde, $fechaHasta]);
+            if ($stmt === false) {
+                error_log("Error en obtenerRealComparativoPorCanal: " . print_r(sqlsrv_errors(), true));
+                return $resultado;
+            }
+
+            $tasaFallback = !empty($tasasBcra) ? (float)end($tasasBcra) : 0.0;
+
+            while ($row = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC)) {
+                $canal = trim($row['CANAL'] ?? '');
+                $mes = (int)$row['MES'];
+                $anio = (int)$row['ANIO'];
+                $mesClave = "$mes-$anio";
+
+                $unidades = (float)($row['UNIDADES'] ?? 0);
+                $impArs = (float)($row['IMPORTE_ARS'] ?? 0);
+                $tasaMes = (float)($tasasBcra[$mesClave] ?? $tasaFallback);
+                $impUsd = ($tasaMes > 1.0) ? ($impArs / $tasaMes) : null;
+
+                if (!isset($resultado['por_canal'][$canal])) {
+                    $resultado['por_canal'][$canal] = [];
+                }
+                $resultado['por_canal'][$canal][$mesClave] = [
+                    'unidades' => round($unidades),
+                    'ars' => round($impArs),
+                    'usd' => $impUsd !== null ? round($impUsd, 2) : null,
+                    'tasa_bcra' => $tasaMes > 1.0 ? $tasaMes : null
+                ];
+            }
+            sqlsrv_free_stmt($stmt);
+        } catch (Exception $e) {
+            error_log("Error en Distribucion::obtenerRealComparativoPorCanal: " . $e->getMessage());
+        }
+
+        return $resultado;
+    }
+
     public function __destruct() {
         if ($this->cid_power) {
             sqlsrv_close($this->cid_power);

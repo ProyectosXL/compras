@@ -38,7 +38,7 @@ $conOc = !empty($barra['oc']);
             <?php endif; ?>
             <div class="dropdown">
                 <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button"
-                        data-bs-toggle="dropdown" aria-expanded="false">
+                        data-bs-toggle="dropdown" data-bs-popper-config='{"strategy":"fixed"}' aria-expanded="false">
                     Más acciones
                 </button>
                 <ul class="dropdown-menu dropdown-menu-end">

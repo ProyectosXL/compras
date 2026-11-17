@@ -223,10 +223,11 @@ class CostoProyeccion {
                 // Conversión a Dólares con el tipo de cambio de hoy
                 $costoUSD = round($medianaARS / $tcHoy, 2);
 
-                // Conservar inc_fob y markups existentes si los tiene
+                // Conservar markups existentes si los tiene; inc_fob queda en 0 porque
+                // RO_SP_COSTO_MEDIANA_RUBRO_CATEGORIA ya devuelve el costo nacionalizado (1 + COSTO_NAC)
                 $existente = $paramsActuales[$clave] ?? null;
-                $incFob = $existente ? (float)$existente['inc_fob'] : 0.0;
-                $vcosto = round($costoUSD * (1 + $incFob / 100), 2);
+                $incFob = 0.0;
+                $vcosto = $costoUSD;
 
                 $filasParaGuardar[] = [
                     'rubro' => $rubro,
@@ -314,10 +315,40 @@ class CostoProyeccion {
     }
 
     /**
-     * Calcular y sincronizar automáticamente el Mark-Up real (Venta / Costo)
-     * por Rubro, Categoría y Canal desde dbo.RO_T_RENT_BRUTA_RUBRO en central.
-     * Actualiza los markups de cada canal en FP_T_COSTOS_PARAMETROS preservando
-     * los costos unitarios y cualquier valor no modificado.
+     * Obtiene el tipo de cambio oficial vendedor promedio mensual desde
+     * RO_V_DOLAR_OFICIAL_BCRA en central (clave "ANIO-MES").
+     */
+    private function obtenerTasasMensualesBCRA($cidCentral) {
+        $tasas = [];
+        $sql = "SELECT Año, Mes, TCC, TCV FROM dbo.RO_V_DOLAR_OFICIAL_BCRA WHERE Año >= 2024 ORDER BY Año, Mes";
+        $stmt = sqlsrv_query($cidCentral, $sql);
+        if ($stmt !== false) {
+            while ($r = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC)) {
+                $clave = (int)$r['Año'] . '-' . (int)$r['Mes'];
+                $tcv = (float)($r['TCV'] ?? 0);
+                $tcc = (float)($r['TCC'] ?? 0);
+                if ($tcv > 0) {
+                    $tasas[$clave] = $tcv;
+                } elseif ($tcc > 0) {
+                    $tasas[$clave] = $tcc;
+                }
+            }
+            sqlsrv_free_stmt($stmt);
+        }
+        return $tasas;
+    }
+
+    /**
+     * Calcular y sincronizar automáticamente el Mark-Up real en USD
+     * (Precio Real USD / Vcosto USD del parámetro) por Rubro, Categoría y Canal.
+     *
+     * Toma la facturación neta sin IVA y unidades reales desde central
+     * (GVA12/GVA53, CTA02/CTA03, STA14/STA20), convierte cada mes a USD con la
+     * cotización oficial BCRA de ese mes y divide por las unidades y por el
+     * Vcosto USD vigente en FP_T_COSTOS_PARAMETROS. De esta manera el mark-up
+     * queda expresado en USD homogéneos (evitando el sesgo del costo contable
+     * histórico en ARS) y protege contra distorsiones por devoluciones o bajo
+     * volumen (< 5 u.) y ratios extremos (> 8.0x o < 0.5x).
      *
      * @param string|null $fechaDesde Fecha inicio (ej: '2026-09-01')
      * @param string|null $fechaHasta Fecha fin (ej: '2026-10-31')
@@ -343,142 +374,217 @@ class CostoProyeccion {
             $hastaNormalizado = date('Y-m-t', strtotime($fechaHasta));
 
             if ($desdeNormalizado > $hastaNormalizado) {
+                sqlsrv_close($cidCentral);
                 throw new Exception("La fecha desde ($fechaDesde) no puede ser posterior a la fecha hasta ($fechaHasta).");
             }
 
-            // Consultar Venta y Costo agrupados por Canal, Rubro y Categoría Padre
+            $tasasMes = $this->obtenerTasasMensualesBCRA($cidCentral);
+            $tcFallback = $this->obtenerTipoCambioHoy();
+            if ($tcFallback <= 0) $tcFallback = 1500.0;
+
+            // Consultar Venta neta sin IVA (ARS) y Unidades reales por Mes, Canal, Rubro y Categoría Padre
             $sql = "
-                SELECT 
-                    CASE
-                        WHEN NRO_SUCURS = 102 THEN 'ECOMMERCE'
-                        WHEN NRO_SUCURS = 100 THEN 'FRANQUICIAS'
-                        WHEN NRO_SUCURS = 101 THEN 'MAYORISTAS'
-                        WHEN NRO_SUCURS = 103 THEN 'OTROS'
-                        ELSE 'LOCALES PROPIOS'
-                    END AS CANAL,
-                    TRIM(RUBRO) AS RUBRO,
-                    TRIM(CATEGORIA_PADRE) AS CATEGORIA_PADRE,
-                    SUM(VENTA) AS TOTAL_VENTA,
-                    SUM(COSTO) AS TOTAL_COSTO
-                FROM dbo.RO_T_RENT_BRUTA_RUBRO
-                WHERE FECHA BETWEEN ? AND ?
-                  AND RUBRO NOT IN ('RECUPEROS','PRORRATEABLES','SIN RUBRO')
-                GROUP BY 
-                    CASE
-                        WHEN NRO_SUCURS = 102 THEN 'ECOMMERCE'
-                        WHEN NRO_SUCURS = 100 THEN 'FRANQUICIAS'
-                        WHEN NRO_SUCURS = 101 THEN 'MAYORISTAS'
-                        WHEN NRO_SUCURS = 103 THEN 'OTROS'
-                        ELSE 'LOCALES PROPIOS'
-                    END,
-                    TRIM(RUBRO),
-                    TRIM(CATEGORIA_PADRE)
+                SELECT
+                    YEAR(X.FECHA) AS ANIO,
+                    MONTH(X.FECHA) AS MES,
+                    X.CANAL,
+                    TRIM(F.RUBRO) AS RUBRO,
+                    TRIM(CASE WHEN F.CATEGORIA_PADRE IS NULL OR F.CATEGORIA_PADRE = '' THEN F.RUBRO ELSE F.CATEGORIA_PADRE END) AS CATEGORIA_PADRE,
+                    SUM(X.CANTIDAD) AS UNIDADES,
+                    SUM(X.IMPORTE) AS VENTA_ARS
+                FROM (
+                    SELECT A.FECHA_EMIS AS FECHA,
+                           CASE WHEN A.COD_CLIENT = '000000' THEN 'ECOMMERCE'
+                                WHEN A.COD_CLIENT LIKE 'MA%' THEN 'MAYORISTAS'
+                                WHEN A.COD_CLIENT LIKE 'FR%' THEN 'FRANQUICIAS'
+                           END AS CANAL,
+                           B.COD_ARTICU,
+                           CASE WHEN A.T_COMP LIKE 'NC%' THEN -B.CANTIDAD ELSE B.CANTIDAD END AS CANTIDAD,
+                           CASE WHEN A.T_COMP LIKE 'NC%' THEN -CAST(B.IMP_NETO_P AS FLOAT) ELSE CAST(B.IMP_NETO_P AS FLOAT) END AS IMPORTE
+                    FROM dbo.GVA12 A
+                    INNER JOIN dbo.GVA53 B ON A.N_COMP = B.N_COMP AND A.T_COMP = B.T_COMP
+                    WHERE (A.COD_CLIENT LIKE '[MF][AR]%' OR (A.COD_CLIENT = '000000' AND A.NRO_DE_LIS = '20'))
+                      AND A.T_COMP LIKE '[NF]%' AND B.COD_ARTICU_KIT = ''
+                      AND A.FECHA_EMIS BETWEEN ? AND ?
+
+                    UNION ALL
+                    SELECT A.FECHA_EMIS AS FECHA,
+                           CASE WHEN A.COD_CLIENT LIKE 'FR%' THEN 'FRANQUICIAS'
+                                WHEN A.COD_CLIENT LIKE 'MA%' THEN 'MAYORISTAS'
+                           END AS CANAL,
+                           B.COD_ARTICU,
+                           CASE WHEN A.T_COMP LIKE 'NC%' THEN -B.CANTIDAD ELSE B.CANTIDAD END AS CANTIDAD,
+                           CASE WHEN A.T_COMP LIKE 'NC%' THEN -CAST(B.IMP_NETO_P AS FLOAT) ELSE CAST(B.IMP_NETO_P AS FLOAT) END AS IMPORTE
+                    FROM dbo.GVA12 A
+                    INNER JOIN dbo.GVA53 B ON A.N_COMP = B.N_COMP AND A.T_COMP = B.T_COMP
+                    WHERE A.COD_CLIENT LIKE '[MF]%' AND A.T_COMP LIKE '[NF]%' AND B.PROMOCION = 1
+                      AND A.FECHA_EMIS BETWEEN ? AND ?
+
+                    UNION ALL
+                    SELECT CAST(A.FECHA_EMIS AS DATE) AS FECHA,
+                           'LOCALES PROPIOS' AS CANAL,
+                           B.COD_ARTICU,
+                           CAST(CASE WHEN B.T_COMP LIKE 'NC%' THEN -B.CANTIDAD ELSE B.CANTIDAD END AS FLOAT) AS CANTIDAD,
+                           CAST(CASE WHEN A.MON_CTE = 0 THEN (CASE WHEN B.T_COMP LIKE 'NC%' THEN -B.IMP_NETO_P ELSE B.IMP_NETO_P END) * A.COTIZ
+                                     ELSE (CASE WHEN B.T_COMP LIKE 'NC%' THEN -B.IMP_NETO_P ELSE B.IMP_NETO_P END) END AS FLOAT) AS IMPORTE
+                    FROM [XL-LAKERBIS].LOCALES_LAKERS.DBO.CTA02 A
+                    INNER JOIN [XL-LAKERBIS].LOCALES_LAKERS.DBO.CTA03 B ON A.FECHA_EMIS = B.FECHA_MOV AND A.N_COMP = B.N_COMP AND A.T_COMP = B.T_COMP
+                    WHERE A.ESTADO <> 'ANU' AND A.FECHA_EMIS BETWEEN ? AND ? AND A.NRO_SUCURS != '1'
+
+                    UNION ALL
+                    SELECT A.FECHA_MOV AS FECHA,
+                           CASE WHEN A.COD_PRO_CL LIKE 'MA%' THEN 'MAYORISTAS'
+                                WHEN A.COD_PRO_CL LIKE 'FR%' THEN 'FRANQUICIAS'
+                           END AS CANAL,
+                           B.COD_ARTICU,
+                           B.CANTIDAD,
+                           B.CANTIDAD * B.PRECIO_REM AS IMPORTE
+                    FROM dbo.STA14 A
+                    INNER JOIN dbo.STA20 B ON A.TCOMP_IN_S = B.TCOMP_IN_S AND A.NCOMP_IN_S = B.NCOMP_IN_S
+                    WHERE A.T_COMP = 'REM' AND A.FECHA_MOV BETWEEN ? AND ?
+                      AND dbo.FN_GC_ES_REMITO_SIN_FACTURA_599(A.N_COMP) = 1 AND B.PROMOCION != 1
+                ) X
+                INNER JOIN dbo.RO_V_MAESTRO_ARTICULOS_RUBRO_CATEGORIA_ORIGEN F ON X.COD_ARTICU = F.COD_ARTICU
+                WHERE F.RUBRO IS NOT NULL
+                  AND F.RUBRO NOT IN ('RECUPEROS', 'PRORRATEABLES', 'SIN RUBRO', 'PACKAGING', '_KITS')
+                  AND (F.CATEGORIA_PADRE IS NULL OR F.CATEGORIA_PADRE <> 'REMERA')
+                  AND (X.COD_ARTICU LIKE 'X%' OR (F.RUBRO = 'SINTETICOS OUTLET' AND X.COD_ARTICU LIKE 'O%' AND X.COD_ARTICU NOT LIKE 'OU%'))
+                GROUP BY YEAR(X.FECHA), MONTH(X.FECHA), X.CANAL, TRIM(F.RUBRO),
+                         TRIM(CASE WHEN F.CATEGORIA_PADRE IS NULL OR F.CATEGORIA_PADRE = '' THEN F.RUBRO ELSE F.CATEGORIA_PADRE END)
             ";
 
-            $stmt = sqlsrv_query($cidCentral, $sql, [$desdeNormalizado, $hastaNormalizado]);
+            $paramsSql = [
+                $desdeNormalizado, $hastaNormalizado,
+                $desdeNormalizado, $hastaNormalizado,
+                $desdeNormalizado, $hastaNormalizado,
+                $desdeNormalizado, $hastaNormalizado
+            ];
+            $stmt = sqlsrv_query($cidCentral, $sql, $paramsSql);
 
             if ($stmt === false) {
-                throw new Exception("Error al consultar rentabilidad por rubro: " . print_r(sqlsrv_errors(), true));
+                $err = print_r(sqlsrv_errors(), true);
+                sqlsrv_close($cidCentral);
+                throw new Exception("Error al consultar ventas reales por canal/categoría: " . $err);
             }
 
-            // Mapear los markups calculados: rubro|categoria => [CANAL => markup]
-            $calculados = [];
+            // Acumular Venta en USD (convertida por el dólar oficial BCRA de cada mes) y Unidades reales
+            $ventasUSD = [];
             while ($row = sqlsrv_fetch_array($stmt, SQLSRV_FETCH_ASSOC)) {
                 $canal = trim($row['CANAL'] ?? '');
-                if ($canal === 'OTROS') continue; // Solo los 4 canales presupuestarios
+                if (!in_array($canal, ['LOCALES PROPIOS', 'FRANQUICIAS', 'MAYORISTAS', 'ECOMMERCE'], true)) continue;
 
                 $rubro = trim($row['RUBRO'] ?? '');
                 $cat = trim($row['CATEGORIA_PADRE'] ?? '');
-                $venta = (float)($row['TOTAL_VENTA'] ?? 0);
-                $costo = (float)($row['TOTAL_COSTO'] ?? 0);
-
                 if ($rubro === '' || $cat === '') continue;
 
-                $clave = "$rubro|$cat";
-                if (!isset($calculados[$clave])) {
-                    $calculados[$clave] = [
-                        'rubro' => $rubro,
-                        'categoria_padre' => $cat,
-                        'LOCALES PROPIOS' => null,
-                        'FRANQUICIAS' => null,
-                        'MAYORISTAS' => null,
-                        'ECOMMERCE' => null
-                    ];
-                }
+                $ym = (int)$row['ANIO'] . '-' . (int)$row['MES'];
+                $tcMes = $tasasMes[$ym] ?? $tcFallback;
+                if ($tcMes <= 0) $tcMes = $tcFallback;
 
-                // Mark-up = Venta / Costo (solo si costo > 0 y venta > 0)
-                if ($costo > 0 && $venta > 0) {
-                    $calculados[$clave][$canal] = round($venta / $costo, 2);
+                $unidades = (float)($row['UNIDADES'] ?? 0);
+                $vARS = (float)($row['VENTA_ARS'] ?? 0);
+                $vUSD = $vARS / $tcMes;
+
+                $clave = "$rubro|$cat";
+                if (!isset($ventasUSD[$clave][$canal])) {
+                    $ventasUSD[$clave][$canal] = ['unidades' => 0.0, 'venta_usd' => 0.0];
                 }
+                $ventasUSD[$clave][$canal]['unidades'] += $unidades;
+                $ventasUSD[$clave][$canal]['venta_usd'] += $vUSD;
             }
             sqlsrv_free_stmt($stmt);
             sqlsrv_close($cidCentral);
 
-            if (empty($calculados)) {
-                throw new Exception("No se encontraron datos de rentabilidad para el período seleccionado ($desdeNormalizado a $hastaNormalizado).");
+            if (empty($ventasUSD)) {
+                throw new Exception("No se encontraron ventas reales para el período seleccionado ($desdeNormalizado a $hastaNormalizado).");
             }
 
-            // Obtener los parámetros globales actuales para conservar costos y markups previos cuando no haya datos nuevos
+            // Obtener los parámetros globales actuales (incluye vcosto USD de cada categoría)
             $paramsActuales = $this->obtenerParametrosGlobales();
-            $filasParaGuardar = [];
+            $canalesMap = [
+                'LOCALES PROPIOS' => 'markup_locales_propios',
+                'FRANQUICIAS' => 'markup_franquicias',
+                'MAYORISTAS' => 'markup_mayoristas',
+                'ECOMMERCE' => 'markup_ecommerce'
+            ];
+
+            $minUnidades = 5;
+            $minMarkupValido = 0.50;
+            $maxMarkupValido = 8.00;
+
+            $filasMap = [];
+            $rubroMarkupsValidos = [];
             $categoriasActualizadas = 0;
+            $omitidasPorOutlier = 0;
 
-            // 1. Actualizar registros existentes en FP_T_COSTOS_PARAMETROS
+            // 1. Calcular nuevo Mark-Up Real en USD por categoría y canal sobre los parámetros existentes
             foreach ($paramsActuales as $clave => $item) {
-                $rubro = $item['rubro'];
-                $cat = $item['categoria_padre'];
-                $calc = $calculados[$clave] ?? null;
+                $rubro = trim($item['rubro']);
+                $cat = trim($item['categoria_padre']);
+                if ($cat === '') continue; // Omitir filas huérfanas sin categoría padre
 
-                $markupLP = ($calc && $calc['LOCALES PROPIOS'] !== null) 
-                    ? $calc['LOCALES PROPIOS'] 
-                    : (float)$item['markup_locales_propios'];
-
-                $markupFR = ($calc && $calc['FRANQUICIAS'] !== null) 
-                    ? $calc['FRANQUICIAS'] 
-                    : (float)$item['markup_franquicias'];
-
-                $markupMY = ($calc && $calc['MAYORISTAS'] !== null) 
-                    ? $calc['MAYORISTAS'] 
-                    : (float)$item['markup_mayoristas'];
-
-                $markupEC = ($calc && $calc['ECOMMERCE'] !== null) 
-                    ? $calc['ECOMMERCE'] 
-                    : (float)$item['markup_ecommerce'];
-
-                if ($calc) {
-                    $categoriasActualizadas++;
-                }
-
-                $filasParaGuardar[] = [
+                $vcosto = (float)$item['vcosto'];
+                $filaNueva = [
                     'rubro' => $rubro,
                     'categoria_padre' => $cat,
                     'costo_prom' => (float)$item['costo_prom'],
                     'inc_fob' => (float)$item['inc_fob'],
-                    'vcosto' => (float)$item['vcosto'],
-                    'markup_locales_propios' => $markupLP,
-                    'markup_franquicias' => $markupFR,
-                    'markup_mayoristas' => $markupMY,
-                    'markup_ecommerce' => $markupEC
+                    'vcosto' => $vcosto,
+                    'markup_locales_propios' => (float)$item['markup_locales_propios'],
+                    'markup_franquicias' => (float)$item['markup_franquicias'],
+                    'markup_mayoristas' => (float)$item['markup_mayoristas'],
+                    'markup_ecommerce' => (float)$item['markup_ecommerce']
                 ];
-            }
 
-            // 2. Si hay categorías nuevas en el reporte de rentabilidad que no existían en parámetros globales
-            foreach ($calculados as $clave => $calc) {
-                if (!isset($paramsActuales[$clave])) {
-                    $filasParaGuardar[] = [
-                        'rubro' => $calc['rubro'],
-                        'categoria_padre' => $calc['categoria_padre'],
-                        'costo_prom' => 0.0,
-                        'inc_fob' => 0.0,
-                        'vcosto' => 0.0,
-                        'markup_locales_propios' => $calc['LOCALES PROPIOS'] ?? 0.0,
-                        'markup_franquicias' => $calc['FRANQUICIAS'] ?? 0.0,
-                        'markup_mayoristas' => $calc['MAYORISTAS'] ?? 0.0,
-                        'markup_ecommerce' => $calc['ECOMMERCE'] ?? 0.0
-                    ];
+                $tuvoActualizacion = false;
+                $datosCat = $ventasUSD[$clave] ?? null;
+
+                foreach ($canalesMap as $canalNombre => $campoMarkup) {
+                    $d = $datosCat[$canalNombre] ?? null;
+                    if ($d && $vcosto > 0 && $d['unidades'] >= $minUnidades && $d['venta_usd'] > 0) {
+                        $precioRealUSD = $d['venta_usd'] / $d['unidades'];
+                        $mkCalculado = round($precioRealUSD / $vcosto, 2);
+
+                        if ($mkCalculado >= $minMarkupValido && $mkCalculado <= $maxMarkupValido) {
+                            $filaNueva[$campoMarkup] = $mkCalculado;
+                            $tuvoActualizacion = true;
+                        } else {
+                            $omitidasPorOutlier++;
+                        }
+                    }
+
+                    // Acumular markups sanos por rubro para poder sanear anomalías heredadas (> 8x)
+                    $mkFinal = $filaNueva[$campoMarkup];
+                    if ($mkFinal >= $minMarkupValido && $mkFinal <= $maxMarkupValido) {
+                        $rubroMarkupsValidos[$rubro][$campoMarkup][] = $mkFinal;
+                    }
+                }
+
+                if ($tuvoActualizacion) {
                     $categoriasActualizadas++;
                 }
+                $filasMap[$clave] = $filaNueva;
             }
+
+            // 2. Sanear cualquier markup heredado extremo (> 8.0x, ej: 25.44x en LLAVERO) usando el promedio sano del rubro
+            $anomaliasSaneadas = 0;
+            foreach ($filasMap as $clave => &$fila) {
+                $rubro = $fila['rubro'];
+                foreach ($canalesMap as $campoMarkup) {
+                    if ($fila[$campoMarkup] > $maxMarkupValido) {
+                        $listaRubro = $rubroMarkupsValidos[$rubro][$campoMarkup] ?? [];
+                        if (!empty($listaRubro)) {
+                            $fila[$campoMarkup] = round(array_sum($listaRubro) / count($listaRubro), 2);
+                        } else {
+                            $fila[$campoMarkup] = $maxMarkupValido;
+                        }
+                        $anomaliasSaneadas++;
+                    }
+                }
+            }
+            unset($fila);
+
+            $filasParaGuardar = array_values($filasMap);
 
             // Guardar en la base de datos
             $resGuardar = $this->guardarParametrosGlobales($filasParaGuardar);
@@ -491,10 +597,12 @@ class CostoProyeccion {
             return [
                 'success' => true,
                 'total_actualizados' => $categoriasActualizadas,
+                'anomalias_saneadas' => $anomaliasSaneadas,
+                'omitidas_por_outlier' => $omitidasPorOutlier,
                 'periodo_desde' => $desdeNormalizado,
                 'periodo_hasta' => $hastaNormalizado,
                 'periodo_formateado' => $textoPeriodo,
-                'message' => "Mark-up real calculado y actualizado con éxito para $categoriasActualizadas categorías (Período: $textoPeriodo)."
+                'message' => "Mark-up real en USD calculado y actualizado con éxito para $categoriasActualizadas categorías (Período: $textoPeriodo)."
             ];
         } catch (Exception $e) {
             error_log("Error en CostoProyeccion::sincronizarMarkupReal: " . $e->getMessage());
