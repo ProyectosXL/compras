@@ -472,15 +472,21 @@ class APIClient {
     /**
      * Obtener parámetros globales de costo
      */
-    static async obtenerParametrosCostos() {
-        return await APIClient.llamarAPI('obtener-parametros-costos');
+    static async obtenerParametrosCostos(temporada = '') {
+        const params = temporada ? { temporada: temporada } : {};
+        return await APIClient.llamarAPI('obtener-parametros-costos', params);
     }
 
     /**
      * Guardar parámetros globales de costo
      */
-    static async guardarParametrosCostos(parametros) {
-        return await APIClient.llamarAPI('guardar-parametros-costos', {}, 'POST', { parametros: parametros });
+    static async guardarParametrosCostos(parametros, temporada = '', markupsMensuales = null) {
+        const body = { parametros: parametros };
+        if (temporada && markupsMensuales) {
+            body.temporada = temporada;
+            body.markups_mensuales = markupsMensuales;
+        }
+        return await APIClient.llamarAPI('guardar-parametros-costos', {}, 'POST', body);
     }
 
     /**
@@ -491,19 +497,20 @@ class APIClient {
     }
 
     /**
-     * Obtener el período por defecto para el cálculo de Mark-up real (últimos 60 días con datos)
+     * Obtener el período de la última temporada cerrada equivalente
      */
-    static async obtenerPeriodoDefaultMarkup() {
-        return await APIClient.llamarAPI('obtener-periodo-default-markup', {}, 'GET');
+    static async obtenerPeriodoDefaultMarkup(temporada = '') {
+        const params = temporada ? { temporada } : {};
+        return await APIClient.llamarAPI('obtener-periodo-default-markup', params, 'GET');
     }
 
     /**
-     * Calcular y sincronizar automáticamente Mark-up real por Rubro, Categoría y Canal
+     * Calcular y sincronizar automáticamente Mark-up real mensual por Rubro, Categoría y Canal
+     * contra la última temporada cerrada equivalente del año anterior.
      */
-    static async calcularMarkupRealParametros(desde = '', hasta = '') {
+    static async calcularMarkupRealParametros(temporada = '') {
         return await APIClient.llamarAPI('calcular-markup-real', {}, 'POST', {
-            desde: desde,
-            hasta: hasta
+            temporada: temporada
         });
     }
 

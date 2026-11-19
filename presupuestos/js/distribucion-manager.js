@@ -1496,9 +1496,6 @@ class DistribucionManager {
             `;
         };
 
-        // Helper para obtener el markup correspondiente al canal de la fila
-        const obtenerMarkupFila = (row) => DistribucionManager.obtenerMarkupFila(row);
-
         // Helper para generar fila de subtotal de markup por rubro/categoría
         const generarSubtotalMarkup = (grupo) => {
             const first = grupo[0];
@@ -1513,15 +1510,15 @@ class DistribucionManager {
 
             grupo.forEach(item => {
                 const vcosto = item.COSTO_PROM * (1 + item.INC_FOB / 100);
-                const markup = DistribucionManager.obtenerMarkupFila(item);
                 sumCompraDist += item.COMPRA_DISTRIBUIDA || 0;
 
                 DistribucionManager.mesesCostosClaves.forEach((m, mIdx) => {
                     const labelMes = DistribucionManager.mesesCostos[mIdx];
                     const tasaMes = esARS ? DistribucionManager.tasaParaMes(labelMes) : 1;
                     const unidades = item.MESES_UNIDADES[m] || 0;
-                    // Formula: unidades * vcosto * markup
-                    const valorMarkupUSD = unidades * vcosto * markup;
+                    const markupMes = DistribucionManager.obtenerMarkupFila(item, m);
+                    // Formula: unidades * vcosto * markup mensual
+                    const valorMarkupUSD = unidades * vcosto * markupMes;
                     sumMesesUSD[m] += valorMarkupUSD;
                     sumMarkupTotalUSD += valorMarkupUSD;
                     sumMarkupTotalARS += valorMarkupUSD * tasaMes;
@@ -1574,7 +1571,8 @@ class DistribucionManager {
             const vcosto = row.COSTO_PROM * (1 + row.INC_FOB / 100);
             row.VCOSTO = vcosto;
 
-            const markup = DistribucionManager.obtenerMarkupFila(row);
+            const markupProm = DistribucionManager.obtenerMarkupPromedioPonderadoFila(row);
+            const markupTooltip = DistribucionManager.obtenerDetalleMarkupsMensualesFila(row);
 
             let mesesHtmlCostos = '';
             let mesesHtmlMarkup = '';
@@ -1587,6 +1585,7 @@ class DistribucionManager {
                 const labelMes = DistribucionManager.mesesCostos[mIdx];
                 const unidades = row.MESES_UNIDADES[m] || 0;
                 const tasaMes = esARS ? DistribucionManager.tasaParaMes(labelMes) : 1;
+                const markupMes = DistribucionManager.obtenerMarkupFila(row, m);
                 
                 // Costo mensual base en USD y ARS con tasa del mes
                 const costoMesUSD = vcosto * unidades;
@@ -1594,12 +1593,12 @@ class DistribucionManager {
                 costoTotalARS += costoMesUSD * tasaMes;
 
                 // Markup mensual base en USD y ARS con tasa del mes
-                const markupMesUSD = vcosto * unidades * markup;
+                const markupMesUSD = vcosto * unidades * markupMes;
                 markupTotalUSD += markupMesUSD;
                 markupTotalARS += markupMesUSD * tasaMes;
                 
                 mesesHtmlCostos += `<td class="text-end font-monospace" style="font-size:0.85rem;">${fmtDinero(costoMesUSD, tasaMes)}</td>`;
-                mesesHtmlMarkup += `<td class="text-end font-monospace" style="font-size:0.85rem;">${fmtDinero(markupMesUSD, tasaMes)}</td>`;
+                mesesHtmlMarkup += `<td class="text-end font-monospace" style="font-size:0.85rem;" title="${labelMes}: x${markupMes.toFixed(2)}">${fmtDinero(markupMesUSD, tasaMes)}</td>`;
             });
 
             const vcostoValorFormatted = esARS ? (vcosto * tasaPromedio).toFixed(0) : vcosto.toFixed(2);
@@ -1629,7 +1628,7 @@ class DistribucionManager {
                 <tr style="vertical-align: middle;">
                     <td>${rubroText}</td>
                     <td>${catText}</td>
-                    <td class="bg-light-blue font-monospace">${row.CANAL} <span class="badge bg-secondary font-monospace fs-9 ms-1" style="font-weight:normal;">x${markup.toFixed(1)}</span></td>
+                    <td class="bg-light-blue font-monospace">${row.CANAL} <span class="badge bg-secondary font-monospace fs-9 ms-1" style="font-weight:normal;" title="${markupTooltip.replace(/"/g, '&quot;')}">x${markupProm.toFixed(2)}</span></td>
                     <td class="text-end font-monospace fw-bold" style="background:#f8f9fa;">${FormatoUtils.formatearNumero(row.COMPRA_DISTRIBUIDA)}</td>
                     <td class="text-end font-monospace ${vcostoColor}">
                         ${vcosto > 0 ? (esARS ? '$' : 'U$D') + ' ' + vcostoValorFormatted : '<span class="badge bg-secondary fs-8">Sin param.</span>'}
@@ -1671,7 +1670,6 @@ class DistribucionManager {
 
         datos.forEach(row => {
             const vcosto = row.COSTO_PROM * (1 + row.INC_FOB / 100);
-            const markup = DistribucionManager.obtenerMarkupFila(row);
             const canalNormalizado = (row.CANAL || '').toUpperCase().trim();
             
             totalGeneralVentaProyectada += row.COMPRA_DISTRIBUIDA || 0;
@@ -1680,9 +1678,10 @@ class DistribucionManager {
                 const labelMes = DistribucionManager.mesesCostos[mIdx];
                 const tasaMes = esARS ? DistribucionManager.tasaParaMes(labelMes) : 1;
                 const unidades = row.MESES_UNIDADES[m] || 0;
+                const markupMes = DistribucionManager.obtenerMarkupFila(row, m);
                 
                 const costoMesUSD = vcosto * unidades;
-                const ventaMesUSD = vcosto * unidades * markup;
+                const ventaMesUSD = vcosto * unidades * markupMes;
                 const costoMesARS = costoMesUSD * tasaMes;
                 const ventaMesARS = ventaMesUSD * tasaMes;
 
@@ -1819,6 +1818,166 @@ class DistribucionManager {
 
     // Propiedad para guardar parámetros cargados en modal
     static parametrosGlobalesModal = [];
+    static markupsMensualesModal = {};
+    static markupMetaModal = null;
+    static periodoMarkupModal = null;
+    static modoMarkupMensualModal = false;
+
+    static CANALES_MARKUP_MODAL = [
+        { canal: 'LOCALES PROPIOS', campo: 'markup_locales_propios' },
+        { canal: 'FRANQUICIAS', campo: 'markup_franquicias' },
+        { canal: 'MAYORISTAS', campo: 'markup_mayoristas' },
+        { canal: 'ECOMMERCE', campo: 'markup_ecommerce' }
+    ];
+
+    /**
+     * Meses ordenados y etiquetas para la temporada activa
+     */
+    static obtenerMesesTemporadaModal(temporada) {
+        const esInv = (temporada || '').toUpperCase().includes('INV');
+        const orden = esInv ? [2, 3, 4, 5, 6, 7] : [8, 9, 10, 11, 12, 1];
+        const nombres = { 1: 'Ene', 2: 'Feb', 3: 'Mar', 4: 'Abr', 5: 'May', 6: 'Jun', 7: 'Jul', 8: 'Ago', 9: 'Sep', 10: 'Oct', 11: 'Nov', 12: 'Dic' };
+        return orden.map(m => ({ mes: m, label: nombres[m] }));
+    }
+
+    /**
+     * Obtiene la temporada activa normalizada ('INVIERNO' | 'VERANO')
+     */
+    static obtenerTemporadaActiva() {
+        const temporadaSelect = document.getElementById('filtro-temporada-distribucion');
+        let temporada = temporadaSelect?.value || '';
+        if (!temporada) {
+            const tempActual = window.presupuestoApp?.temporadaInfo?.temporada_actual?.temporada || '';
+            temporada = tempActual.toUpperCase().includes('INV') ? 'INVIERNO' : 'VERANO';
+        }
+        return temporada.toUpperCase().includes('INV') ? 'INVIERNO' : 'VERANO';
+    }
+
+    /**
+     * Renderiza el banner informativo en la solapa Mark-Up por Canal del modal
+     */
+    static actualizarBannerMarkupModal(temporada) {
+        const banner = document.getElementById('banner-markup-temporada-modal');
+        if (!banner) return;
+        const esInv = (temporada || '').toUpperCase().includes('INV');
+        const nombreTemp = esInv ? 'INVIERNO (Feb–Jul)' : 'VERANO (Ago–Ene)';
+        const periodo = DistribucionManager.periodoMarkupModal;
+        const meta = DistribucionManager.markupMetaModal;
+        const rangoTxt = periodo?.texto ? `Base histórica: <strong>${periodo.texto}</strong>` : '';
+        const actTxt = meta?.fecha_actualizacion ? ` · Actualizado: ${meta.fecha_actualizacion}` : '';
+
+        banner.classList.remove('alert-info', 'alert-primary', 'alert-warning');
+        banner.classList.add(esInv ? 'alert-primary' : 'alert-warning');
+
+        if (DistribucionManager.modoMarkupMensualModal) {
+            banner.innerHTML = `
+                <div>
+                    <i class="fas fa-calendar-check me-1"></i>
+                    <strong>Temporada ${nombreTemp}</strong> ${rangoTxt ? '· ' + rangoTxt : ''}${actTxt}
+                </div>
+                <div>
+                    Editá directamente el Mark-Up de cada mes (<strong>${esInv ? 'azul = Invierno' : 'amarillo = Verano'}</strong>): es el valor exacto que multiplica al Vcosto en Paso 2
+                </div>`;
+        } else {
+            banner.innerHTML = `
+                <div><i class="fas fa-percent me-1"></i><strong>Mark-Up fijo por canal</strong></div>
+                <div>Fórmula: Venta = Unidades × Vcosto × Mark-Up</div>`;
+        }
+    }
+
+    /**
+     * Garantiza que markupsMensualesModal[clave][canalNombre] tenga los 6 meses inicializados cuando corresponde
+     */
+    static asegurarMarkupsMensualesFila(item, temporada) {
+        const clave = `${item.rubro}|${item.categoria_padre}`;
+        if (!DistribucionManager.markupsMensualesModal[clave]) {
+            DistribucionManager.markupsMensualesModal[clave] = {};
+        }
+        const meses = DistribucionManager.obtenerMesesTemporadaModal(temporada);
+        DistribucionManager.CANALES_MARKUP_MODAL.forEach(({ canal, campo }) => {
+            if (!DistribucionManager.markupsMensualesModal[clave][canal]) {
+                DistribucionManager.markupsMensualesModal[clave][canal] = {};
+            }
+            const porCanal = DistribucionManager.markupsMensualesModal[clave][canal];
+            const baseVal = parseFloat(item[campo]) || 0;
+            meses.forEach(({ mes }) => {
+                if (porCanal[mes] === undefined && porCanal[String(mes)] === undefined) {
+                    porCanal[mes] = { markup: baseVal, origen: 'BASE', anio_base: '' };
+                }
+            });
+        });
+        return DistribucionManager.markupsMensualesModal[clave];
+    }
+
+    /**
+     * Renderiza la celda editable de 6 meses (azul en INVIERNO, amarillo en VERANO) para una combinación y canal
+     */
+    static renderizarInputsMarkupMensual(item, idxOriginal, canalNombre, campo, temporada) {
+        const esInv = (temporada || '').toUpperCase().includes('INV');
+        const cardCls = esInv ? 'mk-mes-card--inv' : 'mk-mes-card--ver';
+        const lblCls = esInv ? 'text-primary-emphasis' : 'text-warning-emphasis';
+        const porClave = DistribucionManager.asegurarMarkupsMensualesFila(item, temporada);
+        const porCanal = porClave[canalNombre];
+        const meses = DistribucionManager.obtenerMesesTemporadaModal(temporada);
+
+        let sum = 0;
+        const celdasHtml = meses.map(({ mes, label }) => {
+            const info = porCanal[mes] ?? porCanal[String(mes)] ?? { markup: 0, origen: 'BASE', anio_base: '' };
+            const val = parseFloat(info.markup) || 0;
+            sum += val;
+            const origen = info.origen || 'BASE';
+            const anio = info.anio_base ? ` ${info.anio_base}` : '';
+            return `
+                <div class="mk-mes-card ${cardCls}" title="${label}${anio} · Origen: ${origen}">
+                    <div class="mk-mes-lbl ${lblCls}">${label.toUpperCase()}</div>
+                    <input type="number" step="0.01" min="0"
+                           class="mk-mes-input"
+                           value="${val !== 0 ? val : ''}" placeholder="0.00"
+                           oninput="DistribucionManager.actualizarValorMarkupMensualModal(${idxOriginal}, '${canalNombre}', '${campo}', ${mes}, this.value)">
+                </div>`;
+        }).join('');
+
+        const prom = meses.length > 0 ? (sum / meses.length) : 0;
+        return `
+            <div class="mk-mes-grid">
+                ${celdasHtml}
+            </div>
+            <div class="text-center text-muted font-monospace mt-1" id="modal-mk-prom-${idxOriginal}-${campo}" style="font-size:0.7rem;">
+                Prom. temp.: <strong class="text-dark">x${prom.toFixed(2)}</strong>
+            </div>`;
+    }
+
+    /**
+     * Actualiza el valor mensual editado en memoria y recalcula el promedio base del canal
+     */
+    static actualizarValorMarkupMensualModal(index, canalNombre, campo, mesNum, valor) {
+        const item = DistribucionManager.parametrosGlobalesModal[index];
+        if (!item) return;
+        const temporada = DistribucionManager.obtenerTemporadaActiva();
+        const clave = `${item.rubro}|${item.categoria_padre}`;
+        const porClave = DistribucionManager.asegurarMarkupsMensualesFila(item, temporada);
+        const val = parseFloat(valor) || 0;
+
+        if (porClave[canalNombre][String(mesNum)] && !porClave[canalNombre][mesNum]) {
+            delete porClave[canalNombre][String(mesNum)];
+        }
+        const prevAnio = porClave[canalNombre][mesNum]?.anio_base || '';
+        porClave[canalNombre][mesNum] = { markup: val, origen: 'MANUAL', anio_base: prevAnio };
+
+        const meses = DistribucionManager.obtenerMesesTemporadaModal(temporada);
+        let sum = 0;
+        meses.forEach(({ mes }) => {
+            const info = porClave[canalNombre][mes] ?? porClave[canalNombre][String(mes)];
+            sum += parseFloat(info?.markup) || 0;
+        });
+        const prom = meses.length > 0 ? (sum / meses.length) : 0;
+        item[campo] = parseFloat(prom.toFixed(2));
+
+        const promEl = document.getElementById(`modal-mk-prom-${index}-${campo}`);
+        if (promEl) {
+            promEl.innerHTML = `Prom. temp.: <strong class="text-dark">x${prom.toFixed(2)}</strong>`;
+        }
+    }
 
     /**
      * Cargar y abrir el Modal de Parámetros Globales
@@ -1826,8 +1985,17 @@ class DistribucionManager {
     static async abrirModalParametros() {
         try {
             UIUtils.mostrarLoading(true);
-            const response = await APIClient.obtenerParametrosCostos();
+            const temporada = DistribucionManager.obtenerTemporadaActiva();
+            const response = await APIClient.obtenerParametrosCostos(temporada);
             if (response.success) {
+                DistribucionManager.markupsMensualesModal = response.markups_mensuales || {};
+                DistribucionManager.markupMetaModal = response.markup_meta || null;
+                DistribucionManager.periodoMarkupModal = response.periodo_markup || null;
+                DistribucionManager.modoMarkupMensualModal = Boolean(
+                    response.es_mensual || Object.keys(DistribucionManager.markupsMensualesModal).length > 0
+                );
+                DistribucionManager.actualizarBannerMarkupModal(temporada);
+
                 // PRIMERO: cargar combinaciones desde los parámetros globales guardados en la BD
                 // (disponibles siempre, sin necesidad de tener una versión cargada)
                 const combinaciones = {};
@@ -1926,6 +2094,7 @@ class DistribucionManager {
         if (!tbodyCostos || !tbodyMarkup) return;
 
         const items = lista !== null ? lista : DistribucionManager.parametrosGlobalesModal;
+        const temporada = DistribucionManager.obtenerTemporadaActiva();
 
         if (items.length === 0) {
             const emptyCostos = `<tr><td colspan="4" class="text-center text-muted py-3">No hay combinaciones para mostrar</td></tr>`;
@@ -1945,6 +2114,7 @@ class DistribucionManager {
             );
 
             const vcosto = item.costo_prom * (1 + (item.inc_fob || 0) / 100);
+            const clave = `${item.rubro}|${item.categoria_padre}`;
 
             // Tab 1: Costos (inc_fob ya incluido en el costo del SP)
             htmlCostos += `
@@ -1961,31 +2131,26 @@ class DistribucionManager {
                     </td>
                 </tr>`;
 
-            // Tab 2: Mark-Up
+            // Tab 2: Mark-Up (6 inputs editables por mes para Argentina o input único fijo para Uruguay)
+            const esMensual = DistribucionManager.modoMarkupMensualModal;
+            const celdasCanales = DistribucionManager.CANALES_MARKUP_MODAL.map(({ canal, campo }) => {
+                if (esMensual) {
+                    return `<td>${DistribucionManager.renderizarInputsMarkupMensual(item, idxOriginal, canal, campo, temporada)}</td>`;
+                }
+                const val = item[campo] || 0;
+                return `
+                    <td>
+                        <input type="number" step="any" class="form-control form-control-sm text-end font-monospace"
+                               value="${val !== 0 ? val : ''}" placeholder="0.0"
+                               oninput="DistribucionManager.actualizarValorParametroModal(${idxOriginal}, '${campo}', this.value, this)">
+                    </td>`;
+            }).join('');
+
             htmlMarkup += `
                 <tr class="fila-param-modal" data-rubro="${item.rubro.toLowerCase()}" data-categoria="${item.categoria_padre.toLowerCase()}">
                     <td class="fw-bold">${item.rubro}</td>
                     <td>${item.categoria_padre}</td>
-                    <td>
-                        <input type="number" step="any" class="form-control form-control-sm text-end font-monospace"
-                               value="${item.markup_locales_propios !== 0 ? item.markup_locales_propios : ''}" placeholder="0.0"
-                               oninput="DistribucionManager.actualizarValorParametroModal(${idxOriginal}, 'markup_locales_propios', this.value, this)">
-                    </td>
-                    <td>
-                        <input type="number" step="any" class="form-control form-control-sm text-end font-monospace"
-                               value="${item.markup_franquicias !== 0 ? item.markup_franquicias : ''}" placeholder="0.0"
-                               oninput="DistribucionManager.actualizarValorParametroModal(${idxOriginal}, 'markup_franquicias', this.value, this)">
-                    </td>
-                    <td>
-                        <input type="number" step="any" class="form-control form-control-sm text-end font-monospace"
-                               value="${item.markup_mayoristas !== 0 ? item.markup_mayoristas : ''}" placeholder="0.0"
-                               oninput="DistribucionManager.actualizarValorParametroModal(${idxOriginal}, 'markup_mayoristas', this.value, this)">
-                    </td>
-                    <td>
-                        <input type="number" step="any" class="form-control form-control-sm text-end font-monospace"
-                               value="${item.markup_ecommerce !== 0 ? item.markup_ecommerce : ''}" placeholder="0.0"
-                               oninput="DistribucionManager.actualizarValorParametroModal(${idxOriginal}, 'markup_ecommerce', this.value, this)">
-                    </td>
+                    ${celdasCanales}
                 </tr>`;
         });
 
@@ -2042,13 +2207,28 @@ class DistribucionManager {
 
         // Obtenemos el valor de la primera fila
         const primerValor = items[0][campo] || 0;
+        const canalCfg = DistribucionManager.CANALES_MARKUP_MODAL.find(c => c.campo === campo);
+        const temporada = DistribucionManager.obtenerTemporadaActiva();
+        let primerMensual = null;
+        if (canalCfg && DistribucionManager.modoMarkupMensualModal) {
+            const porClave0 = DistribucionManager.asegurarMarkupsMensualesFila(items[0], temporada);
+            primerMensual = JSON.parse(JSON.stringify(porClave0[canalCfg.canal]));
+        }
 
         // Replicamos a todas las filas
-        items.forEach((item, index) => {
+        items.forEach((item) => {
             item[campo] = primerValor;
             if (campo === 'costo_prom' || campo === 'inc_fob') {
                 if (campo === 'costo_prom') item.inc_fob = 0;
                 item.vcosto = item.costo_prom * (1 + (item.inc_fob || 0) / 100);
+            }
+            if (primerMensual && canalCfg) {
+                const porClave = DistribucionManager.asegurarMarkupsMensualesFila(item, temporada);
+                const copia = {};
+                Object.entries(primerMensual).forEach(([mes, info]) => {
+                    copia[mes] = { ...info, origen: 'MANUAL' };
+                });
+                porClave[canalCfg.canal] = copia;
             }
         });
 
@@ -2102,7 +2282,7 @@ class DistribucionManager {
             if (mostrar) {
                 btnMarkup.innerHTML = '<span class="spinner-border spinner-border-sm me-2" role="status"></span>Calculando Mark-Up...';
             } else {
-                btnMarkup.innerHTML = '<i class="fas fa-chart-line me-1"></i>Calcular Mark-Up Real (Últimos 60 días)';
+                btnMarkup.innerHTML = '<i class="fas fa-chart-line me-1"></i>Calcular Mark-Up Real (Temporada anterior)';
             }
         }
         if (btnGuardar) btnGuardar.disabled = mostrar;
@@ -2115,120 +2295,34 @@ class DistribucionManager {
     static periodoDefaultMarkup = null;
 
     /**
-     * Abre el modal para configurar período y calcular Mark-up real por canal
-     */
-    static async abrirModalCalcularMarkup() {
-        try {
-            let modalEl = document.getElementById('modal-periodo-markup');
-            if (!modalEl) return;
-            if (modalEl.parentNode !== document.body) {
-                document.body.appendChild(modalEl);
-            }
-
-            // Consultar o usar período default
-            if (!DistribucionManager.periodoDefaultMarkup) {
-                try {
-                    const res = await APIClient.obtenerPeriodoDefaultMarkup();
-                    if (res && res.success) {
-                        DistribucionManager.periodoDefaultMarkup = res;
-                    }
-                } catch (e) {
-                    console.warn('No se pudo obtener período default de mark-up:', e);
-                }
-            }
-
-            const def = DistribucionManager.periodoDefaultMarkup;
-            const inputDesde = document.getElementById('markup-fecha-desde');
-            const inputHasta = document.getElementById('markup-fecha-hasta');
-            const badgeDefault = document.getElementById('badge-periodo-default');
-
-            if (inputDesde && def?.desde) inputDesde.value = def.desde;
-            if (inputHasta && def?.hasta) inputHasta.value = def.hasta;
-            if (badgeDefault && def?.texto) {
-                badgeDefault.innerHTML = `<i class="fas fa-history me-1"></i>Default: ${def.texto}`;
-            }
-
-            // Manejo de z-index cuando se abre sobre el modal de parámetros globales
-            if (!modalEl._backdropAdjusted) {
-                modalEl._backdropAdjusted = true;
-                modalEl.addEventListener('shown.bs.modal', () => {
-                    const backdrops = document.querySelectorAll('.modal-backdrop');
-                    if (backdrops.length > 1) {
-                        backdrops[backdrops.length - 1].style.zIndex = '1060';
-                    }
-                });
-            }
-
-            const bsModal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
-            bsModal.show();
-        } catch (e) {
-            console.error(e);
-            UIUtils.mostrarAlerta('Error al abrir selector de período de mark-up: ' + e.message, 'error');
-        }
-    }
-
-    /**
-     * Restablece los inputs de fecha al período default de 60 días con datos
-     */
-    static restablecerPeriodoDefaultMarkup() {
-        const def = DistribucionManager.periodoDefaultMarkup;
-        const inputDesde = document.getElementById('markup-fecha-desde');
-        const inputHasta = document.getElementById('markup-fecha-hasta');
-
-        if (def) {
-            if (inputDesde && def.desde) inputDesde.value = def.desde;
-            if (inputHasta && def.hasta) inputHasta.value = def.hasta;
-        } else {
-            const hoy = new Date();
-            const hasta = hoy.toISOString().split('T')[0];
-            const d60 = new Date(hoy.getTime() - (60 * 24 * 60 * 60 * 1000));
-            const desde = d60.toISOString().split('T')[0];
-            if (inputDesde) inputDesde.value = desde;
-            if (inputHasta) inputHasta.value = hasta;
-        }
-    }
-
-    /**
-     * Ejecuta el cálculo y actualización de Mark-up real por canal
+     * Calcula y actualiza el Mark-Up real mes a mes tomando la última temporada equivalente cerrada
      */
     static async confirmarCalcularMarkup() {
-        const inputDesde = document.getElementById('markup-fecha-desde');
-        const inputHasta = document.getElementById('markup-fecha-hasta');
-        const desde = inputDesde ? inputDesde.value.trim() : '';
-        const hasta = inputHasta ? inputHasta.value.trim() : '';
-
-        if (!desde || !hasta) {
-            UIUtils.mostrarAlerta('Debe especificar ambas fechas (Desde y Hasta).', 'warning');
-            return;
-        }
-
-        if (desde > hasta) {
-            UIUtils.mostrarAlerta('La fecha Desde no puede ser posterior a la fecha Hasta.', 'warning');
-            return;
-        }
-
-        // Cerrar modal selector de fechas
-        const modalPeriodoEl = document.getElementById('modal-periodo-markup');
-        if (modalPeriodoEl) {
-            const bsModalPeriodo = bootstrap.Modal.getInstance(modalPeriodoEl);
-            if (bsModalPeriodo) bsModalPeriodo.hide();
-        }
+        const temporada = DistribucionManager.obtenerTemporadaActiva();
+        const etiquetaTemp = temporada === 'INVIERNO' ? 'Invierno (Feb–Jul)' : 'Verano (Ago–Ene)';
 
         try {
             // Mostrar loading dentro del modal de parámetros
-            DistribucionManager.mostrarLoadingModal(true, 
-                'Calculando Mark-Up Real en USD por Canal...', 
-                `Consultando ventas reales por Rubro, Categoría y Canal y convirtiéndolas a USD oficiales (${desde} al ${hasta}). Por favor aguarde...`
+            DistribucionManager.mostrarLoadingModal(true,
+                `Calculando Mark-Up Real Mensual — ${etiquetaTemp}...`,
+                `Calculando Mark-Up real mes a mes (Rubro, Categoría, Canal y Mes) sobre la última temporada ${etiquetaTemp} cerrada en USD oficiales. Por favor aguarde...`
             );
 
-            const res = await APIClient.calcularMarkupRealParametros(desde, hasta);
+            const res = await APIClient.calcularMarkupRealParametros(temporada);
 
             if (res && res.success) {
-                UIUtils.mostrarAlerta(res.message || 'Mark-Up real calculado y actualizado con éxito.', 'success');
+                UIUtils.mostrarAlerta(res.message || `Mark-Up real mensual (${etiquetaTemp}) actualizado con éxito.`, 'success');
 
-                // Recargar el modal con los nuevos parámetros globales guardados en la BD
-                const response = await APIClient.obtenerParametrosCostos();
+                // Recargar el modal con los parámetros globales y los mark-ups mensuales de la temporada activa
+                const response = await APIClient.obtenerParametrosCostos(temporada);
                 if (response.success && response.parametros) {
+                    DistribucionManager.markupsMensualesModal = response.markups_mensuales || {};
+                    DistribucionManager.markupMetaModal = response.markup_meta || null;
+                    DistribucionManager.periodoMarkupModal = response.periodo_markup || null;
+                    DistribucionManager.modoMarkupMensualModal = Boolean(
+                        response.es_mensual || Object.keys(DistribucionManager.markupsMensualesModal).length > 0
+                    );
+                    DistribucionManager.actualizarBannerMarkupModal(temporada);
                     const mapa = {};
                     response.parametros.forEach(p => mapa[`${p.rubro}|${p.categoria_padre}`] = p);
 
@@ -2258,7 +2352,7 @@ class DistribucionManager {
                         });
                     });
 
-                    // Re-renderizar la tabla para mostrar los nuevos valores en los inputs
+                    // Re-renderizar la tabla para mostrar los nuevos valores base en los inputs
                     DistribucionManager.renderizarParametrosModal();
                 }
 
@@ -2269,8 +2363,10 @@ class DistribucionManager {
                     tabInstance.show();
                 }
 
-                // Recargar costos generales del paso 2 en segundo plano
-                await DistribucionManager.cargarCostos();
+                // Recargar costos generales del paso 2 para traer los MARKUPS_MENSUALES recién guardados
+                if (DistribucionManager.datosCostos && DistribucionManager.datosCostos.length > 0) {
+                    await DistribucionManager.cargarCostos();
+                }
             } else {
                 throw new Error(res?.message || 'Error desconocido al calcular mark-up real.');
             }
@@ -2359,8 +2455,11 @@ class DistribucionManager {
 
     static async guardarParametrosModal() {
         try {
-            DistribucionManager.mostrarLoadingModal(true, 'Guardando Parámetros...', 'Guardando los cambios de costos y mark-up en la base de datos...');
-            const response = await APIClient.guardarParametrosCostos(DistribucionManager.parametrosGlobalesModal);
+            DistribucionManager.mostrarLoadingModal(true, 'Guardando Parámetros...', 'Guardando los cambios de costos y mark-up mes a mes en la base de datos...');
+            const temporada = DistribucionManager.obtenerTemporadaActiva();
+            const response = DistribucionManager.modoMarkupMensualModal
+                ? await APIClient.guardarParametrosCostos(DistribucionManager.parametrosGlobalesModal, temporada, DistribucionManager.markupsMensualesModal)
+                : await APIClient.guardarParametrosCostos(DistribucionManager.parametrosGlobalesModal);
             if (response.success) {
                 UIUtils.mostrarAlerta('Parámetros globales guardados correctamente', 'success');
                 
@@ -2468,172 +2567,157 @@ class DistribucionManager {
             const datosPaso1 = DistribucionManager.datos || [];
             const datosPaso2 = DistribucionManager.datosCostos || [];
 
-            // 1. Pestaña de Ventas en Pesos ($)
-            const obtenerFilasVentaPesos = () => {
-                const filas = [];
-
-                datosPaso2.forEach(row => {
-                    const vcosto = row.COSTO_PROM * (1 + row.INC_FOB / 100);
-                    const markup = DistribucionManager.obtenerMarkupFila(row);
-                    const vventaUnit = vcosto * markup;
-                    const canalNormalizado = (row.CANAL || '').toUpperCase().trim();
-
-                    const itemsPaso1 = datosPaso1.filter(p1 => 
-                        (p1.RUBRO || '').trim().toUpperCase() === (row.RUBRO || '').trim().toUpperCase() && 
-                        (p1.CATEGORIA_PADRE || '').trim().toUpperCase() === (row.CATEGORIA_PADRE || '').trim().toUpperCase() && 
-                        (p1.CANAL || '').trim().toUpperCase() === (row.CANAL || '').trim().toUpperCase()
-                    );
-
-                    let sucursalesConsolidadas = [];
-                    if (itemsPaso1.length > 0) {
-                        itemsPaso1.forEach(p1 => {
-                            if (p1.SUCURSALES_DETALLE && p1.SUCURSALES_DETALLE.length > 0) {
-                                p1.SUCURSALES_DETALLE.forEach(suc => {
-                                    sucursalesConsolidadas.push(suc);
-                                });
-                            }
-                        });
-                    }
-
-                    if (sucursalesConsolidadas.length > 0) {
-                        sucursalesConsolidadas.forEach(suc => {
-                            let unidadesTotalSucursal = 0;
-                            DistribucionManager.mesesCostosClaves.forEach((m, mIdx) => {
-                                const labelMes = DistribucionManager.mesesCostos[mIdx];
-                                const unidadesMesSuc = suc.MESES && suc.MESES[labelMes] ? (suc.MESES[labelMes].unidades || 0) : 0;
-                                unidadesTotalSucursal += unidadesMesSuc;
-                            });
-
-                            const filaObj = {
-                                'Rubro': row.RUBRO,
-                                'Categoría': row.CATEGORIA_PADRE,
-                                'Canal / Sucursal': `${row.CANAL} - ${suc.SUCURSAL}`,
-                                'Venta Proyectada (U.)': unidadesTotalSucursal
-                            };
-
-                            let ventaTotalFilaUSD = 0;
-                            let ventaTotalFilaARS = 0;
-
-                            DistribucionManager.mesesCostosClaves.forEach((m, mIdx) => {
-                                const labelMes = DistribucionManager.mesesCostos[mIdx];
-                                const tasaMes = DistribucionManager.tasaParaMes(labelMes);
-                                const unidadesSuc = suc.MESES && suc.MESES[labelMes] ? (suc.MESES[labelMes].unidades || 0) : 0;
-
-                                const valorVentaMesUSD = vventaUnit * unidadesSuc;
-                                const valorVentaMesARS = valorVentaMesUSD * tasaMes;
-
-                                filaObj[`${labelMes} (TC $${Math.round(tasaMes)})`] = Math.round(valorVentaMesARS);
-                                ventaTotalFilaUSD += valorVentaMesUSD;
-                                ventaTotalFilaARS += valorVentaMesARS;
-                            });
-
-                            const tcPromedioFila = ventaTotalFilaUSD !== 0 ? (ventaTotalFilaARS / ventaTotalFilaUSD) : DistribucionManager.tasaPromedioPeriodo();
-                            filaObj['TC Prom. Fila'] = parseFloat(tcPromedioFila.toFixed(2));
-                            filaObj['Venta Total ($)'] = Math.round(ventaTotalFilaARS);
-
-                            filas.push(filaObj);
-                        });
-                    } else {
-                        const filaObj = {
-                            'Rubro': row.RUBRO,
-                            'Categoría': row.CATEGORIA_PADRE,
-                            'Canal / Sucursal': row.CANAL,
-                            'Venta Proyectada (U.)': row.COMPRA_DISTRIBUIDA || 0
-                        };
-
-                        let ventaTotalFilaUSD = 0;
-                        let ventaTotalFilaARS = 0;
-
-                        DistribucionManager.mesesCostosClaves.forEach((m, mIdx) => {
-                            const labelMes = DistribucionManager.mesesCostos[mIdx];
-                            const tasaMes = DistribucionManager.tasaParaMes(labelMes);
-                            const unidadesMes = row.MESES_UNIDADES[m] || 0;
-
-                            const valorVentaMesUSD = vventaUnit * unidadesMes;
-                            const valorVentaMesARS = valorVentaMesUSD * tasaMes;
-
-                            filaObj[`${labelMes} (TC $${Math.round(tasaMes)})`] = Math.round(valorVentaMesARS);
-                            ventaTotalFilaUSD += valorVentaMesUSD;
-                            ventaTotalFilaARS += valorVentaMesARS;
-                        });
-
-                        const tcPromedioFila = ventaTotalFilaUSD !== 0 ? (ventaTotalFilaARS / ventaTotalFilaUSD) : DistribucionManager.tasaPromedioPeriodo();
-                        filaObj['TC Prom. Fila'] = parseFloat(tcPromedioFila.toFixed(2));
-                        filaObj['Venta Total ($)'] = Math.round(ventaTotalFilaARS);
-
-                        filas.push(filaObj);
-                    }
+            // Helper compartido: prorratea SIEMPRE las unidades autoritativas de Paso 2 (row.MESES_UNIDADES)
+            // entre las sucursales del Paso 1 usando ajuste entero por resto mayor.
+            const distribuirEnterosPorPeso = (totalEntero, pesos) => {
+                const n = pesos.length;
+                if (n === 0) return [];
+                const sumaPesos = pesos.reduce((acc, p) => acc + (p > 0 ? p : 0), 0);
+                const cuotas = pesos.map(p => {
+                    if (totalEntero <= 0) return 0;
+                    const ratio = sumaPesos > 0 ? ((p > 0 ? p : 0) / sumaPesos) : (1 / n);
+                    return totalEntero * ratio;
                 });
-
-                return filas;
+                const pisos = cuotas.map(q => Math.floor(q));
+                let resto = Math.round(totalEntero) - pisos.reduce((a, b) => a + b, 0);
+                if (resto > 0) {
+                    const indices = cuotas
+                        .map((q, idx) => ({ idx, frac: q - pisos[idx] }))
+                        .sort((a, b) => b.frac - a.frac);
+                    for (let i = 0; i < resto && i < indices.length; i++) {
+                        pisos[indices[i].idx] += 1;
+                    }
+                }
+                return pisos;
             };
 
-            // 2. Pestaña de Unidades por Canal (con aperturas de Locales Propios por sucursal)
-            const obtenerFilasUnidadesPorCanal = () => {
-                const filas = [];
+            const construirFilasDesglosadas = () => {
+                const items = [];
 
                 datosPaso2.forEach(row => {
-                    const canalNormalizado = (row.CANAL || '').toUpperCase().trim();
+                    const rubroNorm = (row.RUBRO || '').trim().toUpperCase();
+                    const catNorm = (row.CATEGORIA_PADRE || '').trim().toUpperCase();
+                    const canalNorm = (row.CANAL || '').trim().toUpperCase();
 
-                    const itemsPaso1 = datosPaso1.filter(p1 => 
-                        (p1.RUBRO || '').trim().toUpperCase() === (row.RUBRO || '').trim().toUpperCase() && 
-                        (p1.CATEGORIA_PADRE || '').trim().toUpperCase() === (row.CATEGORIA_PADRE || '').trim().toUpperCase() && 
-                        (p1.CANAL || '').trim().toUpperCase() === (row.CANAL || '').trim().toUpperCase()
+                    const itemsPaso1 = datosPaso1.filter(p1 =>
+                        (p1.RUBRO || '').trim().toUpperCase() === rubroNorm &&
+                        (p1.CATEGORIA_PADRE || '').trim().toUpperCase() === catNorm &&
+                        (p1.CANAL || '').trim().toUpperCase() === canalNorm
                     );
 
-                    let sucursalesConsolidadas = [];
-                    if (itemsPaso1.length > 0) {
-                        itemsPaso1.forEach(p1 => {
-                            if (p1.SUCURSALES_DETALLE && p1.SUCURSALES_DETALLE.length > 0) {
-                                p1.SUCURSALES_DETALLE.forEach(suc => {
-                                    sucursalesConsolidadas.push(suc);
-                                });
-                            }
-                        });
-                    }
+                    const sucursalesConsolidadas = [];
+                    itemsPaso1.forEach(p1 => {
+                        if (p1.SUCURSALES_DETALLE && p1.SUCURSALES_DETALLE.length > 0) {
+                            p1.SUCURSALES_DETALLE.forEach(suc => sucursalesConsolidadas.push(suc));
+                        }
+                    });
 
                     if (sucursalesConsolidadas.length > 0) {
-                        sucursalesConsolidadas.forEach(suc => {
-                            let sumaUnidadesSucursal = 0;
-
-                            const filaObj = {
-                                'Rubro': row.RUBRO,
-                                'Categoría': row.CATEGORIA_PADRE,
-                                'Canal / Sucursal': `${row.CANAL} - ${suc.SUCURSAL}`
-                            };
-
-                            DistribucionManager.mesesCostosClaves.forEach((m, mIdx) => {
-                                const labelMes = DistribucionManager.mesesCostos[mIdx];
-                                const unidadesSuc = suc.MESES && suc.MESES[labelMes] ? (suc.MESES[labelMes].unidades || 0) : 0;
-                                filaObj[labelMes] = unidadesSuc;
-                                sumaUnidadesSucursal += unidadesSuc;
-                            });
-
-                            filaObj['Total Unidades'] = sumaUnidadesSucursal;
-                            filas.push(filaObj);
-                        });
-                    } else {
-                        let sumaUnidadesCanal = 0;
-
-                        const filaObj = {
-                            'Rubro': row.RUBRO,
-                            'Categoría': row.CATEGORIA_PADRE,
-                            'Canal / Sucursal': row.CANAL
-                        };
+                        const asignacionesPorSuc = sucursalesConsolidadas.map(suc => ({
+                            canalSucursal: `${row.CANAL} - ${suc.SUCURSAL}`,
+                            mesesUnid: {},
+                            totalUnidades: 0
+                        }));
 
                         DistribucionManager.mesesCostosClaves.forEach((m, mIdx) => {
                             const labelMes = DistribucionManager.mesesCostos[mIdx];
-                            const unidadesMes = row.MESES_UNIDADES[m] || 0;
-                            filaObj[labelMes] = unidadesMes;
-                            sumaUnidadesCanal += unidadesMes;
+                            const targetMes = Math.round(parseFloat(row.MESES_UNIDADES?.[m]) || 0);
+
+                            // Prioridad de peso: unidades mensuales del Paso 1; si suman 0, participacion %
+                            let pesos = sucursalesConsolidadas.map(suc =>
+                                Math.max(0, parseFloat(suc.MESES?.[labelMes]?.unidades) || 0)
+                            );
+                            const sumaMesP1 = pesos.reduce((a, b) => a + b, 0);
+                            if (sumaMesP1 <= 0) {
+                                pesos = sucursalesConsolidadas.map(suc =>
+                                    Math.max(0, parseFloat(suc.PARTICIPACION) || 0)
+                                );
+                            }
+
+                            const repartido = distribuirEnterosPorPeso(targetMes, pesos);
+                            repartido.forEach((uSuc, sIdx) => {
+                                asignacionesPorSuc[sIdx].mesesUnid[m] = uSuc;
+                                asignacionesPorSuc[sIdx].totalUnidades += uSuc;
+                            });
                         });
 
-                        filaObj['Total Unidades'] = sumaUnidadesCanal;
-                        filas.push(filaObj);
+                        asignacionesPorSuc.forEach(a => items.push({ row, ...a }));
+                    } else {
+                        const mesesUnid = {};
+                        let totalUnidades = 0;
+                        DistribucionManager.mesesCostosClaves.forEach(m => {
+                            const uMes = Math.round(parseFloat(row.MESES_UNIDADES?.[m]) || 0);
+                            mesesUnid[m] = uMes;
+                            totalUnidades += uMes;
+                        });
+                        items.push({
+                            row,
+                            canalSucursal: row.CANAL,
+                            mesesUnid,
+                            totalUnidades
+                        });
                     }
                 });
 
-                return filas;
+                return items;
+            };
+
+            const itemsDesglosados = construirFilasDesglosadas();
+
+            // 1. Pestaña de Ventas en Pesos ($)
+            const obtenerFilasVentaPesos = () => {
+                return itemsDesglosados.map(({ row, canalSucursal, mesesUnid, totalUnidades }) => {
+                    const vcosto = row.COSTO_PROM * (1 + row.INC_FOB / 100);
+
+                    const filaObj = {
+                        'Rubro': row.RUBRO,
+                        'Categoría': row.CATEGORIA_PADRE,
+                        'Canal / Sucursal': canalSucursal,
+                        'Venta Proyectada (U.)': totalUnidades
+                    };
+
+                    let ventaTotalFilaUSD = 0;
+                    let ventaTotalFilaARS = 0;
+
+                    DistribucionManager.mesesCostosClaves.forEach((m, mIdx) => {
+                        const labelMes = DistribucionManager.mesesCostos[mIdx];
+                        const tasaMes = DistribucionManager.tasaParaMes(labelMes);
+                        const unidadesMes = mesesUnid[m] || 0;
+                        const vventaUnitMes = vcosto * DistribucionManager.obtenerMarkupFila(row, m);
+
+                        const valorVentaMesUSD = vventaUnitMes * unidadesMes;
+                        const valorVentaMesARS = valorVentaMesUSD * tasaMes;
+
+                        filaObj[`${labelMes} (TC $${Math.round(tasaMes)})`] = Math.round(valorVentaMesARS);
+                        ventaTotalFilaUSD += valorVentaMesUSD;
+                        ventaTotalFilaARS += valorVentaMesARS;
+                    });
+
+                    const tcPromedioFila = ventaTotalFilaUSD !== 0 ? (ventaTotalFilaARS / ventaTotalFilaUSD) : DistribucionManager.tasaPromedioPeriodo();
+                    filaObj['TC Prom. Fila'] = parseFloat(tcPromedioFila.toFixed(2));
+                    filaObj['Venta Total ($)'] = Math.round(ventaTotalFilaARS);
+
+                    return filaObj;
+                });
+            };
+
+            // 2. Pestaña de Unidades por Canal (con aperturas por sucursal prorrateadas sobre Paso 2)
+            const obtenerFilasUnidadesPorCanal = () => {
+                return itemsDesglosados.map(({ row, canalSucursal, mesesUnid, totalUnidades }) => {
+                    const filaObj = {
+                        'Rubro': row.RUBRO,
+                        'Categoría': row.CATEGORIA_PADRE,
+                        'Canal / Sucursal': canalSucursal
+                    };
+
+                    DistribucionManager.mesesCostosClaves.forEach((m, mIdx) => {
+                        const labelMes = DistribucionManager.mesesCostos[mIdx];
+                        filaObj[labelMes] = mesesUnid[m] || 0;
+                    });
+
+                    filaObj['Total Unidades'] = totalUnidades;
+                    return filaObj;
+                });
             };
 
             const hojas = {
@@ -2671,8 +2755,7 @@ class DistribucionManager {
 
                 datosPaso2.forEach(row => {
                     const vcosto = row.COSTO_PROM * (1 + row.INC_FOB / 100);
-                    const markup = DistribucionManager.obtenerMarkupFila(row);
-                    const multiplicador = esVenta ? (vcosto * markup) : vcosto;
+                    const markupProm = DistribucionManager.obtenerMarkupPromedioPonderadoFila(row);
 
                     const filaObj = {
                         'Rubro': row.RUBRO,
@@ -2683,7 +2766,7 @@ class DistribucionManager {
                     };
 
                     if (esVenta) {
-                        filaObj['Mark-Up (x)'] = parseFloat(markup.toFixed(2));
+                        filaObj['Mark-Up (x)'] = parseFloat(markupProm.toFixed(2));
                     }
 
                     let acumuladoTotalUSD = 0;
@@ -2693,8 +2776,9 @@ class DistribucionManager {
                         const labelMes = DistribucionManager.mesesCostos[mIdx];
                         const tasaMes = DistribucionManager.tasaParaMes(labelMes);
                         const unidadesMes = row.MESES_UNIDADES[m] || 0;
+                        const multiplicadorMes = esVenta ? (vcosto * DistribucionManager.obtenerMarkupFila(row, m)) : vcosto;
 
-                        const valorMesUSD = multiplicador * unidadesMes;
+                        const valorMesUSD = multiplicadorMes * unidadesMes;
                         const valorMesARS = valorMesUSD * tasaMes;
 
                         const colHeader = esARS ? `${labelMes} (TC $${Math.round(tasaMes)})` : labelMes;
@@ -2712,6 +2796,10 @@ class DistribucionManager {
                     } else {
                         const labelColTotal = esVenta ? 'Venta Total (U$D)' : 'Costo Total (U$D)';
                         filaObj[labelColTotal] = Math.round(acumuladoTotalUSD);
+                    }
+
+                    if (esVenta) {
+                        filaObj['Mark-Up Mensual'] = DistribucionManager.obtenerDetalleMarkupsMensualesFila(row);
                     }
 
                     filas.push(filaObj);
@@ -2952,15 +3040,95 @@ class DistribucionManager {
     }
 
     /**
-     * Helper estático para obtener el markup correspondiente al canal de la fila
+     * Extrae el número de mes calendario (1..12) desde claves ('2-2026', '2027-02', '02', 2) o etiquetas ('Feb 27')
      */
-    static obtenerMarkupFila(row) {
+    static extraerNumeroMes(mesClave) {
+        if (mesClave === null || mesClave === undefined || mesClave === '') return null;
+        if (typeof mesClave === 'number') {
+            const n = Math.trunc(mesClave);
+            return (n >= 1 && n <= 12) ? n : null;
+        }
+        const raw = String(mesClave).trim();
+        let match = raw.match(/^(\d{1,2})[-\/]\d{4}$/);
+        if (!match) match = raw.match(/^\d{4}[-\/](\d{1,2})(?:[-\/]\d{1,2})?$/);
+        if (!match) match = raw.match(/^(\d{1,2})$/);
+        if (match) {
+            const n = parseInt(match[1], 10);
+            if (n >= 1 && n <= 12) return n;
+        }
+        const upper = raw.toUpperCase();
+        const mapaMeses = { ENE: 1, JAN: 1, FEB: 2, MAR: 3, ABR: 4, APR: 4, MAY: 5, JUN: 6, JUL: 7, AGO: 8, AUG: 8, SEP: 9, SET: 9, OCT: 10, NOV: 11, DIC: 12, DEC: 12 };
+        for (const [prefijo, num] of Object.entries(mapaMeses)) {
+            if (upper.startsWith(prefijo)) return num;
+        }
+        return null;
+    }
+
+    /**
+     * Helper estático para obtener el markup de la fila; si recibe mesClave usa el mensual con fallback al fijo del canal
+     */
+    static obtenerMarkupFila(row, mesClave = null) {
+        if (!row) return 0.0;
+        if (mesClave !== null && mesClave !== undefined && row.MARKUPS_MENSUALES) {
+            let valMes = row.MARKUPS_MENSUALES[mesClave];
+            if (valMes === undefined || valMes === null) {
+                const mesNum = DistribucionManager.extraerNumeroMes(mesClave);
+                if (mesNum !== null) {
+                    valMes = row.MARKUPS_MENSUALES[mesNum] ?? row.MARKUPS_MENSUALES[String(mesNum)];
+                    if (valMes === undefined || valMes === null) {
+                        for (const [k, v] of Object.entries(row.MARKUPS_MENSUALES)) {
+                            if (DistribucionManager.extraerNumeroMes(k) === mesNum) {
+                                valMes = v;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            const parsed = parseFloat(valMes);
+            if (!isNaN(parsed) && parsed > 0) {
+                return parsed;
+            }
+        }
         const canal = (row.CANAL || '').toUpperCase();
-        if (canal.includes('LOCAL')) return row.MARKUP_LOCALES_PROPIOS || 0.0;
-        if (canal.includes('FRANQ')) return row.MARKUP_FRANQUICIAS || 0.0;
-        if (canal.includes('MAYOR')) return row.MARKUP_MAYORISTAS || 0.0;
-        if (canal.includes('ECOM') || canal.includes('WEB')) return row.MARKUP_ECOMMERCE || 0.0;
+        if (canal.includes('LOCAL')) return parseFloat(row.MARKUP_LOCALES_PROPIOS) || 0.0;
+        if (canal.includes('FRANQ')) return parseFloat(row.MARKUP_FRANQUICIAS) || 0.0;
+        if (canal.includes('MAYOR')) return parseFloat(row.MARKUP_MAYORISTAS) || 0.0;
+        if (canal.includes('ECOM') || canal.includes('WEB')) return parseFloat(row.MARKUP_ECOMMERCE) || 0.0;
         return 0.0;
+    }
+
+    /**
+     * Calcula el mark-up promedio ponderado por unidades del período para resúmenes (badge 2A / columna Excel)
+     */
+    static obtenerMarkupPromedioPonderadoFila(row) {
+        const claves = DistribucionManager.mesesCostosClaves || [];
+        if (!row || claves.length === 0) return DistribucionManager.obtenerMarkupFila(row);
+        let sumUnidades = 0;
+        let sumUnidadesMarkup = 0;
+        let sumSimple = 0;
+        claves.forEach(m => {
+            const mk = DistribucionManager.obtenerMarkupFila(row, m);
+            const unid = parseFloat(row.MESES_UNIDADES?.[m]) || 0;
+            sumUnidades += unid;
+            sumUnidadesMarkup += unid * mk;
+            sumSimple += mk;
+        });
+        if (sumUnidades > 0) return sumUnidadesMarkup / sumUnidades;
+        return sumSimple / claves.length;
+    }
+
+    /**
+     * Construye el texto detalle de mark-ups mensuales para tooltips y exportación Excel
+     */
+    static obtenerDetalleMarkupsMensualesFila(row) {
+        const claves = DistribucionManager.mesesCostosClaves || [];
+        const labels = DistribucionManager.mesesCostos || [];
+        if (!row || claves.length === 0) return `x${DistribucionManager.obtenerMarkupFila(row).toFixed(2)}`;
+        return claves.map((m, idx) => {
+            const label = labels[idx] || m;
+            return `${label}: ${DistribucionManager.obtenerMarkupFila(row, m).toFixed(2)}`;
+        }).join(' | ');
     }
 
     /**
@@ -3102,8 +3270,6 @@ class DistribucionManager {
 
         datosFiltradosPaso2.forEach(row => {
             const vcosto = row.COSTO_PROM * (1 + row.INC_FOB / 100);
-            const markup = DistribucionManager.obtenerMarkupFila(row);
-            const vventaUnit = vcosto * markup;
             const canalRow = (row.CANAL || '').trim().toUpperCase();
 
             if (!mapaCanales[canalRow]) {
@@ -3145,7 +3311,8 @@ class DistribucionManager {
                 const ventaCategoriaMesUSD = {};
                 DistribucionManager.mesesCostosClaves.forEach((m, mIdx) => {
                     const unidadesTotalCatMes = row.MESES_UNIDADES[m] || 0;
-                    ventaCategoriaMesUSD[m] = vventaUnit * unidadesTotalCatMes;
+                    const vventaUnitMes = vcosto * DistribucionManager.obtenerMarkupFila(row, m);
+                    ventaCategoriaMesUSD[m] = vventaUnitMes * unidadesTotalCatMes;
                 });
 
                 sucursales.forEach(suc => {
@@ -3173,12 +3340,13 @@ class DistribucionManager {
                     DistribucionManager.mesesCostosClaves.forEach((m, mIdx) => {
                         const labelMes = DistribucionManager.mesesCostos[mIdx];
                         const tasaMes = esARS ? DistribucionManager.tasaParaMes(labelMes) : 1;
+                        const vventaUnitMes = vcosto * DistribucionManager.obtenerMarkupFila(row, m);
                         const unidadesSucMes = (suc.MESES && suc.MESES[labelMes] && suc.MESES[labelMes].unidades !== undefined)
                             ? (suc.MESES[labelMes].unidades || 0)
                             : (row.MESES_UNIDADES[m] || 0) * partSucDecimal;
 
                         const ventaSucMesUSD = (suc.MESES && suc.MESES[labelMes] && suc.MESES[labelMes].unidades !== undefined)
-                            ? vventaUnit * unidadesSucMes
+                            ? vventaUnitMes * unidadesSucMes
                             : ventaCategoriaMesUSD[m] * partSucDecimal;
                         const ventaSucMesARS = ventaSucMesUSD * tasaMes;
 
@@ -3234,7 +3402,8 @@ class DistribucionManager {
                     const labelMes = DistribucionManager.mesesCostos[mIdx];
                     const tasaMes = esARS ? DistribucionManager.tasaParaMes(labelMes) : 1;
                     const unidadesMes = row.MESES_UNIDADES[m] || 0;
-                    const ventaMesUSD = vventaUnit * unidadesMes;
+                    const vventaUnitMes = vcosto * DistribucionManager.obtenerMarkupFila(row, m);
+                    const ventaMesUSD = vventaUnitMes * unidadesMes;
                     const ventaMesARS = ventaMesUSD * tasaMes;
 
                     itemUnidadesTotal += unidadesMes;
@@ -3283,15 +3452,14 @@ class DistribucionManager {
 
         datosFiltradosPaso2.forEach(row => {
             const vcosto = row.COSTO_PROM * (1 + row.INC_FOB / 100);
-            const markup = DistribucionManager.obtenerMarkupFila(row);
-            const vventaUnit = vcosto * markup;
             totalExactoUnidades += (row.COMPRA_DISTRIBUIDA || 0);
 
             DistribucionManager.mesesCostosClaves.forEach((m, mIdx) => {
                 const labelMes = DistribucionManager.mesesCostos[mIdx];
                 const tasaMes = esARS ? DistribucionManager.tasaParaMes(labelMes) : 1;
                 const unidadesCatMes = row.MESES_UNIDADES[m] || 0;
-                const vUSD = vventaUnit * unidadesCatMes;
+                const vventaUnitMes = vcosto * DistribucionManager.obtenerMarkupFila(row, m);
+                const vUSD = vventaUnitMes * unidadesCatMes;
                 totalExactoMesUSD[m] += vUSD;
                 totalExactoVentaUSD += vUSD;
                 totalExactoVentaARS += vUSD * tasaMes;
@@ -3588,13 +3756,12 @@ class DistribucionManager {
             if (!pptoPorCanal[canalKey]) return;
 
             const vcosto = (parseFloat(row.COSTO_PROM) || 0) * (1 + (parseFloat(row.INC_FOB) || 0) / 100);
-            const markup = DistribucionManager.obtenerMarkupFila(row);
-            const vventaUnitUSD = vcosto * markup;
 
             mesesClaves.forEach((mClave, mIdx) => {
                 const labelMes = meses[mIdx];
                 const tasaMes = esARS ? DistribucionManager.tasaParaMes(labelMes) : 1;
                 const unid = parseFloat(row.MESES_UNIDADES?.[mClave]) || 0;
+                const vventaUnitUSD = vcosto * DistribucionManager.obtenerMarkupFila(row, mClave);
                 const venta = vventaUnitUSD * unid * tasaMes;
 
                 pptoPorCanal[canalKey].meses[mClave].unidades += unid;

@@ -764,3 +764,86 @@ td .marca-manual {
     white-space: nowrap;
     font-size: .8rem;
 }
+
+/* =====================================================================
+   Modal Parámetros Globales: ampliación y grilla mensual editable
+   ===================================================================== */
+#modal-parametros-costos .modal-dialog {
+    max-width: min(96vw, 1580px) !important;
+    width: 96vw;
+    margin: 0.75rem auto;
+}
+
+#modal-parametros-costos .modal-content {
+    height: 93vh;
+    max-height: 93vh;
+}
+
+#scroll-markup-modal tbody td:nth-child(n+3) {
+    border-left: 1px solid #edf0f5;
+    padding: 8px 10px;
+}
+
+.mk-mes-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 5px;
+    min-width: 225px;
+}
+
+.mk-mes-card {
+    border-radius: 6px;
+    border: 1px solid transparent;
+    overflow: hidden;
+    transition: box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.mk-mes-card--inv {
+    background-color: #dbeafe;
+    border-color: #93c5fd;
+}
+
+.mk-mes-card--ver {
+    background-color: #fef3c7;
+    border-color: #fcd34d;
+}
+
+.mk-mes-card:focus-within {
+    box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.25);
+    border-color: #0d6efd;
+}
+
+.mk-mes-card--ver:focus-within {
+    box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.3);
+    border-color: #d97706;
+}
+
+.mk-mes-lbl {
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-align: center;
+    line-height: 1.25;
+    padding: 2px 0;
+}
+
+.mk-mes-input {
+    width: 100%;
+    border: 0;
+    background-color: #ffffff;
+    color: #1e293b;
+    font-family: var(--bs-font-monospace, monospace);
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-align: center;
+    padding: 2px 4px;
+    height: 24px;
+    outline: none;
+    -moz-appearance: textfield;
+}
+
+.mk-mes-input::-webkit-outer-spin-button,
+.mk-mes-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}

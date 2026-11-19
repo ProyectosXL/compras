@@ -100,9 +100,13 @@ class AnalisisDesviosController {
             // 5. Obtener ventas reales en ese rango real trasladado
             $ventasRealesTodas = $this->distribucion->obtenerTodasLasVentasPorCanal($fechaDesdeReal, $fechaHastaReal);
 
-            // 6. Obtener costos promedio globales como fallback
+            // 6. Obtener costos promedio globales y mark-ups mensuales por temporada
             $costosModel = new CostoProyeccion();
             $costosGuardados = $costosModel->obtenerParametrosGlobales();
+            $markupsTemporadaData = (strtolower($pais) !== 'uruguay')
+                ? $costosModel->obtenerMarkupsMensualesPorTemporada($temporada)
+                : ['por_clave' => []];
+            $markupsMensualesDesvios = $markupsTemporadaData['por_clave'] ?? [];
 
             // 7. Consolidar datos
             $desviosCanales = [];
@@ -134,23 +138,33 @@ class AnalisisDesviosController {
                     continue;
                 }
 
+                $paramClave = "$rubro|$categoria";
+                $costoInfo = $costosGuardados[$paramClave] ?? ['costo_prom' => 0.0, 'inc_fob' => 0.0];
+                $vcostoRow = isset($g['vcosto']) && (float)$g['vcosto'] > 0
+                    ? (float)$g['vcosto']
+                    : ((float)($costoInfo['costo_prom'] ?? 0) * (1 + ((float)($costoInfo['inc_fob'] ?? 0) / 100)));
+
+                $markupFijoRow = 0.0;
+                if (strpos($canalUpper, 'LOCAL') !== false) $markupFijoRow = (float)($costoInfo['markup_locales_propios'] ?? 0.0);
+                elseif (strpos($canalUpper, 'FRANQ') !== false) $markupFijoRow = (float)($costoInfo['markup_franquicias'] ?? 0.0);
+                elseif (strpos($canalUpper, 'MAYOR') !== false) $markupFijoRow = (float)($costoInfo['markup_mayoristas'] ?? 0.0);
+                elseif (strpos($canalUpper, 'ECOM') !== false || strpos($canalUpper, 'WEB') !== false) $markupFijoRow = (float)($costoInfo['markup_ecommerce'] ?? 0.0);
+
                 // Obtener valor unitario guardado en consolidado o calcularlo de fallback
                 $vventaUnit = isset($g['vventa_unit_usd']) && (float)$g['vventa_unit_usd'] > 0 
                     ? (float)$g['vventa_unit_usd'] 
-                    : 0.0;
+                    : ($vcostoRow * $markupFijoRow);
 
-                if ($vventaUnit <= 0) {
-                    $paramClave = "$rubro|$categoria";
-                    $costoInfo = $costosGuardados[$paramClave] ?? ['costo_prom' => 0.0, 'inc_fob' => 0.0];
-                    $vcosto = $costoInfo['costo_prom'] * (1 + ($costoInfo['inc_fob'] ?? 0.0) / 100);
+                $paramClaveUpper = strtoupper($rubro) . '|' . strtoupper($categoria);
+                $mkMensualCanal = $markupsMensualesDesvios[$paramClaveUpper][$canalUpper] ?? [];
 
-                    $markup = 0.0;
-                    if (strpos($canalUpper, 'LOCAL') !== false) $markup = $costoInfo['markup_locales_propios'] ?? 0.0;
-                    elseif (strpos($canalUpper, 'FRANQ') !== false) $markup = $costoInfo['markup_franquicias'] ?? 0.0;
-                    elseif (strpos($canalUpper, 'MAYOR') !== false) $markup = $costoInfo['markup_mayoristas'] ?? 0.0;
-                    elseif (strpos($canalUpper, 'ECOM') !== false || strpos($canalUpper, 'WEB') !== false) $markup = $costoInfo['markup_ecommerce'] ?? 0.0;
-                    $vventaUnit = $vcosto * $markup;
-                }
+                $vventaPorMes = function($mKey) use ($mkMensualCanal, $vcostoRow, $vventaUnit) {
+                    $numMes = CostoProyeccion::extraerNumeroMes($mKey);
+                    if ($vcostoRow > 0 && $numMes > 0 && isset($mkMensualCanal[$numMes]['markup']) && (float)$mkMensualCanal[$numMes]['markup'] > 0) {
+                        return $vcostoRow * (float)$mkMensualCanal[$numMes]['markup'];
+                    }
+                    return $vventaUnit;
+                };
 
                 // A. Consolidar Presupuestado
                 $unidadesP = (int)(isset($g['unidades_presupuestadas']) ? $g['unidades_presupuestadas'] : ($g['compra_distribuida'] ?? 0));
@@ -170,8 +184,9 @@ class AnalisisDesviosController {
 
                 foreach ($mesesPeriodo as $mClave => $mLabel) {
                     $uPres = isset($mesesPresupuesto[$mLabel]) ? (int)$mesesPresupuesto[$mLabel]['unidades'] : 0;
+                    $vventaMes = $vventaPorMes($mClave);
                     $desviosCanales[$canalUpper]['meses'][$mLabel]['unidades_presupuesto'] += $uPres;
-                    $desviosCanales[$canalUpper]['meses'][$mLabel]['facturacion_usd_presupuesto'] += ($uPres * $vventaUnit);
+                    $desviosCanales[$canalUpper]['meses'][$mLabel]['facturacion_usd_presupuesto'] += ($uPres * $vventaMes);
                 }
 
                 // B. Consolidar Realidad
@@ -185,14 +200,17 @@ class AnalisisDesviosController {
                 }
 
                 $unidadesRealCanal = 0;
+                $facturacionRealCanal = 0.0;
                 foreach ($mesesPeriodo as $mClave => $mLabel) {
                     $uReal = isset($ventasCanalReal['meses'][$mClave]) ? (int)$ventasCanalReal['meses'][$mClave] : 0;
+                    $vventaMes = $vventaPorMes($mClave);
                     $desviosCanales[$canalUpper]['meses'][$mLabel]['unidades_real'] += $uReal;
-                    $desviosCanales[$canalUpper]['meses'][$mLabel]['facturacion_usd_real'] += ($uReal * $vventaUnit);
+                    $desviosCanales[$canalUpper]['meses'][$mLabel]['facturacion_usd_real'] += ($uReal * $vventaMes);
                     $unidadesRealCanal += $uReal;
+                    $facturacionRealCanal += ($uReal * $vventaMes);
                 }
                 $desviosCanales[$canalUpper]['unidades_real'] += $unidadesRealCanal;
-                $desviosCanales[$canalUpper]['facturacion_usd_real'] += ($unidadesRealCanal * $vventaUnit);
+                $desviosCanales[$canalUpper]['facturacion_usd_real'] += $facturacionRealCanal;
 
                 // C. Si es LOCALES PROPIOS, desglosar sucursales
                 if ($canalUpper === 'LOCALES PROPIOS') {

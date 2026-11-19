@@ -283,6 +283,11 @@ class Distribucion {
             $temporadaCons = $primerFila['temporada'] ?? 'VERANO';
             $nombreCons = !empty($primerFila['nombre_distribucion']) ? trim($primerFila['nombre_distribucion']) : 'Por defecto';
 
+            $markupsTemporadaData = (strtolower($paisCons) !== 'uruguay')
+                ? $costosModel->obtenerMarkupsMensualesPorTemporada($temporadaCons)
+                : ['por_clave' => []];
+            $markupsMensualesCons = $markupsTemporadaData['por_clave'] ?? [];
+
             // Limpiar la versión consolidada anterior
             $sqlDeleteCons = "DELETE FROM dbo.FP_T_PRESUPUESTO_VERSION_CONSOLIDADA WHERE pais = ? AND temporada = ? AND nombre_version = ?";
             $delConsStmt = sqlsrv_query($this->cid_sistemas, $sqlDeleteCons, [$paisCons, $temporadaCons, $nombreCons]);
@@ -315,14 +320,39 @@ class Distribucion {
                     $vcosto = $costoProm * (1 + $incFob / 100);
                 }
 
-                $markup = 0.0;
-                if (strpos($canalUpper, 'LOCAL') !== false) $markup = (float)($costoInfo['markup_locales_propios'] ?? 0.0);
-                elseif (strpos($canalUpper, 'FRANQ') !== false) $markup = (float)($costoInfo['markup_franquicias'] ?? 0.0);
-                elseif (strpos($canalUpper, 'MAYOR') !== false) $markup = (float)($costoInfo['markup_mayoristas'] ?? 0.0);
-                elseif (strpos($canalUpper, 'ECOM') !== false || strpos($canalUpper, 'WEB') !== false) $markup = (float)($costoInfo['markup_ecommerce'] ?? 0.0);
+                $markupFijo = 0.0;
+                if (strpos($canalUpper, 'LOCAL') !== false) $markupFijo = (float)($costoInfo['markup_locales_propios'] ?? 0.0);
+                elseif (strpos($canalUpper, 'FRANQ') !== false) $markupFijo = (float)($costoInfo['markup_franquicias'] ?? 0.0);
+                elseif (strpos($canalUpper, 'MAYOR') !== false) $markupFijo = (float)($costoInfo['markup_mayoristas'] ?? 0.0);
+                elseif (strpos($canalUpper, 'ECOM') !== false || strpos($canalUpper, 'WEB') !== false) $markupFijo = (float)($costoInfo['markup_ecommerce'] ?? 0.0);
 
-                $vventaUnitUsd = $vcosto * $markup;
-                $facturacionUsd = $unidadesP * $vventaUnitUsd;
+                $paramClaveUpper = strtoupper($rubro) . '|' . strtoupper($categoria);
+                $mkMensualCanal = $markupsMensualesCons[$paramClaveUpper][$canalUpper] ?? [];
+
+                $facturacionUsd = 0.0;
+                $mesesArr = !empty($distMensualJson) ? json_decode($distMensualJson, true) : null;
+                if (is_array($mesesArr) && !empty($mesesArr) && !empty($mkMensualCanal)) {
+                    $sumaUnidJson = 0;
+                    foreach ($mesesArr as $kMes => $vMes) {
+                        $uMes = is_array($vMes) ? (float)($vMes['unidades'] ?? 0) : (float)$vMes;
+                        $numMes = CostoProyeccion::extraerNumeroMes($kMes);
+                        $mkMes = ($numMes > 0 && isset($mkMensualCanal[$numMes]['markup']) && (float)$mkMensualCanal[$numMes]['markup'] > 0)
+                            ? (float)$mkMensualCanal[$numMes]['markup']
+                            : $markupFijo;
+                        $facturacionUsd += ($uMes * $vcosto * $mkMes);
+                        $sumaUnidJson += $uMes;
+                    }
+                    // Ajustar proporcionalmente si $unidadesP difiere por redondeo respecto a $sumaUnidJson
+                    if ($sumaUnidJson > 0 && $unidadesP > 0 && abs($sumaUnidJson - $unidadesP) > 0) {
+                        $facturacionUsd = $facturacionUsd * ($unidadesP / $sumaUnidJson);
+                    }
+                    $vventaUnitUsd = $unidadesP > 0 ? ($facturacionUsd / $unidadesP) : ($vcosto * $markupFijo);
+                    $markup = ($unidadesP > 0 && $vcosto > 0) ? round($facturacionUsd / ($unidadesP * $vcosto), 4) : $markupFijo;
+                } else {
+                    $markup = $markupFijo;
+                    $vventaUnitUsd = $vcosto * $markup;
+                    $facturacionUsd = $unidadesP * $vventaUnitUsd;
+                }
 
                 $paramsCons = [
                     $fechaGuardado,

@@ -690,7 +690,13 @@ class DistribucionController {
             }
             unset($fb);
 
-            // 7. Mezclar y preparar respuesta final
+            // 7. Mezclar y preparar respuesta final (incluyendo Mark-Up mensual por temporada si aplica)
+            $markupsTemporadaData = (strtolower($pais) !== 'uruguay')
+                ? $costosModel->obtenerMarkupsMensualesPorTemporada($temporada)
+                : ['por_clave' => [], 'meta' => null];
+            $markupsPorClave = $markupsTemporadaData['por_clave'] ?? [];
+
+            $clavesMeses = array_keys($mesesPeriodo);
             $resultado = [];
             foreach ($agrupados as $clave => $item) {
                 $paramClave = $item['RUBRO'] . '|' . $item['CATEGORIA_PADRE'];
@@ -713,6 +719,24 @@ class DistribucionController {
                     if ((float)($costoInfo['markup_ecommerce'] ?? 0) <= 0) $costoInfo['markup_ecommerce'] = $fbRubro['markup_ecommerce'];
                 }
 
+                $canalNorm = strtoupper(trim($item['CANAL']));
+                $mkFijoCanal = 0.0;
+                if (strpos($canalNorm, 'LOCAL') !== false) $mkFijoCanal = (float)($costoInfo['markup_locales_propios'] ?? 0.0);
+                elseif (strpos($canalNorm, 'FRANQ') !== false) $mkFijoCanal = (float)($costoInfo['markup_franquicias'] ?? 0.0);
+                elseif (strpos($canalNorm, 'MAYOR') !== false) $mkFijoCanal = (float)($costoInfo['markup_mayoristas'] ?? 0.0);
+                elseif (strpos($canalNorm, 'ECOM') !== false || strpos($canalNorm, 'WEB') !== false) $mkFijoCanal = (float)($costoInfo['markup_ecommerce'] ?? 0.0);
+
+                $paramClaveUpper = strtoupper(trim($item['RUBRO'])) . '|' . strtoupper(trim($item['CATEGORIA_PADRE']));
+                $mkMensualCanal = $markupsPorClave[$paramClaveUpper][$canalNorm] ?? [];
+                $markupsPorMes = [];
+                foreach ($clavesMeses as $mClave) {
+                    $numMes = CostoProyeccion::extraerNumeroMes($mClave);
+                    $mkMensual = ($numMes > 0 && isset($mkMensualCanal[$numMes]['markup']) && (float)$mkMensualCanal[$numMes]['markup'] > 0)
+                        ? (float)$mkMensualCanal[$numMes]['markup']
+                        : $mkFijoCanal;
+                    $markupsPorMes[$mClave] = $mkMensual;
+                }
+
                 $resultado[] = [
                     'RUBRO' => $item['RUBRO'],
                     'CATEGORIA_PADRE' => $item['CATEGORIA_PADRE'],
@@ -726,6 +750,7 @@ class DistribucionController {
                     'MARKUP_FRANQUICIAS' => $costoInfo['markup_franquicias'] ?? 0.0,
                     'MARKUP_MAYORISTAS' => $costoInfo['markup_mayoristas'] ?? 0.0,
                     'MARKUP_ECOMMERCE' => $costoInfo['markup_ecommerce'] ?? 0.0,
+                    'MARKUPS_MENSUALES' => $markupsPorMes,
                     'MESES_UNIDADES' => $item['MESES_UNIDADES'],
                     'PAIS' => $pais,
                     'TEMPORADA' => $temporada,
@@ -756,7 +781,8 @@ class DistribucionController {
                 'data' => $resultado,
                 'meses' => array_values($mesesPeriodo),
                 'meses_claves' => array_keys($mesesPeriodo),
-                'real_anterior' => $realAnterior
+                'real_anterior' => $realAnterior,
+                'markup_meta' => $markupsTemporadaData['meta'] ?? null
             ]);
 
         } catch (Exception $e) {
@@ -769,12 +795,31 @@ class DistribucionController {
      */
     public function obtenerParametrosGlobales() {
         try {
+            $pais = strtolower($_GET['pais'] ?? $_SESSION['pais_seleccionado'] ?? 'argentina');
+            $temporada = $_GET['temporada'] ?? null;
+
             $costosModel = new CostoProyeccion();
             $params = $costosModel->obtenerParametrosGlobales();
+
+            $markupsMensuales = [];
+            $markupMeta = null;
+            $periodoMarkup = null;
+
+            if ($pais !== 'uruguay' && !empty($temporada)) {
+                $resMensual = $costosModel->obtenerMarkupsMensualesPorTemporada($temporada);
+                $markupsMensuales = $resMensual['por_clave'] ?? [];
+                $markupMeta = $resMensual['meta'] ?? null;
+                $periodoMarkup = $costosModel->obtenerPeriodoDefaultMarkup($temporada);
+            }
             
             $this->jsonResponse([
                 'success' => true,
-                'parametros' => array_values($params)
+                'pais' => $pais,
+                'es_mensual' => ($pais !== 'uruguay' && !empty($temporada)),
+                'parametros' => array_values($params),
+                'markups_mensuales' => $markupsMensuales,
+                'markup_meta' => $markupMeta,
+                'periodo_markup' => $periodoMarkup
             ]);
         } catch (Exception $e) {
             $this->jsonResponse(['success' => false, 'message' => $e->getMessage()], 500);
@@ -794,8 +839,17 @@ class DistribucionController {
                 return;
             }
 
+            $pais = strtolower($data['pais'] ?? $_GET['pais'] ?? $_SESSION['pais_seleccionado'] ?? 'argentina');
             $costosModel = new CostoProyeccion();
             $res = $costosModel->guardarParametrosGlobales($data['parametros']);
+
+            if ($res === true && $pais !== 'uruguay' && !empty($data['temporada']) && !empty($data['markups_mensuales']) && is_array($data['markups_mensuales'])) {
+                $resMensual = $costosModel->guardarMarkupsMensualesManual($data['temporada'], $data['markups_mensuales']);
+                if ($resMensual !== true) {
+                    $this->jsonResponse(['success' => false, 'message' => $resMensual['mensaje'] ?? 'Error al guardar mark-ups mensuales'], 500);
+                    return;
+                }
+            }
             
             if ($res === true) {
                 $this->jsonResponse(['success' => true, 'message' => 'Parámetros guardados con éxito']);
@@ -831,12 +885,13 @@ class DistribucionController {
     }
 
     /**
-     * Obtener el período por defecto con datos para el cálculo de Mark-up (últimos 60 días con datos)
+     * Obtener el período de la última temporada cerrada equivalente del año anterior.
      */
     public function obtenerPeriodoDefaultMarkup() {
         try {
+            $temporada = $_GET['temporada'] ?? null;
             $costosModel = new CostoProyeccion();
-            $res = $costosModel->obtenerPeriodoDefaultMarkup();
+            $res = $costosModel->obtenerPeriodoDefaultMarkup($temporada);
             $this->jsonResponse($res);
         } catch (Exception $e) {
             $this->jsonResponse(['success' => false, 'message' => $e->getMessage()], 500);
@@ -844,18 +899,17 @@ class DistribucionController {
     }
 
     /**
-     * Calcular y sincronizar automáticamente el Mark-Up real (Venta / Costo)
-     * por Rubro, Categoría y Canal desde Rentabilidad por Rubro
+     * Calcular y sincronizar automáticamente el Mark-Up real mes a mes en USD
+     * contra la última temporada cerrada equivalente del año anterior.
      */
     public function calcularMarkupReal() {
         try {
             $raw = file_get_contents('php://input');
             $data = json_decode($raw, true) ?? [];
-            $desde = $data['desde'] ?? $_POST['desde'] ?? null;
-            $hasta = $data['hasta'] ?? $_POST['hasta'] ?? null;
+            $temporada = $data['temporada'] ?? $_POST['temporada'] ?? $_GET['temporada'] ?? null;
 
             $costosModel = new CostoProyeccion();
-            $res = $costosModel->sincronizarMarkupReal($desde, $hasta);
+            $res = $costosModel->sincronizarMarkupReal(null, null, $temporada);
 
             if ($res['success']) {
                 $this->jsonResponse($res);

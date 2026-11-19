@@ -9,7 +9,7 @@
 <!-- Temporada calculada por el servidor. Va temprano porque la consultan el renderer,
      el exportador a Excel y las calculadoras. -->
 <script src="js/temporada-servidor.js?v=2.1"></script>
-<script src="js/api-client.js?v=13.0"></script>
+<script src="js/api-client.js?v=13.2"></script>
 <script src="js/tabla-renderer.js?v=4.6"></script>
 <script src="js/busqueda-manager.js"></script>
 
@@ -33,7 +33,7 @@
 <script src="js/totales-stock.js?v=2.1"></script>
 <script src="js/excel-exporter.js?v=14.5"></script>
 <script src="js/ventas-manager.js?v=2.1"></script>
-<script src="js/distribucion-manager.js?v=26.6"></script>
+<script src="js/distribucion-manager.js?v=27.1"></script>
 
 <!-- Script principal (SIEMPRE AL FINAL) -->
 <script src="js/main.js?v=13.7"></script>
