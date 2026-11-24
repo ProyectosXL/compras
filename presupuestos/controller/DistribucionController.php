@@ -773,8 +773,13 @@ class DistribucionController {
                 return $posA <=> $posB;
             });
 
+            $clavesValidas = [];
+            foreach ($guardados as $g) {
+                $clavesValidas[strtoupper(trim($g['rubro']) . '|' . trim($g['categoria_padre']))] = true;
+            }
+
             $tasasBcra = $this->obtenerTasasBcraHistoricas();
-            $realAnterior = $this->distribucion->obtenerRealComparativoPorCanal($fechaDesde, $fechaHasta, $tasasBcra);
+            $realAnterior = $this->distribucion->obtenerRealComparativoPorCanal($fechaDesde, $fechaHasta, $tasasBcra, $clavesValidas);
 
             $this->jsonResponse([
                 'success' => true,

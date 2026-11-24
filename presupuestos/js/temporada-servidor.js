@@ -146,7 +146,7 @@ const TemporadaServidor = {
 
         const candidatas = [];
         for (const [columna, valor] of Object.entries(registro || {})) {
-            if (valor === null || valor === '' || isNaN(valor) || parseFloat(valor) <= 0) continue;
+            if (valor === null || valor === '' || isNaN(valor)) continue;
             if (/PROY/i.test(columna)) continue;
 
             const t = TemporadaServidor.temporadaDeColumna(columna);

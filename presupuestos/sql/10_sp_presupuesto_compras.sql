@@ -231,6 +231,7 @@ BEGIN
               AND RUBRO IS NOT NULL
               AND CATEGORIA_PADRE IS NOT NULL
               AND ' + @FiltroArticulo + N'
+              AND ISNULL(DESC_SUCURSAL, '''') <> ''XL RURAL''
             GROUP BY RUBRO, CATEGORIA_PADRE, T.TEMPORADA
         ),
         StockData AS (
@@ -288,6 +289,7 @@ BEGIN
               AND FECHA_VENTA >= DATEADD(DAY, -@DiasVentana, DATEADD(DAY, -1, CAST(GETDATE() AS DATE)))
               AND FECHA_VENTA <= DATEADD(DAY, -1, CAST(GETDATE() AS DATE))
               AND RUBRO IS NOT NULL AND CATEGORIA_PADRE IS NOT NULL
+              AND ISNULL(DESC_SUCURSAL, '''') <> ''XL RURAL''
             GROUP BY RUBRO, CATEGORIA_PADRE
         ),
         VentasAnoAnterior AS (
@@ -300,6 +302,7 @@ BEGIN
               AND FECHA_VENTA >= DATEADD(YEAR, -1, DATEADD(DAY, -@DiasVentana, DATEADD(DAY, -1, CAST(GETDATE() AS DATE))))
               AND FECHA_VENTA <= DATEADD(YEAR, -1, DATEADD(DAY, -1, CAST(GETDATE() AS DATE)))
               AND RUBRO IS NOT NULL AND CATEGORIA_PADRE IS NOT NULL
+              AND ISNULL(DESC_SUCURSAL, '''') <> ''XL RURAL''
             GROUP BY RUBRO, CATEGORIA_PADRE
         ),
         VentasUltimos60DiasTE AS (
@@ -313,6 +316,7 @@ BEGIN
               AND FECHA_VENTA >= DATEADD(DAY, -@DiasVentana, DATEADD(DAY, -1, CAST(GETDATE() AS DATE)))
               AND FECHA_VENTA <= DATEADD(DAY, -1, CAST(GETDATE() AS DATE))
               AND RUBRO IS NOT NULL AND CATEGORIA_PADRE IS NOT NULL
+              AND ISNULL(DESC_SUCURSAL, '''') <> ''XL RURAL''
             GROUP BY RUBRO, CATEGORIA_PADRE
         ),
         VentasAnoAnteriorTE AS (
@@ -326,6 +330,7 @@ BEGIN
               AND FECHA_VENTA >= DATEADD(YEAR, -1, DATEADD(DAY, -@DiasVentana, DATEADD(DAY, -1, CAST(GETDATE() AS DATE))))
               AND FECHA_VENTA <= DATEADD(YEAR, -1, DATEADD(DAY, -1, CAST(GETDATE() AS DATE)))
               AND RUBRO IS NOT NULL AND CATEGORIA_PADRE IS NOT NULL
+              AND ISNULL(DESC_SUCURSAL, '''') <> ''XL RURAL''
             GROUP BY RUBRO, CATEGORIA_PADRE
         ),
         VentasTemporadaEnCurso AS (
@@ -339,6 +344,7 @@ BEGIN
               AND FECHA_VENTA >= @InicioTemporadaEnCurso
               AND FECHA_VENTA <= DATEADD(DAY, -1, CAST(GETDATE() AS DATE))
               AND RUBRO IS NOT NULL AND CATEGORIA_PADRE IS NOT NULL
+              AND ISNULL(DESC_SUCURSAL, '''') <> ''XL RURAL''
             GROUP BY RUBRO, CATEGORIA_PADRE
         ),
         PivotData AS (

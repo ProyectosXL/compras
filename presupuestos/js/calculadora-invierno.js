@@ -14,6 +14,9 @@ class CalculadoraInvierno {
     static calcularVentasProyectadas(ventaVeranoAnterior, ventaInviernoAnterior, indiceVerano, indiceInvierno, temporadaActual) {
         console.log('❄️ CALCULADORA INVIERNO - Iniciando cálculo');
         console.log(`Temporada actual: ${temporadaActual.tipo} (${temporadaActual.enCurso ? 'en curso' : 'no en curso'})`);
+
+        const baseVerano = Math.max(0, parseFloat(ventaVeranoAnterior) || 0);
+        const baseInvierno = Math.max(0, parseFloat(ventaInviernoAnterior) || 0);
         
         let ventaProyVerano, ventaProyInvierno;
         
@@ -22,7 +25,7 @@ class CalculadoraInvierno {
             // • Venta Proy. Verano: Próximo Verano Completo
             // • Venta Proy. Invierno: FÓRMULA CORREGIDA
             
-            ventaProyVerano = Math.round(ventaVeranoAnterior * indiceVerano); // Próximo verano completo
+            ventaProyVerano = Math.round(baseVerano * indiceVerano); // Próximo verano completo
 
             // Días del servidor: son los mismos que usó PHP para el render inicial.
             const diasRestantesInvierno = TemporadaServidor.diasRestantes();
@@ -31,14 +34,14 @@ class CalculadoraInvierno {
             // Mismo orden de operaciones que PHP (venta * indice * proporcion) para que
             // el redondeo caiga igual y reeditar el mismo índice no mueva el número.
             const inviernoActualProporcional = Math.round(
-                ventaInviernoAnterior * indiceInvierno * (diasRestantesInvierno / diasTotalesInvierno)
+                baseInvierno * indiceInvierno * (diasRestantesInvierno / diasTotalesInvierno)
             );
-            const proximoInviernoCompleto = Math.round(ventaInviernoAnterior * indiceInvierno);
+            const proximoInviernoCompleto = Math.round(baseInvierno * indiceInvierno);
             
             ventaProyInvierno = inviernoActualProporcional + proximoInviernoCompleto;
             
             console.log(`VERANO (No transitando): Próximo completo = ${ventaProyVerano}`);
-            console.log(`INVIERNO (Transitando): Proporcional (${ventaInviernoAnterior}/${diasTotalesInvierno}*${diasRestantesInvierno}*${indiceInvierno} = ${inviernoActualProporcional}) + Próximo completo (${proximoInviernoCompleto}) = ${ventaProyInvierno}`);
+            console.log(`INVIERNO (Transitando): Proporcional (${baseInvierno}/${diasTotalesInvierno}*${diasRestantesInvierno}*${indiceInvierno} = ${inviernoActualProporcional}) + Próximo completo (${proximoInviernoCompleto}) = ${ventaProyInvierno}`);
             
         } else if (temporadaActual.tipo === 'VERANO' && temporadaActual.enCurso) {
             // Contexto: Transitando verano
@@ -49,18 +52,18 @@ class CalculadoraInvierno {
             const diasTotalesVerano = TemporadaServidor.diasTotales();
 
             ventaProyVerano = Math.round(
-                ventaVeranoAnterior * indiceVerano * (diasRestantesVerano / diasTotalesVerano)
+                baseVerano * indiceVerano * (diasRestantesVerano / diasTotalesVerano)
             );
             
-            ventaProyInvierno = Math.round(ventaInviernoAnterior * indiceInvierno); // Próximo invierno completo
+            ventaProyInvierno = Math.round(baseInvierno * indiceInvierno); // Próximo invierno completo
             
-            console.log(`VERANO (Transitando): Proporcional (${ventaVeranoAnterior}/${diasTotalesVerano}*${diasRestantesVerano}*${indiceVerano} = ${ventaProyVerano})`);
+            console.log(`VERANO (Transitando): Proporcional (${baseVerano}/${diasTotalesVerano}*${diasRestantesVerano}*${indiceVerano} = ${ventaProyVerano})`);
             console.log(`INVIERNO (No transitando): Próximo completo = ${ventaProyInvierno}`);
             
         } else {
             // Fuera de temporadas activas, usar completo para ambas
-            ventaProyVerano = Math.round(ventaVeranoAnterior * indiceVerano);
-            ventaProyInvierno = Math.round(ventaInviernoAnterior * indiceInvierno);
+            ventaProyVerano = Math.round(baseVerano * indiceVerano);
+            ventaProyInvierno = Math.round(baseInvierno * indiceInvierno);
             console.log(`VERANO (Fuera temporada): Próximo completo = ${ventaProyVerano}`);
             console.log(`INVIERNO (Fuera temporada): Próximo completo = ${ventaProyInvierno}`);
         }

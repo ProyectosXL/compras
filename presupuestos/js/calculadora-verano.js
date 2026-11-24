@@ -15,6 +15,9 @@ class CalculadoraVerano {
     static calcularVentasProyectadas(ventaVeranoAnterior, ventaInviernoAnterior, indiceVerano, indiceInvierno, temporadaActual) {
         console.log('🔥 CALCULADORA VERANO - Iniciando cálculo');
         console.log(`Temporada actual: ${temporadaActual.tipo} (${temporadaActual.enCurso ? 'en curso' : 'no en curso'})`);
+
+        const baseVerano = Math.max(0, parseFloat(ventaVeranoAnterior) || 0);
+        const baseInvierno = Math.max(0, parseFloat(ventaInviernoAnterior) || 0);
         
         let ventaProyVerano, ventaProyInvierno;
         
@@ -31,14 +34,14 @@ class CalculadoraVerano {
             // para que el redondeo caiga igual y editar un índice con el mismo valor
             // devuelva exactamente el número que ya estaba en pantalla.
             const veranoActualProporcional = Math.round(
-                ventaVeranoAnterior * indiceVerano * (diasRestantesVerano / diasTotalesVerano)
+                baseVerano * indiceVerano * (diasRestantesVerano / diasTotalesVerano)
             );
-            const proximoVeranoCompleto = Math.round(ventaVeranoAnterior * indiceVerano);
+            const proximoVeranoCompleto = Math.round(baseVerano * indiceVerano);
             
             ventaProyVerano = veranoActualProporcional + proximoVeranoCompleto;
-            ventaProyInvierno = Math.round(ventaInviernoAnterior * indiceInvierno); // Próximo invierno completo
+            ventaProyInvierno = Math.round(baseInvierno * indiceInvierno); // Próximo invierno completo
             
-            console.log(`VERANO (Transitando): Proporcional (${ventaVeranoAnterior}/${diasTotalesVerano}*${diasRestantesVerano}*${indiceVerano} = ${veranoActualProporcional}) + Próximo completo (${proximoVeranoCompleto}) = ${ventaProyVerano}`);
+            console.log(`VERANO (Transitando): Proporcional (${baseVerano}/${diasTotalesVerano}*${diasRestantesVerano}*${indiceVerano} = ${veranoActualProporcional}) + Próximo completo (${proximoVeranoCompleto}) = ${ventaProyVerano}`);
             console.log(`INVIERNO (Transitando): Próximo completo = ${ventaProyInvierno}`);
             
         } else if (temporadaActual.tipo === 'INVIERNO' && temporadaActual.enCurso) {
@@ -46,22 +49,22 @@ class CalculadoraVerano {
             // • Venta Proy. Verano: Próximo Verano Completo
             // • Venta Proy. Invierno: FÓRMULA CORREGIDA
             
-            ventaProyVerano = Math.round(ventaVeranoAnterior * indiceVerano); // Próximo verano completo
+            ventaProyVerano = Math.round(baseVerano * indiceVerano); // Próximo verano completo
 
             const diasRestantesInvierno = TemporadaServidor.diasRestantes();
             const diasTotalesInvierno = TemporadaServidor.diasTotales();
 
             ventaProyInvierno = Math.round(
-                ventaInviernoAnterior * indiceInvierno * (diasRestantesInvierno / diasTotalesInvierno)
+                baseInvierno * indiceInvierno * (diasRestantesInvierno / diasTotalesInvierno)
             );
             
             console.log(`VERANO (No transitando): Próximo completo = ${ventaProyVerano}`);
-            console.log(`INVIERNO (Transitando): Proporcional (${ventaInviernoAnterior}/${diasTotalesInvierno}*${diasRestantesInvierno}*${indiceInvierno} = ${ventaProyInvierno})`);
+            console.log(`INVIERNO (Transitando): Proporcional (${baseInvierno}/${diasTotalesInvierno}*${diasRestantesInvierno}*${indiceInvierno} = ${ventaProyInvierno})`);
             
         } else {
             // Fuera de temporadas activas, usar completo para ambas
-            ventaProyVerano = Math.round(ventaVeranoAnterior * indiceVerano);
-            ventaProyInvierno = Math.round(ventaInviernoAnterior * indiceInvierno);
+            ventaProyVerano = Math.round(baseVerano * indiceVerano);
+            ventaProyInvierno = Math.round(baseInvierno * indiceInvierno);
             console.log(`VERANO (Fuera temporada): Próximo completo = ${ventaProyVerano}`);
             console.log(`INVIERNO (Fuera temporada): Próximo completo = ${ventaProyInvierno}`);
         }

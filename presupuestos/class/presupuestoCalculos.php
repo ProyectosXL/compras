@@ -329,12 +329,11 @@ class PresupuestoCalculos {
     }
 
     /**
-     * Igual que extraerVentaAnterior pero devuelve tambien de que columna salio.
+     * Devuelve el valor y la columna de la última temporada histórica del tipo pedido.
      *
-     * Hace falta porque la columna base varia POR FILA: se toma la ultima
-     * temporada con ventas, y un rubro sin movimiento reciente cae a una mas
-     * vieja que el de al lado. Guardar solo el numero dejaba la version sin
-     * poder decir de que temporada venia cada base.
+     * Si la última temporada tuvo venta 0 o negativa no hace fallback a temporadas más
+     * viejas: devuelve el valor de esa última temporada (y la proyección queda en 0,
+     * editable manualmente por el usuario).
      *
      * @return array|null ['valor' => float, 'columna' => string, 'codigo' => string]
      */
@@ -344,7 +343,7 @@ class PresupuestoCalculos {
         foreach ($registro as $columna => $valor) {
             if (stripos($columna, $temporada) === false
                 || stripos($columna, 'PROY') !== false
-                || !is_numeric($valor) || $valor <= 0) {
+                || !is_numeric($valor)) {
                 continue;
             }
 
