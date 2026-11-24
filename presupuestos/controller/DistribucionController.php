@@ -363,55 +363,11 @@ class DistribucionController {
                         $mesesDistribuidos[$mesMayorPorcentaje]['unidades'] += $diferenciaMes;
                     }
 
-                    // Recopilar información detallada de sucursales/clientes para todos los canales que tengan sucursales
-                    $sucursalesDetalle = [];
+                    // Recopilar información detallada de sucursales/clientes usando la distribución actual del canal
                     $canalClave = trim($canal);
-                    if (isset($ventasCanal[$canalClave]['sucursales']) && count($ventasCanal[$canalClave]['sucursales']) > 0) {
-                        foreach ($ventasCanal[$canalClave]['sucursales'] as $sucName => $sucData) {
-                            $sucVentaTotal = $sucData['total'];
-                            // Participación de la sucursal respecto a la venta del canal completo
-                            $ventaCanalTotal = $distribucionPorCanal[$canal]['venta_canal'];
-                            $sucParticipacion = $ventaCanalTotal > 0 ? ($sucVentaTotal / $ventaCanalTotal) : 0;
-                            
-                            $sucFinalTotal = (int)round($distFinal * $sucParticipacion);
-                            $sucMeses = [];
-                            $sucSumaMeses = 0;
-                            $sucMesMayorP = null;
-                            $sucMaxP = -1;
-                            
-                            foreach ($mesesTemporada as $mClave => $mLabel) {
-                                $p = $porcentajesMesCanal[$mClave];
-                                if ($p > $sucMaxP) {
-                                    $sucMaxP = $p;
-                                    $sucMesMayorP = $mLabel;
-                                }
-                                
-                                $sucUnidadesProyectadas = (int)round($sucFinalTotal * $p);
-                                $sucMeses[$mLabel] = [
-                                    'unidades' => $sucUnidadesProyectadas,
-                                    'porcentaje' => round($p * 100, 2)
-                                ];
-                                $sucSumaMeses += $sucUnidadesProyectadas;
-                            }
-                            
-                            if ($sucFinalTotal !== $sucSumaMeses && $sucMesMayorP !== null) {
-                                $sucDiferenciaMes = $sucFinalTotal - $sucSumaMeses;
-                                $sucMeses[$sucMesMayorP]['unidades'] += $sucDiferenciaMes;
-                            }
-                            
-                            $sucursalesDetalle[] = [
-                                'SUCURSAL' => $sucName,
-                                'VENTA_HISTORICA' => $sucVentaTotal,
-                                'PARTICIPACION' => round($sucParticipacion * 100, 2),
-                                'MESES' => $sucMeses
-                            ];
-                        }
-                        
-                        // Ordenar sucursales por mayor venta
-                        usort($sucursalesDetalle, function($a, $b) {
-                            return $b['VENTA_HISTORICA'] <=> $a['VENTA_HISTORICA'];
-                        });
-                    }
+                    $sucursalesDetalle = !empty($ventasCanal[$canalClave]['sucursales'])
+                        ? self::repartirSucursalesPorMes($ventasCanal[$canalClave]['sucursales'], (int)$distFinal, $mesesDistribuidos)
+                        : [];
 
                     $resultado[] = [
                         'RUBRO' => $rubro,
@@ -1051,6 +1007,239 @@ class DistribucionController {
         } catch (Exception $e) {
             $this->jsonResponse(['success' => false, 'message' => $e->getMessage()], 500);
         }
+    }
+
+    /**
+     * Reparte las unidades distribuidas de un canal entre sus sucursales según su
+     * participación histórica, y abre cada sucursal por mes respetando exactamente
+     * las unidades mensuales actuales del canal (método de Resto Mayor en matriz).
+     *
+     * Garantiza cierre exacto horizontal (sum_meses == VENTA_DISTRIBUIDA de sucursal)
+     * y vertical (sum_sucursales_mes == unidades del mes en el canal).
+     */
+    public static function repartirSucursalesPorMes(array $sucursalesMap, int $distFinal, array $mesesDistribuidos) {
+        if (empty($sucursalesMap)) {
+            return [];
+        }
+
+        $sucs = [];
+        foreach ($sucursalesMap as $sucName => $sucData) {
+            $sucs[] = [
+                'SUCURSAL' => $sucName,
+                'VENTA_HISTORICA' => (int)($sucData['total'] ?? 0)
+            ];
+        }
+
+        usort($sucs, function($a, $b) {
+            if ($b['VENTA_HISTORICA'] !== $a['VENTA_HISTORICA']) {
+                return $b['VENTA_HISTORICA'] <=> $a['VENTA_HISTORICA'];
+            }
+            return strcmp($a['SUCURSAL'], $b['SUCURSAL']);
+        });
+
+        $n = count($sucs);
+        $totalHistPos = 0;
+        foreach ($sucs as $s) {
+            $totalHistPos += max(0, $s['VENTA_HISTORICA']);
+        }
+        $props = [];
+        foreach ($sucs as $i => $s) {
+            $peso = max(0, $s['VENTA_HISTORICA']);
+            $props[$i] = $totalHistPos > 0 ? ($peso / $totalHistPos) : (1.0 / $n);
+        }
+
+        $repartirEntero = function(int $total) use ($n, $props, $sucs) {
+            $total = max(0, $total);
+            $res = array_fill(0, $n, 0);
+            $fracs = [];
+            for ($i = 0; $i < $n; $i++) {
+                $cuota = $total * $props[$i];
+                $res[$i] = (int)floor($cuota);
+                $fracs[] = ['i' => $i, 'frac' => $cuota - $res[$i], 'hist' => $sucs[$i]['VENTA_HISTORICA']];
+            }
+            $faltante = $total - array_sum($res);
+            usort($fracs, function($a, $b) {
+                if (abs($b['frac'] - $a['frac']) > 1e-12) {
+                    return $b['frac'] <=> $a['frac'];
+                }
+                if ($b['hist'] !== $a['hist']) {
+                    return $b['hist'] <=> $a['hist'];
+                }
+                return $a['i'] <=> $b['i'];
+            });
+            for ($k = 0; $k < $faltante; $k++) {
+                $res[$fracs[$k]['i']]++;
+            }
+            return $res;
+        };
+
+        $sucTotales = $repartirEntero($distFinal);
+
+        $mesLabels = array_keys($mesesDistribuidos);
+        $colTarget = [];
+        $sumMesesCanal = 0;
+        foreach ($mesLabels as $mLabel) {
+            $u = max(0, (int)round((float)($mesesDistribuidos[$mLabel]['unidades'] ?? 0)));
+            $colTarget[$mLabel] = $u;
+            $sumMesesCanal += $u;
+        }
+
+        $rowTarget = ($sumMesesCanal === max(0, $distFinal))
+            ? $sucTotales
+            : $repartirEntero($sumMesesCanal);
+
+        $mat = [];
+        $celdas = [];
+        $rowRem = $rowTarget;
+        $colRem = $colTarget;
+
+        for ($i = 0; $i < $n; $i++) {
+            $mat[$i] = [];
+            foreach ($mesLabels as $mLabel) {
+                $ideal = $colTarget[$mLabel] * $props[$i];
+                $base = (int)floor($ideal);
+                $mat[$i][$mLabel] = $base;
+                $rowRem[$i] -= $base;
+                $colRem[$mLabel] -= $base;
+                $celdas[] = [
+                    'i' => $i,
+                    'm' => $mLabel,
+                    'frac' => $ideal - $base,
+                    'hist' => $sucs[$i]['VENTA_HISTORICA']
+                ];
+            }
+        }
+
+        usort($celdas, function($a, $b) {
+            if (abs($b['frac'] - $a['frac']) > 1e-12) {
+                return $b['frac'] <=> $a['frac'];
+            }
+            if ($b['hist'] !== $a['hist']) {
+                return $b['hist'] <=> $a['hist'];
+            }
+            return $a['i'] <=> $b['i'];
+        });
+
+        $added = [];
+        foreach ($celdas as $c) {
+            $i = $c['i'];
+            $m = $c['m'];
+            if ($rowRem[$i] > 0 && $colRem[$m] > 0) {
+                $mat[$i][$m]++;
+                $added[$i][$m] = true;
+                $rowRem[$i]--;
+                $colRem[$m]--;
+            }
+        }
+
+        // Paso 2 (caminos aumentantes 0-1): si el orden greedy dejó fila/columna con
+        // remanente, reubica un +1 mediante camino alternante sin exceder +1 por celda.
+        $hayPendientes = function() use ($rowRem) {
+            foreach ($rowRem as $r) {
+                if ($r > 0) return true;
+            }
+            return false;
+        };
+        while ($hayPendientes()) {
+            $progreso = false;
+            for ($startI = 0; $startI < $n; $startI++) {
+                if ($rowRem[$startI] <= 0) continue;
+
+                // BFS alternante: fila -> mes (sin +1) -> fila (con +1) -> ... -> mes con colRem > 0
+                $queue = [];
+                $visitedCol = [];
+                $visitedRow = [$startI => true];
+                $parentCol = []; // mLabel => ['row' => r]
+                $parentRow = []; // row => ['col' => mLabel]
+
+                foreach ($mesLabels as $mLabel) {
+                    if (empty($added[$startI][$mLabel])) {
+                        $visitedCol[$mLabel] = true;
+                        $parentCol[$mLabel] = ['row' => $startI];
+                        $queue[] = $mLabel;
+                    }
+                }
+
+                $foundCol = null;
+                while (!empty($queue)) {
+                    $mCur = array_shift($queue);
+                    if ($colRem[$mCur] > 0) {
+                        $foundCol = $mCur;
+                        break;
+                    }
+                    for ($rNext = 0; $rNext < $n; $rNext++) {
+                        if (isset($visitedRow[$rNext]) || empty($added[$rNext][$mCur])) continue;
+                        $visitedRow[$rNext] = true;
+                        $parentRow[$rNext] = ['col' => $mCur];
+                        foreach ($mesLabels as $mNext) {
+                            if (!isset($visitedCol[$mNext]) && empty($added[$rNext][$mNext])) {
+                                $visitedCol[$mNext] = true;
+                                $parentCol[$mNext] = ['row' => $rNext];
+                                $queue[] = $mNext;
+                            }
+                        }
+                    }
+                }
+
+                if ($foundCol !== null) {
+                    $mCur = $foundCol;
+                    $colRem[$foundCol]--;
+                    while (true) {
+                        $rCur = $parentCol[$mCur]['row'];
+                        $mat[$rCur][$mCur]++;
+                        $added[$rCur][$mCur] = true;
+                        if ($rCur === $startI) {
+                            $rowRem[$startI]--;
+                            break;
+                        }
+                        $mPrev = $parentRow[$rCur]['col'];
+                        $mat[$rCur][$mPrev]--;
+                        unset($added[$rCur][$mPrev]);
+                        $mCur = $mPrev;
+                    }
+                    $progreso = true;
+                    break;
+                }
+            }
+            if (!$progreso) break;
+        }
+
+        // Paso 3 (respaldo extremo): garantiza cierre exacto incluso en distribuciones sintéticas
+        for ($i = 0; $i < $n; $i++) {
+            while ($rowRem[$i] > 0) {
+                $asignado = false;
+                foreach ($mesLabels as $mLabel) {
+                    if ($colRem[$mLabel] > 0) {
+                        $mat[$i][$mLabel]++;
+                        $rowRem[$i]--;
+                        $colRem[$mLabel]--;
+                        $asignado = true;
+                        break;
+                    }
+                }
+                if (!$asignado) break;
+            }
+        }
+
+        $detalle = [];
+        for ($i = 0; $i < $n; $i++) {
+            $sucMeses = [];
+            foreach ($mesLabels as $mLabel) {
+                $sucMeses[$mLabel] = [
+                    'unidades' => $mat[$i][$mLabel],
+                    'porcentaje' => (float)($mesesDistribuidos[$mLabel]['porcentaje'] ?? 0)
+                ];
+            }
+            $detalle[] = [
+                'SUCURSAL' => $sucs[$i]['SUCURSAL'],
+                'VENTA_HISTORICA' => $sucs[$i]['VENTA_HISTORICA'],
+                'PARTICIPACION' => round($props[$i] * 100, 2),
+                'VENTA_DISTRIBUIDA' => $sucTotales[$i],
+                'MESES' => $sucMeses
+            ];
+        }
+
+        return $detalle;
     }
 
     private function jsonResponse($data, $httpCode = 200) {

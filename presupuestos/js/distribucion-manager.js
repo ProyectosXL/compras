@@ -505,6 +505,248 @@ class DistribucionManager {
         });
     }
 
+    /**
+     * Recalcula en memoria el reparto de unidades por sucursal y por mes de un ítem
+     * respetando exactamente la distribución actual del canal (VENTA DISTRIBUIDA y
+     * unidades mensuales) mediante el método de Resto Mayor en matriz.
+     */
+    static recalcularSucursalesItem(item) {
+        if (!item || !Array.isArray(item.SUCURSALES_DETALLE) || item.SUCURSALES_DETALLE.length === 0) {
+            return;
+        }
+
+        const sucs = item.SUCURSALES_DETALLE.slice().sort((a, b) => {
+            const diff = (parseFloat(b.VENTA_HISTORICA) || 0) - (parseFloat(a.VENTA_HISTORICA) || 0);
+            if (diff !== 0) return diff;
+            return String(a.SUCURSAL || '').localeCompare(String(b.SUCURSAL || ''));
+        });
+
+        const n = sucs.length;
+        const totalHistPos = sucs.reduce((acc, s) => acc + Math.max(0, parseFloat(s.VENTA_HISTORICA) || 0), 0);
+        const props = sucs.map(s => (totalHistPos > 0 ? Math.max(0, parseFloat(s.VENTA_HISTORICA) || 0) / totalHistPos : 1 / n));
+
+        const repartirEntero = (total) => {
+            const objetivo = Math.max(0, Math.round(total));
+            const res = new Array(n).fill(0);
+            const fracs = [];
+            let suma = 0;
+            for (let i = 0; i < n; i++) {
+                const cuota = objetivo * props[i];
+                res[i] = Math.floor(cuota);
+                suma += res[i];
+                fracs.push({ i, frac: cuota - res[i], hist: parseFloat(sucs[i].VENTA_HISTORICA) || 0 });
+            }
+            const faltante = objetivo - suma;
+            fracs.sort((a, b) => {
+                if (Math.abs(b.frac - a.frac) > 1e-12) return b.frac - a.frac;
+                if (b.hist !== a.hist) return b.hist - a.hist;
+                return a.i - b.i;
+            });
+            for (let k = 0; k < faltante; k++) {
+                res[fracs[k].i]++;
+            }
+            return res;
+        };
+
+        const distFinal = Math.max(0, Math.round(parseFloat(item.COMPRA_DISTRIBUIDA ?? item.DISTRIBUCION_FINAL ?? 0) || 0));
+        const sucTotales = repartirEntero(distFinal);
+
+        const mesLabels = (DistribucionManager.meses && DistribucionManager.meses.length > 0)
+            ? DistribucionManager.meses
+            : Object.keys(item.DISTRIBUCION_MENSUAL || {});
+
+        const colTarget = {};
+        let sumMesesCanal = 0;
+        mesLabels.forEach(m => {
+            const u = Math.max(0, Math.round(parseFloat(item.DISTRIBUCION_MENSUAL?.[m]?.unidades ?? 0) || 0));
+            colTarget[m] = u;
+            sumMesesCanal += u;
+        });
+
+        const rowTarget = (sumMesesCanal === distFinal) ? sucTotales.slice() : repartirEntero(sumMesesCanal);
+
+        const mat = Array.from({ length: n }, () => ({}));
+        const rowRem = rowTarget.slice();
+        const colRem = { ...colTarget };
+        const celdas = [];
+
+        for (let i = 0; i < n; i++) {
+            const hist = parseFloat(sucs[i].VENTA_HISTORICA) || 0;
+            mesLabels.forEach(m => {
+                const ideal = colTarget[m] * props[i];
+                const base = Math.floor(ideal);
+                mat[i][m] = base;
+                rowRem[i] -= base;
+                colRem[m] -= base;
+                celdas.push({ i, m, frac: ideal - base, hist });
+            });
+        }
+
+        celdas.sort((a, b) => {
+            if (Math.abs(b.frac - a.frac) > 1e-12) return b.frac - a.frac;
+            if (b.hist !== a.hist) return b.hist - a.hist;
+            return a.i - b.i;
+        });
+
+        const added = Array.from({ length: n }, () => ({}));
+        celdas.forEach(c => {
+            if (rowRem[c.i] > 0 && colRem[c.m] > 0) {
+                mat[c.i][c.m]++;
+                added[c.i][c.m] = true;
+                rowRem[c.i]--;
+                colRem[c.m]--;
+            }
+        });
+
+        // Paso 2 (caminos aumentantes 0-1): garantiza cierre exacto horizontal y vertical
+        while (rowRem.some(r => r > 0)) {
+            let progreso = false;
+            for (let startI = 0; startI < n; startI++) {
+                if (rowRem[startI] <= 0) continue;
+
+                const queue = [];
+                const visitedCol = {};
+                const visitedRow = { [startI]: true };
+                const parentCol = {};
+                const parentRow = {};
+
+                mesLabels.forEach(mLabel => {
+                    if (!added[startI][mLabel]) {
+                        visitedCol[mLabel] = true;
+                        parentCol[mLabel] = { row: startI };
+                        queue.push(mLabel);
+                    }
+                });
+
+                let foundCol = null;
+                while (queue.length > 0) {
+                    const mCur = queue.shift();
+                    if (colRem[mCur] > 0) {
+                        foundCol = mCur;
+                        break;
+                    }
+                    for (let rNext = 0; rNext < n; rNext++) {
+                        if (visitedRow[rNext] || !added[rNext][mCur]) continue;
+                        visitedRow[rNext] = true;
+                        parentRow[rNext] = { col: mCur };
+                        mesLabels.forEach(mNext => {
+                            if (!visitedCol[mNext] && !added[rNext][mNext]) {
+                                visitedCol[mNext] = true;
+                                parentCol[mNext] = { row: rNext };
+                                queue.push(mNext);
+                            }
+                        });
+                    }
+                }
+
+                if (foundCol !== null) {
+                    let mCur = foundCol;
+                    colRem[foundCol]--;
+                    while (true) {
+                        const rCur = parentCol[mCur].row;
+                        mat[rCur][mCur]++;
+                        added[rCur][mCur] = true;
+                        if (rCur === startI) {
+                            rowRem[startI]--;
+                            break;
+                        }
+                        const mPrev = parentRow[rCur].col;
+                        mat[rCur][mPrev]--;
+                        delete added[rCur][mPrev];
+                        mCur = mPrev;
+                    }
+                    progreso = true;
+                    break;
+                }
+            }
+            if (!progreso) break;
+        }
+
+        // Paso 3 (respaldo extremo)
+        for (let i = 0; i < n; i++) {
+            while (rowRem[i] > 0) {
+                const mDisp = mesLabels.find(m => colRem[m] > 0);
+                if (!mDisp) break;
+                mat[i][mDisp]++;
+                rowRem[i]--;
+                colRem[mDisp]--;
+            }
+        }
+
+        item.SUCURSALES_DETALLE = sucs.map((s, i) => {
+            const mesesObj = {};
+            mesLabels.forEach(m => {
+                mesesObj[m] = {
+                    unidades: mat[i][m] ?? 0,
+                    porcentaje: parseFloat(item.DISTRIBUCION_MENSUAL?.[m]?.porcentaje ?? 0) || 0
+                };
+            });
+            return {
+                SUCURSAL: s.SUCURSAL,
+                VENTA_HISTORICA: s.VENTA_HISTORICA,
+                PARTICIPACION: Math.round(props[i] * 10000) / 100,
+                VENTA_DISTRIBUIDA: sucTotales[i],
+                MESES: mesesObj
+            };
+        });
+    }
+
+    static construirFilasSucursalesHtml(index, item) {
+        let childHtml = '';
+        (item.SUCURSALES_DETALLE || []).forEach(suc => {
+            let mesesSucHtml = '';
+            DistribucionManager.meses.forEach(m => {
+                const infoMes = suc.MESES?.[m] || { unidades: 0, porcentaje: 0 };
+                mesesSucHtml += `
+                    <td class="text-end font-monospace text-muted" style="font-size: 0.85rem; padding-top: 4px; padding-bottom: 4px;">
+                        ${FormatoUtils.formatearNumero(infoMes.unidades)}
+                    </td>`;
+            });
+
+            childHtml += `
+                <tr class="table-light child-row-${index} bg-light-subtle" style="font-size: 0.85rem; border-left: 4px solid #0d6efd; vertical-align: middle;">
+                    <td class="text-muted"></td>
+                    <td class="text-muted"></td>
+                    <td></td>
+                    <td></td>
+                    <td class="ps-4 text-primary font-monospace" style="padding-top: 4px; padding-bottom: 4px;">
+                        <i class="fas fa-store me-1 text-muted"></i>${suc.SUCURSAL}
+                    </td>
+                    <td class="text-end text-muted font-monospace" style="padding-top: 4px; padding-bottom: 4px;">
+                        ${FormatoUtils.formatearNumero(suc.VENTA_HISTORICA)}
+                    </td>
+                    <td class="text-end text-muted font-monospace" style="padding-top: 4px; padding-bottom: 4px;">
+                        ${suc.PARTICIPACION}%
+                    </td>
+                    <td class="text-end text-muted font-monospace fw-semibold" style="padding-top: 4px; padding-bottom: 4px;">
+                        ${FormatoUtils.formatearNumero(suc.VENTA_DISTRIBUIDA ?? 0)}
+                    </td>
+                    ${mesesSucHtml}
+                    <td></td>
+                </tr>
+            `;
+        });
+        return childHtml;
+    }
+
+    static refrescarSucursalesDOM(index) {
+        const row = document.getElementById(`row-distrib-${index}`);
+        const item = DistribucionManager.datos[index];
+        if (!row || !item || !item.SUCURSALES_DETALLE) return;
+
+        const icon = row.querySelector('.toggle-sucursales i');
+        const estaExpandido = icon && icon.classList.contains('fa-chevron-down');
+        if (!estaExpandido) return;
+
+        let nextRow = row.nextElementSibling;
+        while (nextRow && nextRow.classList.contains(`child-row-${index}`)) {
+            const toRemove = nextRow;
+            nextRow = nextRow.nextElementSibling;
+            toRemove.remove();
+        }
+        row.insertAdjacentHTML('afterend', DistribucionManager.construirFilasSucursalesHtml(index, item));
+    }
+
     static toggleSucursales(index, element) {
         const item = DistribucionManager.datos[index];
         const row = document.getElementById(`row-distrib-${index}`);
@@ -525,43 +767,11 @@ class DistribucionManager {
                 toRemove.remove();
             }
         } else {
-            // Expandir sucursales
+            // Expandir sucursales con los valores recalculados sobre la distribución actual
+            DistribucionManager.recalcularSucursalesItem(item);
             icon.classList.remove('fa-chevron-right');
             icon.classList.add('fa-chevron-down');
-
-            let childHtml = '';
-            item.SUCURSALES_DETALLE.forEach(suc => {
-                let mesesSucHtml = '';
-                DistribucionManager.meses.forEach(m => {
-                    const infoMes = suc.MESES[m] || { unidades: 0, porcentaje: 0 };
-                    mesesSucHtml += `
-                        <td class="text-end font-monospace text-muted" style="font-size: 0.85rem; padding-top: 4px; padding-bottom: 4px;">
-                            ${FormatoUtils.formatearNumero(infoMes.unidades)}
-                        </td>`;
-                });
-
-                childHtml += `
-                    <tr class="table-light child-row-${index} bg-light-subtle" style="font-size: 0.85rem; border-left: 4px solid #0d6efd; vertical-align: middle;">
-                        <td class="text-muted"></td>
-                        <td class="text-muted"></td>
-                        <td></td>
-                        <td></td>
-                        <td class="ps-4 text-primary font-monospace" style="padding-top: 4px; padding-bottom: 4px;">
-                            <i class="fas fa-store me-1 text-muted"></i>${suc.SUCURSAL}
-                        </td>
-                        <td class="text-end text-muted font-monospace" style="padding-top: 4px; padding-bottom: 4px;">
-                            ${FormatoUtils.formatearNumero(suc.VENTA_HISTORICA)}
-                        </td>
-                        <td class="text-end text-muted font-monospace" style="padding-top: 4px; padding-bottom: 4px;">
-                            ${suc.PARTICIPACION}%
-                        </td>
-                        <td></td>
-                        ${mesesSucHtml}
-                    </tr>
-                `;
-            });
-
-            row.insertAdjacentHTML('afterend', childHtml);
+            row.insertAdjacentHTML('afterend', DistribucionManager.construirFilasSucursalesHtml(index, item));
         }
     }
 
@@ -644,6 +854,9 @@ class DistribucionManager {
                         }
                     });
                 }
+
+                DistribucionManager.recalcularSucursalesItem(item);
+                DistribucionManager.refrescarSucursalesDOM(idx);
             });
         } else {
             // Si la suma no es exactamente 100%, igualmente calcular las unidades proporcionales para cada canal
@@ -674,6 +887,9 @@ class DistribucionManager {
                         }
                     });
                 }
+
+                DistribucionManager.recalcularSucursalesItem(item);
+                DistribucionManager.refrescarSucursalesDOM(idx);
             });
         }
     }
@@ -736,6 +952,9 @@ class DistribucionManager {
                     }
                 });
             }
+
+            DistribucionManager.recalcularSucursalesItem(item);
+            DistribucionManager.refrescarSucursalesDOM(index);
         }
         
         // 3. Actualizar subtotal, indicadores generales y validaciones
@@ -794,6 +1013,10 @@ class DistribucionManager {
             
             // Validar la fila
             DistribucionManager.validarFilaMensual(index);
+
+            // Actualizar apertura por sucursal si corresponde
+            DistribucionManager.recalcularSucursalesItem(item);
+            DistribucionManager.refrescarSucursalesDOM(index);
             
             // Actualizar subtotal
             DistribucionManager.actualizarSubtotalGrupo(item.RUBRO, item.CATEGORIA_PADRE);
